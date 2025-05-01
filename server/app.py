@@ -3,6 +3,7 @@ from flask import Flask
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_migrate import Migrate
 from dotenv import load_dotenv
 from utils.middleware import request_middleware
 from config.database import db, init_db
@@ -32,8 +33,9 @@ def create_app(test_config=None):
         storage_uri="memory://"
     )
     
-    # Initialize database
+    # Initialize database and migrations
     init_db(app, test_config)
+    migrate = Migrate(app, db)
     
     # Register blueprints
     api = create_api_blueprint()
@@ -72,4 +74,4 @@ if __name__ == '__main__':
         app.config['SESSION_COOKIE_HTTPONLY'] = True
         app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
     
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))) 
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5001))) 

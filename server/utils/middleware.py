@@ -14,7 +14,13 @@ def log_request_info():
     if request.path == '/health':
         return
     
-    extra = {}
+    extra = {
+        'method': request.method,
+        'path': request.path,
+        'remote_addr': request.remote_addr,
+        'request_id': getattr(g, 'request_id', None),
+    }
+    
     if hasattr(g, 'start_time'):
         extra['duration_ms'] = int((time.time() - g.start_time) * 1000)
     if hasattr(g, 'status_code'):
@@ -27,8 +33,8 @@ def request_middleware(app):
     
     @app.before_request
     def before_request():
-        # Add request ID
-        request.id = generate_request_id()
+        # Add request ID to g
+        g.request_id = generate_request_id()
         # Store start time
         g.start_time = time.time()
         
@@ -40,7 +46,8 @@ def request_middleware(app):
                     'method': request.method,
                     'path': request.path,
                     'remote_addr': request.remote_addr,
-                    'request_id': request.id
+                    'request_id': g.request_id,
+                    'user_agent': request.user_agent.string
                 }
             )
     
@@ -49,7 +56,7 @@ def request_middleware(app):
         # Store response status code
         g.status_code = response.status_code
         # Add request ID to response headers
-        response.headers['X-Request-ID'] = request.id
+        response.headers['X-Request-ID'] = g.request_id
         return response
     
     @app.teardown_request
@@ -59,7 +66,11 @@ def request_middleware(app):
                 'Request failed',
                 extra={
                     'error': str(exception),
-                    'request_id': getattr(request, 'id', None)
+                    'request_id': getattr(g, 'request_id', None),
+                    'method': request.method,
+                    'path': request.path,
+                    'remote_addr': request.remote_addr,
+                    'user_agent': request.user_agent.string
                 }
             )
         else:
@@ -78,7 +89,8 @@ def log_function_call(func):
                 extra={
                     'function': func.__name__,
                     'duration_ms': duration_ms,
-                    'success': True
+                    'success': True,
+                    'request_id': getattr(g, 'request_id', None)
                 }
             )
             return result
@@ -90,7 +102,8 @@ def log_function_call(func):
                     'function': func.__name__,
                     'duration_ms': duration_ms,
                     'error': str(e),
-                    'success': False
+                    'success': False,
+                    'request_id': getattr(g, 'request_id', None)
                 }
             )
             raise

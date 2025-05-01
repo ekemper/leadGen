@@ -30,6 +30,7 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 1rem;
+  transition: all 0.2s ease;
 }
 
 .form-group input:focus {
@@ -38,11 +39,30 @@
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
+.form-group input:disabled {
+  background-color: #f8f9fa;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .error-message {
   color: #dc3545;
   margin-bottom: 1rem;
   font-size: 0.9rem;
   text-align: center;
+  padding: 0.5rem;
+  background-color: rgba(220, 53, 69, 0.1);
+  border-radius: 4px;
+}
+
+.success-message {
+  color: #28a745;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 0.5rem;
+  background-color: rgba(40, 167, 69, 0.1);
+  border-radius: 4px;
 }
 
 button {
@@ -53,6 +73,7 @@ button {
   font-size: 1rem;
   cursor: pointer;
   margin-bottom: 1rem;
+  transition: all 0.2s ease;
 }
 
 button[type="submit"] {
@@ -60,16 +81,27 @@ button[type="submit"] {
   color: white;
 }
 
-button[type="submit"]:hover {
+button[type="submit"]:hover:not(:disabled) {
   background-color: #0056b3;
 }
 
-.switch-auth {
+button[type="submit"]:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.toggle-button {
   background-color: transparent;
   color: #007bff;
 }
 
-.switch-auth:hover {
+.toggle-button:hover:not(:disabled) {
   text-decoration: underline;
   background-color: rgba(0, 123, 255, 0.1);
+}
+
+.toggle-button:disabled {
+  color: #6c757d;
+  cursor: not-allowed;
 } 

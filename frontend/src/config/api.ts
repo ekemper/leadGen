@@ -3,10 +3,13 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:50
 export const api = {
     get: async (endpoint: string) => {
         const response = await fetch(`${API_BASE_URL}${endpoint}`);
+        const data = await response.json();
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(data.error || `HTTP error! status: ${response.status}`);
         }
-        return response.json();
+        
+        return data;
     },
     
     post: async (endpoint: string, data: any) => {
@@ -17,9 +20,13 @@ export const api = {
             },
             body: JSON.stringify(data),
         });
+        
+        const responseData = await response.json();
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(responseData.error || `HTTP error! status: ${response.status}`);
         }
-        return response.json();
+        
+        return responseData;
     }
 }; 

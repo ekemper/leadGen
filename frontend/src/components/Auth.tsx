@@ -7,8 +7,8 @@ interface AuthProps {
 }
 
 interface AuthResponse {
-  token: string;
-  message: string;
+  token?: string;
+  message?: string;
 }
 
 interface AuthError {
@@ -21,29 +21,72 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const handleLogin = async (loginEmail: string, loginPassword: string) => {
+    const loginResponse = await api.post('/api/auth/login', {
+      email: loginEmail,
+      password: loginPassword
+    });
+
+    if (loginResponse && loginResponse.token) {
+      // Clear form
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      
+      // Update auth state - this will trigger redirection in App.tsx
+      onAuthSuccess(loginResponse.token);
+    } else {
+      throw new Error('Invalid login response from server');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
+    setIsLoading(true);
 
     if (!isLogin && password !== confirmPassword) {
       setError('Passwords do not match');
+      setIsLoading(false);
       return;
     }
 
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
-      const data = await api.post(endpoint, {
-        email,
-        password,
-        ...(isLogin ? {} : { confirm_password: confirmPassword })
-      });
+      if (!isLogin) {
+        // Handle Signup
+        const signupResponse = await api.post('/api/auth/signup', {
+          email,
+          password,
+          confirm_password: confirmPassword
+        });
 
-      if (data.token) {
-        onAuthSuccess(data.token);
+        if (signupResponse && signupResponse.message) {
+          setSuccessMessage(signupResponse.message);
+          
+          // Automatically log in after successful signup
+          try {
+            await handleLogin(email, password);
+          } catch (loginError) {
+            setError('Signup successful, but automatic login failed. Please log in manually.');
+            setIsLogin(true);
+            setPassword('');
+            setConfirmPassword('');
+          }
+        } else {
+          setError('Invalid signup response from server');
+        }
+      } else {
+        // Handle Login
+        await handleLogin(email, password);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -53,6 +96,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         <h2>{isLogin ? 'Login' : 'Sign Up'}</h2>
         
         {error && <div className="error-message">{error}</div>}
+        {successMessage && <div className="success-message">{successMessage}</div>}
         
         <div className="form-group">
           <label htmlFor="email">Email:</label>
@@ -62,6 +106,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            disabled={isLoading}
           />
         </div>
 
@@ -73,6 +118,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            disabled={isLoading}
+            autoComplete="new-password"
           />
         </div>
 
@@ -85,18 +132,32 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              disabled={isLoading}
+              autoComplete="new-password"
             />
           </div>
         )}
 
-        <button type="submit" className="submit-button">
-          {isLogin ? 'Login' : 'Sign Up'}
+        <button 
+          type="submit" 
+          className="submit-button"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Please wait...' : (isLogin ? 'Login' : 'Sign Up')}
         </button>
 
         <button
           type="button"
           className="toggle-button"
-          onClick={() => setIsLogin(!isLogin)}
+          onClick={() => {
+            setIsLogin(!isLogin);
+            setError('');
+            setSuccessMessage('');
+            setEmail('');
+            setPassword('');
+            setConfirmPassword('');
+          }}
+          disabled={isLoading}
         >
           {isLogin ? 'Need an account? Sign up' : 'Already have an account? Login'}
         </button>
