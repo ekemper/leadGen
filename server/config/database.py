@@ -28,19 +28,21 @@ def init_db(app, test_config=None):
     if test_config is None:
         # Use the configured database URL with SSL for Neon
         app.config['SQLALCHEMY_DATABASE_URI'] = get_db_url()
+        
+        # Configure SQLAlchemy pool settings for Neon/PostgreSQL only
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 5,  # Maximum number of connections in the pool
+            'pool_timeout': 30,  # Seconds to wait before timing out
+            'pool_recycle': 1800,  # Recycle connections after 30 minutes
+            'max_overflow': 2,  # Maximum number of connections that can be created beyond pool_size
+        }
     else:
         # Use test configuration if provided
         app.config['SQLALCHEMY_DATABASE_URI'] = test_config.get('DATABASE_URL', 'sqlite:///:memory:')
+        # No pool settings for SQLite test database
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {}
     
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    
-    # Configure SQLAlchemy pool settings for Neon
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_size': 5,  # Maximum number of connections in the pool
-        'pool_timeout': 30,  # Seconds to wait before timing out
-        'pool_recycle': 1800,  # Recycle connections after 30 minutes
-        'max_overflow': 2,  # Maximum number of connections that can be created beyond pool_size
-    }
     
     db.init_app(app)
     
