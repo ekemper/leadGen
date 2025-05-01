@@ -1,15 +1,24 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 export const api = {
-    get: async (endpoint: string) => {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`);
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+    get: async (endpoint: string, params?: any) => {
+        const url = new URL(`${API_BASE_URL}${endpoint}`);
+        if (params) {
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    url.searchParams.append(key, String(value));
+                }
+            });
         }
         
-        return data;
+        const response = await fetch(url.toString());
+        const responseData = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(responseData.error || `HTTP error! status: ${response.status}`);
+        }
+        
+        return responseData;
     },
     
     post: async (endpoint: string, data: any) => {

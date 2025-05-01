@@ -18,10 +18,13 @@ def init_api(app):
     """Initialize API blueprint and its configurations"""
     # Configure CORS for API routes
     CORS(app, resources={
-        r"/auth/*": {"origins": app.config.get('ALLOWED_ORIGINS', '*').split(','),
+        r"/api/auth/*": {"origins": app.config.get('ALLOWED_ORIGINS', '*').split(','),
                     "methods": ["POST"],
                     "allow_headers": ["Content-Type", "Authorization"]},
-        r"/": {"origins": "*"}  # Allow all origins for the root path
+        r"/api/fetch_apollo_leads": {"origins": app.config.get('ALLOWED_ORIGINS', '*').split(','),
+                                "methods": ["POST"],
+                                "allow_headers": ["Content-Type"]},
+        r"/api/": {"origins": "*"}  # Allow all origins for the root path
     })
 
     # Configure rate limiting

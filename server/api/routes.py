@@ -145,7 +145,7 @@ def register_routes(api):
                 }
             }), 500
 
-    @api.route('/fetch_apollo_leads', methods=['GET'])
+    @api.route('/fetch_apollo_leads', methods=['POST'])
     @log_function_call
     def fetch_apollo_leads():
         """
