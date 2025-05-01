@@ -1,5 +1,23 @@
 # API Documentation
 
+## Environment Setup
+1. Create a Python virtual environment:
+```bash
+python -m venv venv
+```
+
+2. Activate the virtual environment:
+- On Linux/macOS:
+```bash
+source venv/bin/activate
+```
+
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
 ## Base URL
 ```
 Development: http://localhost:5000/api
@@ -88,63 +106,40 @@ Query Parameters:
 - `end_date`: End date (YYYY-MM-DD)
 - `group_by`: Group by field ("source", "status", "date")
 
+### Scraping
+
+#### POST /scrape
+Scrape content from a provided URL.
+
+Request body:
+```json
+{
+  "url": "https://example.com"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "text_content": "string",
+    "title": "string",
+    "metadata": {},
+    "links": [],
+    "tables": []
+  },
+  "file_location": "temp_scrape_results.json"
+}
+```
+
+Example usage:
+```bash
+curl -X POST http://localhost:5000/api/scrape \
+     -H "Content-Type: application/json" \
+     -d '{"url": "https://example.com"}'
+```
+
 ## Error Responses
 All error responses follow this format:
-```json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable message",
-    "details": {} // Optional additional information
-  }
-}
 ```
-
-Common Error Codes:
-- `400`: Bad Request
-- `401`: Unauthorized
-- `403`: Forbidden
-- `404`: Not Found
-- `429`: Too Many Requests
-- `500`: Internal Server Error
-
-## Data Models
-
-### Lead
-```json
-{
-  "id": "uuid",
-  "name": "string",
-  "email": "string",
-  "company": "string",
-  "phone": "string",
-  "status": "enum(new, contacted, qualified, lost)",
-  "source": "string",
-  "notes": "string",
-  "created_at": "datetime",
-  "updated_at": "datetime"
-}
-```
-
-## Webhooks
-Webhooks are available for real-time notifications of lead updates.
-
-### Configuration
-POST /webhooks/configure
-```json
-{
-  "url": "https://your-server.com/webhook",
-  "events": ["lead.created", "lead.updated", "lead.deleted"],
-  "secret": "your_webhook_secret"
-}
-```
-
-## Best Practices
-1. Always validate request data
-2. Use appropriate HTTP methods
-3. Include error handling
-4. Implement rate limiting
-5. Use pagination for large datasets
-6. Keep endpoints versioned
-7. Use HTTPS in production
-8. Implement proper authentication 
