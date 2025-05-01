@@ -14,9 +14,12 @@ from .services.auth_service import AuthService
 from .services.scraper_service import ScraperService
 import json
 from flask import Blueprint
+from services.apollo_service import ApolloService
+from utils.middleware import log_function_call
 
 # Initialize services
 scraper_service = ScraperService()
+apollo_service = ApolloService()
 
 def register_routes(api):
     """Register all routes with the provided blueprint."""
@@ -140,4 +143,47 @@ def register_routes(api):
                     "code": "500",
                     "message": str(e)
                 }
+            }), 500
+
+    @api.route('/fetch_apollo_leads', methods=['GET'])
+    @log_function_call
+    def fetch_apollo_leads():
+        """
+        Fetch leads from Apollo API and save to file.
+        
+        Request body:
+        {
+            "count": int,
+            "excludeGuessedEmails": bool,
+            "excludeNoEmails": bool,
+            "getEmails": bool,
+            "searchUrl": str
+        }
+        
+        Returns:
+            JSON response with operation status and message
+        """
+        try:
+            # Get the request body
+            params = request.get_json()
+            
+            # Validate required parameters
+            required_params = ['count', 'excludeGuessedEmails', 'excludeNoEmails', 'getEmails', 'searchUrl']
+            for param in required_params:
+                if param not in params:
+                    return jsonify({
+                        "status": "error",
+                        "message": f"Missing required parameter: {param}"
+                    }), 400
+            
+            # Fetch leads using the Apollo service
+            result = apollo_service.fetch_leads(params)
+            
+            # Return the operation status
+            return jsonify(result)
+            
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": str(e)
             }), 500 
