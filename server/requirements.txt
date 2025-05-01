@@ -15,4 +15,5 @@ Flask-Migrate==4.0.5  # For database migrations
 
 # Testing dependencies
 pytest==8.0.2
-pytest-cov==4.1.0 
+pytest-cov==4.1.0
+pytest-watch==4.2.0 

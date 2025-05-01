@@ -46,20 +46,60 @@
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+  min-height: 100vh;
+  position: relative;
 }
 
 .health-status {
-  margin: 2rem;
-  padding: 2rem;
-  border-radius: 8px;
-  background-color: #f8f9fa;
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background-color: rgba(248, 249, 250, 0.9);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
 }
 
-.health-status p {
-  font-size: 1.2rem;
-  color: #28a745;
-  margin: 0;
+.health-status .status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.health-status .status-indicator.healthy {
+  background-color: #28a745;
+}
+
+.health-status .status-indicator.error {
+  background-color: #dc3545;
+}
+
+.health-status .status-indicator.loading {
+  background-color: #ffc107;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.health-status-text {
+  color: #666;
+  font-weight: 500;
 }
 
 .error {

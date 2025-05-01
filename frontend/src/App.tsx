@@ -16,9 +16,24 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    api.get('/api/health')
-      .then(data => setHealth(data))
-      .catch(err => setError(err.message));
+    const checkHealth = async () => {
+      try {
+        const data = await api.get('/api/health');
+        setHealth(data);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'API Error');
+        setHealth(null);
+      }
+    };
+
+    // Initial check
+    checkHealth();
+
+    // Set up periodic health checks every 30 seconds
+    const interval = setInterval(checkHealth, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -58,16 +73,16 @@ const App: React.FC = () => {
           {/* Add more routes as needed */}
         </Routes>
 
-        {/* Health status section */}
+        {/* Health status indicator */}
         <div className="health-status">
-          <h1>API Health Status</h1>
-          {error ? (
-            <div className="error">Error: {error}</div>
-          ) : health ? (
-            <div className="status">Status: {health.status}</div>
-          ) : (
-            <div>Loading...</div>
-          )}
+          <div 
+            className={`status-indicator ${
+              error ? 'error' : health ? 'healthy' : 'loading'
+            }`}
+          />
+          <span className="health-status-text">
+            {error ? 'API Error' : health ? 'API Healthy' : 'Checking API...'}
+          </span>
         </div>
       </div>
     </Router>
