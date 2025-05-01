@@ -11,6 +11,12 @@ from config.database import db
 from utils.logger import logger
 from werkzeug.exceptions import BadRequest
 from .services.auth_service import AuthService
+from .services.scraper_service import ScraperService
+import json
+from flask import Blueprint
+
+# Initialize services
+scraper_service = ScraperService()
 
 def register_routes(api):
     """Register all routes with the provided blueprint."""
@@ -92,4 +98,46 @@ def register_routes(api):
         return jsonify({
             'message': 'Welcome to the Auth Template API',
             'version': '1.0.0'
-        }), 200 
+        }), 200
+
+    @api.route('/scrape', methods=['POST'])
+    def scrape_url():
+        # Validate request format
+        if not request.is_json:
+            return jsonify({
+                "error": {
+                    "code": "400",
+                    "message": "Request must be JSON"
+                }
+            }), 400
+
+        data = request.get_json()
+        
+        # Validate required fields
+        if 'url' not in data:
+            return jsonify({
+                "error": {
+                    "code": "400",
+                    "message": "URL is required"
+                }
+            }), 400
+
+        try:
+            # Delegate to service
+            result = scraper_service.scrape_and_save(data['url'])
+            return jsonify(result)
+
+        except ValueError as e:
+            return jsonify({
+                "error": {
+                    "code": "400",
+                    "message": str(e)
+                }
+            }), 400
+        except Exception as e:
+            return jsonify({
+                "error": {
+                    "code": "500",
+                    "message": str(e)
+                }
+            }), 500 
