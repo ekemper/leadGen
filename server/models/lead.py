@@ -18,6 +18,7 @@ class Lead(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     raw_lead_data = db.Column(JSON, nullable=True)
+    email_verification = db.Column(JSON, nullable=True)
 
     campaign = db.relationship('Campaign', backref=db.backref('leads', lazy=True))
 
@@ -48,7 +49,8 @@ class Lead(db.Model):
             'campaign_id': self.campaign_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'raw_lead_data': self.raw_lead_data
+            'raw_lead_data': self.raw_lead_data,
+            'email_verification': self.email_verification
         }
 
     def __repr__(self):

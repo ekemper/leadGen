@@ -33,8 +33,9 @@ def init_db(app, test_config=None):
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
             'pool_size': 5,  # Maximum number of connections in the pool
             'pool_timeout': 30,  # Seconds to wait before timing out
-            'pool_recycle': 60,  # Recycle connections after 1 minute
+            'pool_recycle': 60,  # Recycle connections after 60 seconds
             'max_overflow': 2,  # Maximum number of connections that can be created beyond pool_size
+            'pool_pre_ping': True,  # Check if connection is alive before using
         }
     else:
         # Use test configuration if provided

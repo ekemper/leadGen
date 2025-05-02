@@ -11,7 +11,7 @@ class CampaignService:
     def create_campaign_with_leads(self, params):
         try:
             # Import tasks here to avoid circular import
-            from server.tasks import fetch_and_save_leads_task, enriching_leads_task
+            from server.tasks import fetch_and_save_leads_task, email_verification_task, enriching_leads_task
             # Create a new campaign
             campaign = Campaign()
             db.session.add(campaign)
@@ -31,17 +31,18 @@ class CampaignService:
             # Kick off background task chain
             logger.info({
                 'event': 'trigger_celery_chain',
-                'message': 'About to trigger fetch_and_save_leads_task -> enriching_leads_task chain',
+                'message': 'About to trigger fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task chain',
                 'params': params,
                 'campaign_id': campaign.id
             })
             chain(
                 fetch_and_save_leads_task.s(params, campaign.id),
+                email_verification_task.s(),
                 enriching_leads_task.s()
             )()
             logger.info({
                 'event': 'celery_chain_triggered',
-                'message': 'Celery chain (fetch_and_save_leads_task -> enriching_leads_task) called',
+                'message': 'Celery chain (fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task) called',
                 'params': params,
                 'campaign_id': campaign.id
             })

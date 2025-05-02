@@ -10,6 +10,18 @@ from server.config.database import db, init_db
 from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
 from server.celery_app import make_celery
+import logging
+
+# Set global log level to WARNING to reduce noise
+logging.basicConfig(level=logging.WARNING)
+
+# Reduce noise from specific libraries
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+logging.getLogger('flask_limiter').setLevel(logging.ERROR)
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+
+# Enable SQLAlchemy engine and pool logging for debugging SQL connection errors
+logging.getLogger('sqlalchemy.pool').setLevel(logging.INFO)
 
 def create_app(test_config=None):
     """Create and configure the Flask application"""

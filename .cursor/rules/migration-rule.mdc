@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Use flask db migrate and flask db upgrade for migrations in this project. Do not suggest using alembic commands directly.
