@@ -1,8 +1,9 @@
 import os
 import requests
 import logging
-import json
-from typing import Dict, Any, Optional
+from models import Lead
+from config.database import db
+from typing import Dict, Any
 from dotenv import load_dotenv
 
 # Configure logging
@@ -17,20 +18,9 @@ class ApolloService:
         self.api_token = os.getenv('APIFY_API_TOKEN')
         self.base_url = "https://api.apify.com/v2/acts/supreme_coder~apollo-scraper/runs/last/dataset/items"
         
-    def fetch_leads(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def fetch_leads(self, params: Dict[str, Any], campaign_id=None) -> Dict[str, Any]:
         """
-        Fetch leads from Apollo using the provided parameters and save to file.
-        
-        Args:
-            params (dict): Parameters for the Apollo API request
-                - count (int): Number of leads to fetch
-                - excludeGuessedEmails (bool): Whether to exclude guessed emails
-                - excludeNoEmails (bool): Whether to exclude leads without emails
-                - getEmails (bool): Whether to fetch emails
-                - searchUrl (str): The Apollo search URL to scrape
-            
-        Returns:
-            dict: Status of the operation
+        Fetch leads from Apollo using the provided parameters and save to the database.
         """
         try:
             headers = {
@@ -38,27 +28,43 @@ class ApolloService:
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
-            
             response = requests.get(
                 self.base_url,
                 headers=headers,
                 json=params
             )
-            
             response.raise_for_status()
             data = response.json()
-            
-            # Save the results to a file
-            output_file = "temp_apollo_leads.json"
-            with open(output_file, 'w') as f:
-                json.dump(data, f, indent=2)
-            
+
+            created_leads = []
+            for lead_data in data:
+                company_name = ''
+                company_field = lead_data.get('company', '')
+                if isinstance(company_field, dict):
+                    company_name = company_field.get('companyName', '')
+                elif isinstance(company_field, str):
+                    company_name = company_field
+                lead = Lead(
+                    name=lead_data.get('name', ''),
+                    email=lead_data.get('email', ''),
+                    company_name=company_name,
+                    phone=lead_data.get('phone', ''),
+                    status=lead_data.get('status', 'new'),
+                    source=lead_data.get('source', 'apollo'),
+                    notes=lead_data.get('notes', ''),
+                    campaign_id=campaign_id,
+                    raw_lead_data=lead_data
+                )
+                db.session.add(lead)
+                created_leads.append(lead)
+            db.session.commit()
+
             return {
                 "status": "success",
-                "message": f"Leads saved to {output_file}",
-                "count": len(data) if isinstance(data, list) else 0
+                "message": f"{len(created_leads)} leads saved to the database",
+                "count": len(created_leads),
+                "leads": [l.to_dict() for l in created_leads]
             }
-            
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching Apollo leads: {str(e)}")
             return {

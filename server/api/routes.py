@@ -18,11 +18,13 @@ from flask import Blueprint
 from services.apollo_service import ApolloService
 from utils.middleware import log_function_call
 from functools import wraps
+from .services.campaign_service import CampaignService
 
 # Initialize services
 scraper_service = ScraperService()
 apollo_service = ApolloService()
 lead_service = LeadService()
+campaign_service = CampaignService()
 
 # Create blueprint
 api = Blueprint('api', __name__)
@@ -193,43 +195,22 @@ def register_routes(api):
     @log_function_call
     def create_campaign():
         """
-        Fetch leads from Apollo API and save to file (now as campaign creation).
-        
-        Request body:
-        {
-            "count": int,
-            "excludeGuessedEmails": bool,
-            "excludeNoEmails": bool,
-            "getEmails": bool,
-            "searchUrl": str
-        }
-        
-        Returns:
-            JSON response with operation status and message
+        Create a campaign and fetch leads from Apollo API, saving them to the database.
         """
         try:
-            # Get the request body
             params = request.get_json()
-            
-            # Validate required parameters
             required_params = ['count', 'excludeGuessedEmails', 'excludeNoEmails', 'getEmails', 'searchUrl']
             for param in required_params:
                 if param not in params:
                     raise BadRequest(f"Missing required parameter: {param}")
-            
-            # Fetch leads using the Apollo service
-            result = apollo_service.fetch_leads(params)
-            
-            # Return the operation status
-            return jsonify({
-                'status': 'success',
-                'data': result
-            })
-            
+
+            result = campaign_service.create_campaign_with_leads(params)
+
+            return jsonify(result), 201
+        except BadRequest as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 400
         except Exception as e:
-            if isinstance(e, BadRequest):
-                raise
-            raise InternalServerError(str(e))
+            return jsonify({'status': 'error', 'message': str(e)}), 500
 
     @api.route('/leads', methods=['GET'])
     @token_required

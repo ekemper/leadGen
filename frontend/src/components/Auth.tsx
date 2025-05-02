@@ -30,6 +30,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       password: loginPassword
     });
 
+    console.log('Login response:', loginResponse);
+
     if (loginResponse && loginResponse.token) {
       // Clear form
       setEmail('');

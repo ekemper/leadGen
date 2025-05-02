@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { api } from '../config/api';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { useNavigate } from 'react-router-dom';
 
 const Campaigns: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -10,7 +13,7 @@ const Campaigns: React.FC = () => {
     searchUrl: "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing"
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -23,13 +26,22 @@ const Campaigns: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setMessage('');
 
     try {
-      const response = await api.post('/api/fetch_apollo_leads', formData);
-      setMessage(`Success! ${response.message}`);
-    } catch (error) {
-      setMessage(`Error: ${error instanceof Error ? error.message : 'Failed to fetch leads'}`);
+      const response = await api.post('/api/campaigns', formData);
+      if (response.status === 'success') {
+        toast.success(response.message || 'Campaign started successfully!');
+      } else {
+        toast.error(response.message || 'Failed to start campaign.');
+        if (response.message && response.message.toLowerCase().includes('token is missing')) {
+          setTimeout(() => navigate('/login'), 1500);
+        }
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to start campaign.');
+      if (error?.message && error.message.toLowerCase().includes('token is missing')) {
+        setTimeout(() => navigate('/login'), 1500);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -41,6 +53,7 @@ const Campaigns: React.FC = () => {
       padding: '2rem',
       color: '#d4d4d4'
     }}>
+      <ToastContainer position="top-right" autoClose={4000} hideProgressBar={false} newestOnTop closeOnClick pauseOnFocusLoss draggable pauseOnHover />
       <h1 style={{ fontSize: '1.5rem', marginBottom: '2rem' }}>Campaigns</h1>
       
       <form onSubmit={handleSubmit} style={{
@@ -141,19 +154,8 @@ const Campaigns: React.FC = () => {
             opacity: isLoading ? 0.7 : 1
           }}
         >
-          {isLoading ? 'Fetching...' : 'Fetch Leads'}
+          {isLoading ? 'Starting...' : 'Start Campaign'}
         </button>
-
-        {message && (
-          <div style={{ 
-            marginTop: '1rem',
-            padding: '0.75rem',
-            backgroundColor: message.includes('Error') ? '#dc3545' : '#198754',
-            borderRadius: '4px'
-          }}>
-            {message}
-          </div>
-        )}
       </form>
     </div>
   );

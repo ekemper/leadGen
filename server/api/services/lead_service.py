@@ -79,6 +79,9 @@ class LeadService:
             company=data['company'],
             notes=data.get('notes', ''),
             status=data.get('status', 'new'),
+            phone=data.get('phone', ''),
+            source=data.get('source', 'apollo'),
+            campaign_id=data.get('campaign_id'),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
