@@ -1,4 +1,4 @@
-from flask import jsonify, request, g
+from flask import jsonify, request, g, current_app, abort
 from email_validator import validate_email, EmailNotValidError
 from datetime import datetime, timedelta
 import bcrypt
@@ -9,7 +9,7 @@ import uuid
 from models import User
 from config.database import db
 from utils.logger import logger
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, Unauthorized, NotFound, InternalServerError
 from .services.auth_service import AuthService
 from .services.scraper_service import ScraperService
 from .services.lead_service import LeadService
@@ -24,7 +24,11 @@ scraper_service = ScraperService()
 apollo_service = ApolloService()
 lead_service = LeadService()
 
+# Create blueprint
+api = Blueprint('api', __name__)
+
 def token_required(f):
+    """Decorator to protect routes with JWT authentication."""
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
@@ -42,7 +46,7 @@ def token_required(f):
             
         try:
             # Decode the token
-            data = jwt.decode(token, os.getenv('JWT_SECRET_KEY', 'your-secret-key'), algorithms=['HS256'])
+            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
             current_user = User.query.filter_by(id=data['user_id']).first()
             
             if not current_user:
@@ -51,26 +55,22 @@ def token_required(f):
                     'message': 'User not found'
                 }), 401
                 
-            # Store the current user in the request context
+            # Add user to request context
             g.current_user = current_user
+            return f(*args, **kwargs)
             
         except jwt.ExpiredSignatureError:
             return jsonify({
                 'status': 'error',
                 'message': 'Token has expired'
             }), 401
+            
         except jwt.InvalidTokenError:
             return jsonify({
                 'status': 'error',
                 'message': 'Invalid token'
             }), 401
-        except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500
             
-        return f(*args, **kwargs)
     return decorated
 
 def register_routes(api):
@@ -86,125 +86,114 @@ def register_routes(api):
             'endpoint': '/api/health'
         }), 200
 
-    @api.route('/auth/signup', methods=['POST'])
-    def signup():
-        """User registration endpoint."""
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'error': 'Missing required fields'}), 400
-        except BadRequest:
-            return jsonify({'error': 'Invalid JSON payload'}), 400
-        
-        if not all(k in data for k in ['email', 'password', 'confirm_password']):
-            return jsonify({'error': 'All fields are required'}), 400
-
-        email = data['email'].lower().strip()
-        password = data['password']
-        confirm_password = data['confirm_password']
-
-        result = AuthService.signup(email, password, confirm_password)
-        if result['success']:
-            return jsonify({'message': 'User registered successfully'}), 201
-        else:
-            return jsonify({'error': result['message']}), 400
-
-    @api.route('/auth/login', methods=['POST'])
-    def login():
-        """User login endpoint."""
-        try:
-            # Set request timeout
-            request.environ['REQUEST_TIMEOUT'] = 30
-
-            # Get and validate input
-            try:
-                data = request.get_json()
-            except Exception as e:
-                logger.warning('Invalid JSON payload', extra={'error': str(e)})
-                return jsonify({'error': 'Invalid JSON payload'}), 400
-
-            if not data:
-                logger.warning('Login attempt with no data provided')
-                return jsonify({'error': 'No data provided'}), 400
-
-            email = data.get('email', '').lower().strip()
-            password = data.get('password', '')
-
-            if not email or not password:
-                logger.warning('Login attempt with missing email or password')
-                return jsonify({'error': 'Missing email or password'}), 400
-
-            result = AuthService.login(email, password)
-            if result['success']:
-                return jsonify({
-                    'message': result['message'],
-                    'token': result['token']
-                }), result.get('status_code', 200)
-            else:
-                return jsonify({'error': result['message']}), result.get('status_code', 401)
-
-        except Exception as e:
-            logger.error('Login failed', extra={'error': str(e)}, exc_info=True)
-            return jsonify({'error': 'An unexpected error occurred'}), 500
-
     @api.route('/')
-    @token_required
     def root():
         """Root endpoint."""
         return jsonify({
+            'status': 'success',
             'message': 'Welcome to the Auth Template API',
             'version': '1.0.0'
         }), 200
 
+    @api.route('/auth/signup', methods=['POST'])
+    def signup():
+        """Handle user registration."""
+        try:
+            data = request.get_json()
+            if not data:
+                raise BadRequest("No input data provided")
+            
+            email = data.get('email')
+            password = data.get('password')
+            confirm_password = data.get('confirm_password')
+            
+            if not all([email, password, confirm_password]):
+                raise BadRequest("All fields are required")
+            
+            result = AuthService.signup(email, password, confirm_password)
+            return jsonify(result), 201
+        
+        except BadRequest as e:
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 400
+        
+        except Exception as e:
+            logger.error(f"Error during signup: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 400
+
+    @api.route('/auth/login', methods=['POST'])
+    def login():
+        """Handle user login."""
+        try:
+            data = request.get_json()
+            if not data:
+                raise BadRequest("No input data provided")
+            
+            email = data.get('email')
+            password = data.get('password')
+            
+            if not all([email, password]):
+                raise BadRequest("Missing email or password")
+            
+            result = AuthService.login(email, password)
+            return jsonify(result), 200
+        
+        except (BadRequest, Unauthorized) as e:
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), e.code
+        
+        except Exception as e:
+            logger.error(f"Error during login: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': "An error occurred during login"
+            }), 500
+
     @api.route('/scrape', methods=['POST'])
     @token_required
     def scrape_url():
-        # Validate request format
-        if not request.is_json:
-            return jsonify({
-                "error": {
-                    "code": "400",
-                    "message": "Request must be JSON"
-                }
-            }), 400
-
-        data = request.get_json()
-        
-        # Validate required fields
-        if 'url' not in data:
-            return jsonify({
-                "error": {
-                    "code": "400",
-                    "message": "URL is required"
-                }
-            }), 400
-
+        """Scrape content from a URL."""
         try:
-            # Delegate to service
-            result = scraper_service.scrape_and_save(data['url'])
-            return jsonify(result)
-
-        except ValueError as e:
+            data = request.get_json()
+            if not data:
+                raise BadRequest("No input data provided")
+            
+            url = data.get('url')
+            if not url:
+                raise BadRequest("URL is required")
+            
+            result = ScraperService().scrape_and_save(url)
             return jsonify({
-                "error": {
-                    "code": "400",
-                    "message": str(e)
-                }
+                'status': 'success',
+                'data': result
+            }), 200
+        
+        except BadRequest as e:
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
             }), 400
+        
         except Exception as e:
+            logger.error(f"Error scraping URL: {str(e)}")
             return jsonify({
-                "error": {
-                    "code": "500",
-                    "message": str(e)
-                }
+                'status': 'error',
+                'message': str(e)
             }), 500
 
-    @api.route('/fetch_apollo_leads', methods=['POST'])
+    @api.route('/campaigns', methods=['POST'])
     @token_required
     @log_function_call
-    def fetch_apollo_leads():
+    def create_campaign():
         """
-        Fetch leads from Apollo API and save to file.
+        Fetch leads from Apollo API and save to file (now as campaign creation).
         
         Request body:
         {
@@ -226,38 +215,37 @@ def register_routes(api):
             required_params = ['count', 'excludeGuessedEmails', 'excludeNoEmails', 'getEmails', 'searchUrl']
             for param in required_params:
                 if param not in params:
-                    return jsonify({
-                        "status": "error",
-                        "message": f"Missing required parameter: {param}"
-                    }), 400
+                    raise BadRequest(f"Missing required parameter: {param}")
             
             # Fetch leads using the Apollo service
             result = apollo_service.fetch_leads(params)
             
             # Return the operation status
-            return jsonify(result)
+            return jsonify({
+                'status': 'success',
+                'data': result
+            })
             
         except Exception as e:
-            return jsonify({
-                "status": "error",
-                "message": str(e)
-            }), 500
+            if isinstance(e, BadRequest):
+                raise
+            raise InternalServerError(str(e))
 
     @api.route('/leads', methods=['GET'])
     @token_required
     def get_leads():
-        """Get all leads."""
+        """Get all leads for the current user."""
         try:
-            leads = lead_service.get_all_leads()
+            lead_service = LeadService()
+            leads = lead_service.get_leads(g.current_user.id)
             return jsonify({
                 'status': 'success',
-                'data': [lead.to_dict() for lead in leads]
-            })
+                'data': leads
+            }), 200
+        
         except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500
+            logger.error(f"Error fetching leads: {str(e)}")
+            raise
 
     @api.route('/leads', methods=['POST'])
     @token_required
@@ -266,104 +254,88 @@ def register_routes(api):
         try:
             data = request.get_json()
             if not data:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'No data provided'
-                }), 400
-
-            lead, is_duplicate, reason = lead_service.create_lead(data)
+                raise BadRequest("No input data provided")
             
-            if is_duplicate:
-                return jsonify({
-                    'status': 'warning',
-                    'message': reason,
-                    'data': lead.to_dict()
-                }), 200
-
+            lead_service = LeadService()
+            lead = lead_service.create_lead(user_id=g.current_user.id, data=data)
             return jsonify({
                 'status': 'success',
-                'data': lead.to_dict()
+                'data': lead
             }), 201
-        except ValueError as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 400
+        
+        except BadRequest as e:
+            raise
+        
         except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500
+            logger.error(f"Error creating lead: {str(e)}")
+            raise
 
     @api.route('/leads/<lead_id>', methods=['GET'])
     @token_required
     def get_lead(lead_id):
-        """Get a specific lead by ID."""
+        """Get a specific lead."""
         try:
-            lead = lead_service.get_lead(lead_id)
+            lead_service = LeadService()
+            lead = lead_service.get_lead(user_id=g.current_user.id, lead_id=lead_id)
             if not lead:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Lead not found'
-                }), 404
-
+                raise NotFound("Lead not found")
+            
             return jsonify({
                 'status': 'success',
-                'data': lead.to_dict()
-            })
+                'data': lead
+            }), 200
+        
+        except NotFound as e:
+            raise
+        
         except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500
+            logger.error(f"Error fetching lead: {str(e)}")
+            raise
 
     @api.route('/leads/<lead_id>', methods=['PUT'])
     @token_required
     def update_lead(lead_id):
-        """Update a lead."""
+        """Update a specific lead."""
         try:
             data = request.get_json()
             if not data:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'No data provided'
-                }), 400
-
-            lead = lead_service.update_lead(lead_id, data)
+                raise BadRequest("No input data provided")
+            
+            lead_service = LeadService()
+            lead = lead_service.update_lead(user_id=g.current_user.id, lead_id=lead_id, data=data)
             if not lead:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Lead not found'
-                }), 404
-
+                raise NotFound("Lead not found")
+            
             return jsonify({
                 'status': 'success',
-                'data': lead.to_dict()
-            })
+                'data': lead
+            }), 200
+        
+        except (NotFound, BadRequest) as e:
+            raise
+        
         except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500
+            logger.error(f"Error updating lead: {str(e)}")
+            raise
 
     @api.route('/leads/<lead_id>', methods=['DELETE'])
     @token_required
     def delete_lead(lead_id):
-        """Delete a lead."""
+        """Delete a specific lead."""
         try:
-            success = lead_service.delete_lead(lead_id)
+            lead_service = LeadService()
+            success = lead_service.delete_lead(user_id=g.current_user.id, lead_id=lead_id)
             if not success:
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Lead not found'
-                }), 404
-
+                raise NotFound("Lead not found")
+            
             return jsonify({
                 'status': 'success',
                 'message': 'Lead deleted successfully'
-            })
+            }), 200
+        
+        except NotFound as e:
+            raise
+        
         except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'message': str(e)
-            }), 500 
+            logger.error(f"Error deleting lead: {str(e)}")
+            raise 

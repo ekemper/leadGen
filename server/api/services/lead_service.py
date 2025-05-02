@@ -1,111 +1,137 @@
-import json
-import os
-from typing import List, Dict, Any, Optional, Tuple
-from models.lead import Lead
+from datetime import datetime
+import uuid
+from models import Lead
+from config.database import db
+from werkzeug.exceptions import BadRequest, NotFound
 
 class LeadService:
-    def __init__(self, storage_file: str = 'leads.json'):
-        self.storage_file = storage_file
-        self._ensure_storage_file()
+    """Service for handling lead-related operations."""
 
-    def _ensure_storage_file(self):
-        """Ensure the storage file exists and is valid JSON."""
-        if not os.path.exists(self.storage_file):
-            with open(self.storage_file, 'w') as f:
-                json.dump([], f)
-
-    def _read_leads(self) -> List[Dict[str, Any]]:
-        """Read all leads from the storage file."""
-        with open(self.storage_file, 'r') as f:
-            return json.load(f)
-
-    def _write_leads(self, leads: List[Dict[str, Any]]):
-        """Write leads to the storage file."""
-        with open(self.storage_file, 'w') as f:
-            json.dump(leads, f, indent=2)
-
-    def _is_duplicate(self, email: str, guid: Optional[str] = None) -> Tuple[bool, Optional[Lead], str]:
+    def get_leads(self, user_id: str) -> list:
         """
-        Check if a lead with the given email or GUID already exists.
-        Returns a tuple of (is_duplicate, existing_lead, reason)
+        Get all leads for a user.
+        
+        Args:
+            user_id: The ID of the user
+            
+        Returns:
+            list: List of leads
         """
-        leads_data = self._read_leads()
-        
-        # First check for GUID match
-        if guid:
-            for lead_data in leads_data:
-                if lead_data.get('guid') == guid:
-                    return True, Lead.from_dict(lead_data), "A lead with this GUID already exists"
-        
-        # Then check for email match
-        for lead_data in leads_data:
-            if lead_data['email'].lower() == email.lower():
-                return True, Lead.from_dict(lead_data), "A lead with this email already exists"
-        
-        return False, None, ""
+        leads = Lead.query.filter_by(user_id=user_id).all()
+        return [lead.to_dict() for lead in leads]
 
-    def get_all_leads(self) -> List[Lead]:
-        """Get all leads."""
-        leads_data = self._read_leads()
-        return [Lead.from_dict(lead_data) for lead_data in leads_data]
+    def get_lead(self, user_id: str, lead_id: str) -> dict:
+        """
+        Get a specific lead.
+        
+        Args:
+            user_id: The ID of the user
+            lead_id: The ID of the lead
+            
+        Returns:
+            dict: Lead data
+            
+        Raises:
+            NotFound: If the lead doesn't exist
+        """
+        lead = Lead.query.filter_by(id=lead_id, user_id=user_id).first()
+        if not lead:
+            raise NotFound("Lead not found")
+        return lead.to_dict()
 
-    def get_lead(self, lead_id: str) -> Optional[Lead]:
-        """Get a lead by ID or GUID."""
-        leads_data = self._read_leads()
-        for lead_data in leads_data:
-            if lead_data.get('guid') == lead_id or lead_data.get('id') == lead_id:
-                return Lead.from_dict(lead_data)
-        return None
-
-    def create_lead(self, lead_data: Dict[str, Any]) -> Tuple[Lead, bool, str]:
+    def create_lead(self, user_id: str, data: dict) -> dict:
         """
         Create a new lead.
-        Returns a tuple of (lead, is_duplicate, reason)
+        
+        Args:
+            user_id: The ID of the user
+            data: Lead data
+            
+        Returns:
+            dict: Created lead data
+            
+        Raises:
+            BadRequest: If required fields are missing
         """
-        # Check for required fields
-        email = lead_data.get('email', '')
-        if not email:
-            raise ValueError("Email is required for lead creation")
+        required_fields = ['email', 'name', 'company']
+        for field in required_fields:
+            if not data.get(field):
+                raise BadRequest(f"{field.capitalize()} is required for lead creation")
 
-        # Check for duplicates
-        guid = lead_data.get('guid')
-        is_duplicate, existing_lead, reason = self._is_duplicate(email, guid)
-        if is_duplicate:
-            return existing_lead, True, reason
+        # Check for duplicate
+        existing_lead = Lead.query.filter_by(
+            user_id=user_id,
+            email=data['email']
+        ).first()
 
-        # Create new lead
-        lead = Lead(**lead_data)
-        leads_data = self._read_leads()
-        leads_data.append(lead.to_dict())
-        self._write_leads(leads_data)
-        return lead, False, ""
+        if existing_lead:
+            return {
+                'status': 'warning',
+                'message': 'Lead with this email already exists',
+                'data': existing_lead.to_dict()
+            }
 
-    def update_lead(self, lead_id: str, update_data: Dict[str, Any]) -> Optional[Lead]:
-        """Update an existing lead."""
-        leads_data = self._read_leads()
-        for i, lead_data in enumerate(leads_data):
-            if lead_data.get('guid') == lead_id or lead_data.get('id') == lead_id:
-                # Check if email is being updated and if it would create a duplicate
-                if 'email' in update_data:
-                    email = update_data['email']
-                    is_duplicate, _, reason = self._is_duplicate(email)
-                    if is_duplicate:
-                        raise ValueError(reason)
+        lead = Lead(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            email=data['email'],
+            name=data['name'],
+            company=data['company'],
+            notes=data.get('notes', ''),
+            status=data.get('status', 'new'),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
 
-                # Update the lead data
-                lead_data.update(update_data)
-                lead_data['updated_at'] = Lead().created_at  # Update timestamp
-                leads_data[i] = lead_data
-                self._write_leads(leads_data)
-                return Lead.from_dict(lead_data)
-        return None
+        db.session.add(lead)
+        db.session.commit()
 
-    def delete_lead(self, lead_id: str) -> bool:
-        """Delete a lead by ID or GUID."""
-        leads_data = self._read_leads()
-        for i, lead_data in enumerate(leads_data):
-            if lead_data.get('guid') == lead_id or lead_data.get('id') == lead_id:
-                del leads_data[i]
-                self._write_leads(leads_data)
-                return True
-        return False 
+        return lead.to_dict()
+
+    def update_lead(self, user_id: str, lead_id: str, data: dict) -> dict:
+        """
+        Update a lead.
+        
+        Args:
+            user_id: The ID of the user
+            lead_id: The ID of the lead
+            data: Updated lead data
+            
+        Returns:
+            dict: Updated lead data
+            
+        Raises:
+            NotFound: If the lead doesn't exist
+        """
+        lead = Lead.query.filter_by(id=lead_id, user_id=user_id).first()
+        if not lead:
+            raise NotFound("Lead not found")
+
+        # Update fields
+        for field in ['name', 'company', 'email', 'notes', 'status']:
+            if field in data:
+                setattr(lead, field, data[field])
+
+        lead.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return lead.to_dict()
+
+    # def delete_lead(self, user_id: str, lead_id: str) -> bool:
+    #     """
+    #     Delete a lead.
+        
+    #     Args:
+    #         user_id: The ID of the user
+    #         lead_id: The ID of the lead
+            
+    #     Returns:
+    #         bool: True if deleted, False if not found
+    #     """
+    #     lead = Lead.query.filter_by(id=lead_id, user_id=user_id).first()
+    #     if not lead:
+    #         return False
+
+    #     db.session.delete(lead)
+    #     db.session.commit()
+    #     return True 

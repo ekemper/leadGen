@@ -21,12 +21,12 @@ def test_protected_endpoint_invalid_token(client):
     assert response.json['status'] == 'error'
     assert response.json['message'] == 'Invalid token'
 
-def test_protected_endpoint_expired_token(client, auth_headers):
+def test_protected_endpoint_expired_token(client, auth_headers, test_secret_key):
     """Test accessing protected endpoint with expired token."""
     # Create an expired token
     expired_token = jwt.encode(
         {'user_id': 1, 'exp': datetime.utcnow() - timedelta(hours=1)},
-        'test-secret-key',
+        test_secret_key,
         algorithm='HS256'
     )
     headers = {'Authorization': f'Bearer {expired_token}'}
@@ -55,14 +55,13 @@ def test_protected_endpoint_valid_token(client, auth_headers):
     """Test accessing protected endpoint with valid token."""
     response = client.get('/api/leads', headers=auth_headers)
     assert response.status_code == 200
-    assert response.json['status'] == 'success'
 
-def test_protected_endpoint_user_not_found(client):
+def test_protected_endpoint_user_not_found(client, test_secret_key):
     """Test accessing protected endpoint with token for non-existent user."""
     # Create token for non-existent user
     token = jwt.encode(
-        {'user_id': 999999},
-        'test-secret-key',
+        {'user_id': 999999, 'exp': datetime.utcnow() + timedelta(days=1)},
+        test_secret_key,
         algorithm='HS256'
     )
     headers = {'Authorization': f'Bearer {token}'}

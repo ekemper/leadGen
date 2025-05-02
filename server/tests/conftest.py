@@ -6,6 +6,14 @@ from app import create_app
 from config.database import db, init_db
 from api.services.auth_service import AuthService
 
+# Define test secret key to be used consistently
+TEST_SECRET_KEY = 'test-secret-key'
+
+@pytest.fixture
+def test_secret_key():
+    """Return the test secret key."""
+    return TEST_SECRET_KEY
+
 @pytest.fixture
 def app():
     """Create and configure a new app instance for each test."""
@@ -14,7 +22,7 @@ def app():
         'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
         'SQLALCHEMY_TRACK_MODIFICATIONS': False,
         'RATELIMIT_ENABLED': False,  # Disable rate limiting for tests
-        'SECRET_KEY': 'test'
+        'SECRET_KEY': TEST_SECRET_KEY
     }
     
     app = create_app(test_config)
@@ -42,11 +50,11 @@ def runner(app):
 
 @pytest.fixture
 def test_user():
-    """Test user data."""
+    """A test user for authentication tests."""
     return {
         'email': 'test@example.com',
-        'password': 'Test123!@#',
-        'confirm_password': 'Test123!@#'
+        'password': 'Test123!',
+        'confirm_password': 'Test123!'
     }
 
 @pytest.fixture

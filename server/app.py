@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from utils.middleware import request_middleware
 from config.database import db, init_db
 from api import create_api_blueprint
+from werkzeug.exceptions import HTTPException, BadRequest
 
 def create_app(test_config=None):
     """Create and configure the Flask application"""
@@ -27,35 +28,59 @@ def create_app(test_config=None):
     # Initialize extensions
     CORS(app)
     limiter = Limiter(
-        get_remote_address,
         app=app,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri="memory://"
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"]
     )
     
-    # Initialize database and migrations
-    init_db(app, test_config)
+    # Initialize database
+    init_db(app)
     migrate = Migrate(app, db)
     
     # Register blueprints
-    api = create_api_blueprint()
-    limiter.limit("100/day;30/hour")(api)
-    app.register_blueprint(api, url_prefix='/api')
+    api_blueprint = create_api_blueprint()
+    app.register_blueprint(api_blueprint, url_prefix='/api')
     
-    # Configure middleware
-    request_middleware(app)
+    # Register error handlers
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error):
+        """Handle HTTP exceptions."""
+        response = {
+            'status': 'error',
+            'error': {
+                'code': error.code,
+                'name': error.name,
+                'message': error.description
+            }
+        }
+        return jsonify(response), error.code
 
-    # Add security headers
-    @app.after_request
-    def add_security_headers(response):
-        """Add security headers to all responses."""
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-        response.headers['Content-Security-Policy'] = "default-src 'self'"
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options'] = 'DENY'
-        response.headers['X-XSS-Protection'] = '1; mode=block'
-        return response
+    @app.errorhandler(BadRequest)
+    def handle_bad_request(error):
+        """Handle bad request errors."""
+        response = {
+            'status': 'error',
+            'error': {
+                'code': 400,
+                'name': 'Bad Request',
+                'message': str(error.description)
+            }
+        }
+        return jsonify(response), 400
 
+    @app.errorhandler(Exception)
+    def handle_generic_error(error):
+        """Handle generic exceptions."""
+        response = {
+            'status': 'error',
+            'error': {
+                'code': 500,
+                'name': 'Internal Server Error',
+                'message': str(error)
+            }
+        }
+        return jsonify(response), 500
+    
     return app
 
 # Only create the app if running directly
