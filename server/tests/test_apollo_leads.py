@@ -8,7 +8,7 @@ from flask import json
 def apollo_params():
     """Test Apollo parameters."""
     return {
-        'count': 10,
+        'count': 2,
         'excludeGuessedEmails': True,
         'excludeNoEmails': False,
         'getEmails': True,

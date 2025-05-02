@@ -12,6 +12,8 @@ gunicorn==21.2.0
 psycopg2-binary==2.9.9  # For PostgreSQL support
 Flask-SQLAlchemy==3.1.1  # For database ORM
 Flask-Migrate==4.0.5  # For database migrations
+celery==5.3.6
+redis==4.6.0
 
 # Testing dependencies
 pytest==8.0.2

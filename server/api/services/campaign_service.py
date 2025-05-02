@@ -2,6 +2,7 @@ from server.models import Campaign
 from server.config.database import db
 from server.services.apollo_service import ApolloService
 from server.utils.logger import logger
+from celery import chain
 
 class CampaignService:
     def __init__(self):
@@ -9,8 +10,8 @@ class CampaignService:
 
     def create_campaign_with_leads(self, params):
         try:
-            # Import here to avoid circular import
-            from server.tasks import fetch_and_save_leads_task
+            # Import tasks here to avoid circular import
+            from server.tasks import fetch_and_save_leads_task, enriching_leads_task
             # Create a new campaign
             campaign = Campaign()
             db.session.add(campaign)
@@ -27,17 +28,20 @@ class CampaignService:
                 'campaign_id': campaign.id,
                 'params': params
             })
-            # Kick off background task
+            # Kick off background task chain
             logger.info({
-                'event': 'trigger_celery_task',
-                'message': 'About to trigger fetch_and_save_leads_task',
+                'event': 'trigger_celery_chain',
+                'message': 'About to trigger fetch_and_save_leads_task -> enriching_leads_task chain',
                 'params': params,
                 'campaign_id': campaign.id
             })
-            fetch_and_save_leads_task.delay(params, campaign.id)
+            chain(
+                fetch_and_save_leads_task.s(params, campaign.id),
+                enriching_leads_task.s()
+            )()
             logger.info({
-                'event': 'celery_task_triggered',
-                'message': 'fetch_and_save_leads_task.delay called',
+                'event': 'celery_chain_triggered',
+                'message': 'Celery chain (fetch_and_save_leads_task -> enriching_leads_task) called',
                 'params': params,
                 'campaign_id': campaign.id
             })
