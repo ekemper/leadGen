@@ -1,2 +1,2 @@
-celery
-redis 
+redis==4.6.0
+rq==1.16.1 

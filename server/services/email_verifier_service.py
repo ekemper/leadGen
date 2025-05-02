@@ -38,13 +38,12 @@ class EmailVerifierService:
         Returns:
             int: Number of leads processed.
         """
-        session = db.create_scoped_session()
         try:
-            leads = session.query(Lead).filter_by(campaign_id=campaign_id).all()
+            leads = db.session.query(Lead).filter_by(campaign_id=campaign_id).all()
             for lead in leads:
                 result = self.verify_email(lead.email)
                 lead.email_verification = result
-            session.commit()
+            db.session.commit()
             return len(leads)
         finally:
-            session.remove() 
+            db.session.remove() 

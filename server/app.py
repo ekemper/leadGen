@@ -9,7 +9,6 @@ from server.utils.middleware import request_middleware
 from server.config.database import db, init_db
 from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
-from server.celery_app import make_celery
 import logging
 
 # Set global log level to WARNING to reduce noise
@@ -53,10 +52,6 @@ def create_app(test_config=None):
     # Register blueprints
     api_blueprint = create_api_blueprint()
     app.register_blueprint(api_blueprint, url_prefix='/api')
-    
-    # Add Celery config if not present
-    app.config.setdefault('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    app.config.setdefault('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
     
     # Register error handlers
     @app.errorhandler(HTTPException)
@@ -105,7 +100,6 @@ if __name__ == '__main__':
     from server.utils.logger import logger
     
     app = create_app()
-    celery_app = make_celery(app)
     
     logger.info('Starting application', extra={
         'environment': os.getenv('FLASK_ENV', 'development'),

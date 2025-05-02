@@ -5,7 +5,6 @@ from server.models.lead import Lead
 from server.config.database import db
 from typing import Dict, Any
 from dotenv import load_dotenv
-from sqlalchemy.orm import scoped_session
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -186,7 +185,6 @@ class ApolloService:
             }]
 
             created_leads = []
-            session = db.create_scoped_session()
             try:
                 for lead_data in data:
                     # Parse name from firstName and lastName
@@ -236,11 +234,11 @@ class ApolloService:
                         campaign_id=campaign_id,
                         raw_lead_data=lead_data
                     )
-                    session.add(lead)
+                    db.session.add(lead)
                     created_leads.append(lead)
-                session.commit()
+                db.session.commit()
             finally:
-                session.remove()
+                db.session.remove()
 
             return {
                 "status": "success",
