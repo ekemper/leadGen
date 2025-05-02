@@ -1,6 +1,6 @@
 from email_validator import validate_email, EmailNotValidError
 import re
-from models import User
+from server.models import User
 from typing import Dict, Union
 
 class ValidationService:

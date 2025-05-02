@@ -1,7 +1,7 @@
 from datetime import datetime
 import bcrypt
 import uuid
-from config.database import db
+from server.config.database import db
 
 class User(db.Model):
     """User model for authentication."""

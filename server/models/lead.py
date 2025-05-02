@@ -1,6 +1,6 @@
 from datetime import datetime
 import uuid
-from config.database import db
+from server.config.database import db
 from sqlalchemy.dialects.postgresql import JSON
 
 class Lead(db.Model):

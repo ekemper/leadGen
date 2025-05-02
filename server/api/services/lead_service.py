@@ -1,7 +1,7 @@
 from datetime import datetime
 import uuid
-from models import Lead
-from config.database import db
+from server.models import Lead
+from server.config.database import db
 from werkzeug.exceptions import BadRequest, NotFound
 
 class LeadService:

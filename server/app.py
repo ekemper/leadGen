@@ -5,10 +5,11 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate
 from dotenv import load_dotenv
-from utils.middleware import request_middleware
-from config.database import db, init_db
-from api import create_api_blueprint
+from server.utils.middleware import request_middleware
+from server.config.database import db, init_db
+from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
+from server.celery_app import make_celery
 
 def create_app(test_config=None):
     """Create and configure the Flask application"""
@@ -40,6 +41,10 @@ def create_app(test_config=None):
     # Register blueprints
     api_blueprint = create_api_blueprint()
     app.register_blueprint(api_blueprint, url_prefix='/api')
+    
+    # Add Celery config if not present
+    app.config.setdefault('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    app.config.setdefault('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
     
     # Register error handlers
     @app.errorhandler(HTTPException)
@@ -85,9 +90,10 @@ def create_app(test_config=None):
 
 # Only create the app if running directly
 if __name__ == '__main__':
-    from utils.logger import logger
+    from server.utils.logger import logger
     
     app = create_app()
+    celery_app = make_celery(app)
     
     logger.info('Starting application', extra={
         'environment': os.getenv('FLASK_ENV', 'development'),

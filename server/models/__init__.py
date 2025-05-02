@@ -1,9 +1,8 @@
 """
 Models package initialization.
 """
-from config.database import db
-from .user import User
-from .lead import Lead
-from .campaign import Campaign
+from server.models.user import User
+from server.models.lead import Lead
+from server.models.campaign import Campaign
 
-__all__ = ['db', 'User', 'Lead', 'Campaign'] 
+__all__ = ['User', 'Lead', 'Campaign'] 

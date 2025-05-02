@@ -2,9 +2,9 @@ import os
 import pytest
 from flask import Flask
 from dotenv import load_dotenv
-from app import create_app
-from config.database import db, init_db
-from api.services.auth_service import AuthService
+from server.app import create_app
+from server.config.database import db, init_db
+from server.api.services.auth_service import AuthService
 
 # Define test secret key to be used consistently
 TEST_SECRET_KEY = 'test-secret-key'

@@ -6,19 +6,19 @@ import jwt
 import os
 import re
 import uuid
-from models import User
-from config.database import db
-from utils.logger import logger
+from server.models import User
+from server.config.database import db
+from server.utils.logger import logger
 from werkzeug.exceptions import BadRequest, Unauthorized, NotFound, InternalServerError
-from .services.auth_service import AuthService
-from .services.scraper_service import ScraperService
-from .services.lead_service import LeadService
+from server.api.services.auth_service import AuthService
+from server.api.services.scraper_service import ScraperService
+from server.api.services.lead_service import LeadService
 import json
 from flask import Blueprint
-from services.apollo_service import ApolloService
-from utils.middleware import log_function_call
+from server.services.apollo_service import ApolloService
+from server.utils.middleware import log_function_call
 from functools import wraps
-from .services.campaign_service import CampaignService
+from server.api.services.campaign_service import CampaignService
 
 # Initialize services
 scraper_service = ScraperService()

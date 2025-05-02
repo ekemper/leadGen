@@ -8,15 +8,14 @@ from bs4 import BeautifulSoup
 import trafilatura
 import re
 from urllib.parse import urlparse
-from utils.logger import logger
+from server.utils.logger import logger
 from werkzeug.exceptions import BadRequest, InternalServerError
+from server.utils.scraper import WebScraper
 
 # Add the server directory to Python path
 server_dir = str(Path(__file__).resolve().parent.parent.parent)
 if server_dir not in sys.path:
     sys.path.insert(0, server_dir)
-
-from utils.scraper import WebScraper
 
 class ScraperService:
     """Service for web scraping functionality."""

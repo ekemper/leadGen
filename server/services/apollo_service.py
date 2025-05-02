@@ -1,8 +1,8 @@
 import os
 import requests
 import logging
-from models import Lead
-from config.database import db
+from server.models.lead import Lead
+from server.config.database import db
 from typing import Dict, Any
 from dotenv import load_dotenv
 
@@ -38,17 +38,47 @@ class ApolloService:
 
             created_leads = []
             for lead_data in data:
+                # Parse name from firstName and lastName
+                first_name = lead_data.get('firstName', '')
+                last_name = lead_data.get('lastName', '')
+                name = f"{first_name} {last_name}".strip()
+                if not name.strip():
+                    name = lead_data.get('name', '')
+
+                # Parse email from emailAddress
+                email = lead_data.get('emailAddress', '')
+                if not email:
+                    # fallback to 'email' or first in 'emails' array
+                    email = lead_data.get('email', '')
+                    if not email:
+                        emails = lead_data.get('emails', [])
+                        if isinstance(emails, list) and emails:
+                            email = emails[0]
+
+                # Parse phone (not present in sample, fallback to previous logic)
+                phone = lead_data.get('phone', '')
+                if not phone:
+                    phones = lead_data.get('phones', [])
+                    if isinstance(phones, list) and phones:
+                        phone = phones[0]
+                    elif isinstance(lead_data.get('company', ''), dict):
+                        main_phone = lead_data['company'].get('mainPhone', {})
+                        if isinstance(main_phone, dict):
+                            phone = main_phone.get('phoneNumber', '')
+
+                # Parse company name from company.companyName
                 company_name = ''
                 company_field = lead_data.get('company', '')
                 if isinstance(company_field, dict):
                     company_name = company_field.get('companyName', '')
                 elif isinstance(company_field, str):
                     company_name = company_field
+
                 lead = Lead(
-                    name=lead_data.get('name', ''),
-                    email=lead_data.get('email', ''),
+                    name=name,
+                    email=email,
                     company_name=company_name,
-                    phone=lead_data.get('phone', ''),
+                    phone=phone,
                     status=lead_data.get('status', 'new'),
                     source=lead_data.get('source', 'apollo'),
                     notes=lead_data.get('notes', ''),
