@@ -10,7 +10,7 @@ class CampaignService:
     def create_campaign_with_leads(self, params):
         try:
             # Import RQ enqueue helpers here to avoid circular import
-            from server.tasks import enqueue_fetch_and_save_leads, enqueue_email_verification, enqueue_enriching_leads
+            from server.tasks import enqueue_fetch_and_save_leads, enqueue_email_verification, enqueue_enriching_leads, enqueue_email_copy_generation
             # Create a new campaign
             campaign = Campaign()
             db.session.add(campaign)
@@ -30,7 +30,7 @@ class CampaignService:
             # Kick off background task chain using RQ job dependencies
             logger.info({
                 'event': 'trigger_rq_chain',
-                'message': 'About to trigger fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task chain',
+                'message': 'About to trigger fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task -> email_copy_generation_task chain',
                 'params': params,
                 'campaign_id': campaign.id
             })
@@ -39,10 +39,11 @@ class CampaignService:
             # Chain the next jobs using depends_on
             job2 = enqueue_email_verification({'campaign_id': campaign.id}, depends_on=job1)
             job3 = enqueue_enriching_leads({'campaign_id': campaign.id}, depends_on=job2)
+            job4 = enqueue_email_copy_generation({'campaign_id': campaign.id}, depends_on=job3)
 
             logger.info({
                 'event': 'rq_chain_triggered',
-                'message': 'RQ chain (fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task) called',
+                'message': 'RQ chain (fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task -> email_copy_generation_task) called',
                 'params': params,
                 'campaign_id': campaign.id
             })
