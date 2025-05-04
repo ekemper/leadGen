@@ -19,6 +19,9 @@ import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
 import Campaigns from "./components/Campaigns";
+import OrganizationsList from "./pages/OrganizationsList";
+import OrganizationDetail from "./pages/OrganizationDetail";
+import OrganizationCreate from "./pages/OrganizationCreate";
 
 export default function App() {
   return (
@@ -55,6 +58,11 @@ export default function App() {
 
             {/* Campaigns */}
             <Route path="/campaigns" element={<Campaigns />} />
+
+            {/* Organizations */}
+            <Route path="/organizations" element={<OrganizationsList />} />
+            <Route path="/organizations/create" element={<OrganizationCreate />} />
+            <Route path="/organizations/:id" element={<OrganizationDetail />} />
           </Route>
 
           {/* Auth Layout */}

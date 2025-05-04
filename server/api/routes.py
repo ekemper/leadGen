@@ -19,12 +19,14 @@ from server.services.apollo_service import ApolloService
 from server.utils.middleware import log_function_call
 from functools import wraps
 from server.api.services.campaign_service import CampaignService
+from server.api.services.organization_service import OrganizationService
 
 # Initialize services
 scraper_service = ScraperService()
 apollo_service = ApolloService()
 lead_service = LeadService()
 campaign_service = CampaignService()
+organization_service = OrganizationService()
 
 # Create blueprint
 api = Blueprint('api', __name__)
@@ -319,4 +321,44 @@ def register_routes(api):
         
         except Exception as e:
             logger.error(f"Error deleting lead: {str(e)}")
-            raise 
+            raise
+
+    @api.route('/organizations', methods=['POST'])
+    @token_required
+    def create_organization():
+        logger.debug('POST /organizations called')
+        data = request.get_json()
+        logger.debug(f'Request data: {data}')
+        if not data or 'name' not in data:
+            logger.debug('Missing name in request data')
+            raise BadRequest('Name is required')
+        org = organization_service.create_organization(data)
+        logger.debug(f'Organization created: {org}')
+        return jsonify({'status': 'success', 'data': org}), 201
+
+    @api.route('/organizations', methods=['GET'])
+    @token_required
+    def get_organizations():
+        logger.debug('GET /organizations called')
+        orgs = organization_service.get_organizations()
+        logger.debug(f'Returning organizations: {orgs}')
+        return jsonify({'status': 'success', 'data': orgs}), 200
+
+    @api.route('/organizations/<org_id>', methods=['GET'])
+    @token_required
+    def get_organization(org_id):
+        org = organization_service.get_organization(org_id)
+        if not org:
+            raise NotFound('Organization not found')
+        return jsonify({'status': 'success', 'data': org}), 200
+
+    @api.route('/organizations/<org_id>', methods=['PUT'])
+    @token_required
+    def update_organization(org_id):
+        data = request.get_json()
+        if not data:
+            raise BadRequest('No input data provided')
+        org = organization_service.update_organization(org_id, data)
+        if not org:
+            raise NotFound('Organization not found')
+        return jsonify({'status': 'success', 'data': org}), 200 
