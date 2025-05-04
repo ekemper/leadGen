@@ -1,4 +1,6 @@
+import sys
 import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -10,6 +12,9 @@ from server.config.database import db, init_db
 from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
 import logging
+
+print('sys.path:', sys.path)
+print('CWD:', os.getcwd())
 
 # Set global log level to WARNING to reduce noise
 logging.basicConfig(level=logging.WARNING)

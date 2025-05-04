@@ -1,6 +1,6 @@
 from server.models import Campaign
 from server.config.database import db
-from server.services.apollo_service import ApolloService
+from server.background_services.apollo_service import ApolloService
 from server.utils.logger import logger
 
 class CampaignService:

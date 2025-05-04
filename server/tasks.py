@@ -1,7 +1,7 @@
-from server.services.apollo_service import ApolloService
-from server.services.email_verifier_service import EmailVerifierService
+from server.background_services.apollo_service import ApolloService
+from server.background_services.email_verifier_service import EmailVerifierService
 from server.app import create_app
-from server.services.openai_service import OpenAIService
+from server.background_services.openai_service import OpenAIService
 
 flask_app = create_app()
 
@@ -37,7 +37,7 @@ def email_copy_generation_task(result):
         print(f"email_copy_generation_task: generating email copy for campaign_id={campaign_id}")
         from server.models.lead import Lead
         from server.config.database import db
-        from server.services.openai_service import OpenAIService
+        from server.background_services.openai_service import OpenAIService
         openai_service = OpenAIService()
         try:
             leads = db.session.query(Lead).filter_by(campaign_id=campaign_id).all()

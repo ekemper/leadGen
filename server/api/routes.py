@@ -15,7 +15,7 @@ from server.api.services.scraper_service import ScraperService
 from server.api.services.lead_service import LeadService
 import json
 from flask import Blueprint
-from server.services.apollo_service import ApolloService
+from server.background_services.apollo_service import ApolloService
 from server.utils.middleware import log_function_call
 from functools import wraps
 from server.api.services.campaign_service import CampaignService
