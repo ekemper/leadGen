@@ -20,6 +20,7 @@ from server.utils.middleware import log_function_call
 from functools import wraps
 from server.api.services.campaign_service import CampaignService
 from server.api.services.organization_service import OrganizationService
+from server.api.services.event_service import EventService
 
 # Initialize services
 scraper_service = ScraperService()
@@ -27,6 +28,7 @@ apollo_service = ApolloService()
 lead_service = LeadService()
 campaign_service = CampaignService()
 organization_service = OrganizationService()
+event_service = EventService()
 
 # Create blueprint
 api = Blueprint('api', __name__)
@@ -361,4 +363,25 @@ def register_routes(api):
         org = organization_service.update_organization(org_id, data)
         if not org:
             raise NotFound('Organization not found')
-        return jsonify({'status': 'success', 'data': org}), 200 
+        return jsonify({'status': 'success', 'data': org}), 200
+
+    @api.route('/events', methods=['POST'])
+    @token_required
+    def create_event():
+        data = request.get_json()
+        if not data or not all(k in data for k in ('source', 'tag', 'data', 'type')):
+            raise BadRequest('Missing required event fields')
+        event = event_service.create_event(data)
+        return jsonify({'status': 'success', 'data': event}), 201
+
+    @api.route('/events', methods=['GET'])
+    @token_required
+    def get_events():
+        events = event_service.get_events()
+        return jsonify({'status': 'success', 'data': events}), 200
+
+    @api.route('/events/<event_id>', methods=['GET'])
+    @token_required
+    def get_event(event_id):
+        event = event_service.get_event(event_id)
+        return jsonify({'status': 'success', 'data': event}), 200 
