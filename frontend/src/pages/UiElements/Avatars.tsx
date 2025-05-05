@@ -13,108 +13,43 @@ export default function Avatars() {
       <PageBreadcrumb pageTitle="Avatars" />
       <div className="space-y-5 sm:space-y-6">
         <ComponentCard title="Default Avatar">
-          {/* Default Avatar (No Status) */}
-          <div className="flex flex-col items-center justify-center gap-5 sm:flex-row">
-            <Avatar src="/images/user/user-01.jpg" size="xsmall" />
-            <Avatar src="/images/user/user-01.jpg" size="small" />
-            <Avatar src="/images/user/user-01.jpg" size="medium" />
-            <Avatar src="/images/user/user-01.jpg" size="large" />
-            <Avatar src="/images/user/user-01.jpg" size="xlarge" />
-            <Avatar src="/images/user/user-01.jpg" size="xxlarge" />
+          <div className="flex flex-wrap items-center gap-4">
+            <Avatar icon={true} size="xsmall" />
+            <Avatar icon={true} size="small" />
+            <Avatar icon={true} size="medium" />
+            <Avatar icon={true} size="large" />
+            <Avatar icon={true} size="xlarge" />
+            <Avatar icon={true} size="xxlarge" />
           </div>
         </ComponentCard>
         <ComponentCard title="Avatar with online indicator">
-          <div className="flex flex-col items-center justify-center gap-5 sm:flex-row">
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xsmall"
-              status="online"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="small"
-              status="online"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="medium"
-              status="online"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="large"
-              status="online"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xlarge"
-              status="online"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xxlarge"
-              status="online"
-            />
+          <div className="flex flex-wrap items-center gap-4">
+            <Avatar icon={true} size="xsmall" status="online" />
+            <Avatar icon={true} size="small" status="online" />
+            <Avatar icon={true} size="medium" status="online" />
+            <Avatar icon={true} size="large" status="online" />
+            <Avatar icon={true} size="xlarge" status="online" />
+            <Avatar icon={true} size="xxlarge" status="online" />
           </div>
         </ComponentCard>
         <ComponentCard title="Avatar with Offline indicator">
-          <div className="flex flex-col items-center justify-center gap-5 sm:flex-row">
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xsmall"
-              status="offline"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="small"
-              status="offline"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="medium"
-              status="offline"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="large"
-              status="offline"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xlarge"
-              status="offline"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xxlarge"
-              status="offline"
-            />
+          <div className="flex flex-wrap items-center gap-4">
+            <Avatar icon={true} size="xsmall" status="offline" />
+            <Avatar icon={true} size="small" status="offline" />
+            <Avatar icon={true} size="medium" status="offline" />
+            <Avatar icon={true} size="large" status="offline" />
+            <Avatar icon={true} size="xlarge" status="offline" />
+            <Avatar icon={true} size="xxlarge" status="offline" />
           </div>
-        </ComponentCard>{" "}
+        </ComponentCard>
         <ComponentCard title="Avatar with busy indicator">
-          <div className="flex flex-col items-center justify-center gap-5 sm:flex-row">
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xsmall"
-              status="busy"
-            />
-            <Avatar src="/images/user/user-01.jpg" size="small" status="busy" />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="medium"
-              status="busy"
-            />
-            <Avatar src="/images/user/user-01.jpg" size="large" status="busy" />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xlarge"
-              status="busy"
-            />
-            <Avatar
-              src="/images/user/user-01.jpg"
-              size="xxlarge"
-              status="busy"
-            />
+          <div className="flex flex-wrap items-center gap-4">
+            <Avatar icon={true} size="xsmall" status="busy" />
+            <Avatar icon={true} size="small" status="busy" />
+            <Avatar icon={true} size="medium" status="busy" />
+            <Avatar icon={true} size="large" status="busy" />
+            <Avatar icon={true} size="xlarge" status="busy" />
+            <Avatar icon={true} size="xxlarge" status="busy" />
           </div>
         </ComponentCard>
       </div>

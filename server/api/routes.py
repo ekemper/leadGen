@@ -388,4 +388,23 @@ def register_routes(api):
     @token_required
     def get_event(event_id):
         event = event_service.get_event(event_id)
-        return jsonify({'status': 'success', 'data': event}), 200 
+        return jsonify({'status': 'success', 'data': event}), 200
+
+    @api.route('/auth/me', methods=['GET'])
+    @token_required
+    def get_current_user():
+        """Get current user information."""
+        try:
+            current_user = g.current_user
+            return jsonify({
+                'id': current_user.id,
+                'email': current_user.email,
+                'created_at': current_user.created_at.isoformat(),
+                'updated_at': current_user.updated_at.isoformat()
+            }), 200
+        except Exception as e:
+            logger.error(f"Error getting current user: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 500 

@@ -1,8 +1,9 @@
 interface AvatarProps {
-  src: string; // URL of the avatar image
+  src?: string; // URL of the avatar image
   alt?: string; // Alt text for the avatar
   size?: "xsmall" | "small" | "medium" | "large" | "xlarge" | "xxlarge"; // Avatar size
   status?: "online" | "offline" | "busy" | "none"; // Status indicator
+  icon?: boolean; // Whether to show a Font Awesome user icon instead of an image
 }
 
 const sizeClasses = {
@@ -34,11 +35,18 @@ const Avatar: React.FC<AvatarProps> = ({
   alt = "User Avatar",
   size = "medium",
   status = "none",
+  icon = false,
 }) => {
   return (
-    <div className={`relative  rounded-full ${sizeClasses[size]}`}>
-      {/* Avatar Image */}
-      <img src={src} alt={alt} className="object-cover rounded-full" />
+    <div className={`relative rounded-full ${sizeClasses[size]}`}>
+      {/* Avatar Image or Icon */}
+      {icon ? (
+        <div className="flex items-center justify-center w-full h-full rounded-full bg-gray-100 dark:bg-gray-800">
+          <i className="fas fa-user text-gray-500 dark:text-gray-400 text-sm"></i>
+        </div>
+      ) : (
+        <img src={src} alt={alt} className="object-cover rounded-full" />
+      )}
 
       {/* Status Indicator */}
       {status !== "none" && (

@@ -7,6 +7,7 @@ import {
 } from "../../ui/table";
 
 import Badge from "../../ui/badge/Badge";
+import Avatar from "../../ui/avatar/Avatar";
 
 interface Order {
   id: number;
@@ -14,6 +15,7 @@ interface Order {
     image: string;
     name: string;
     role: string;
+    email: string;
   };
   projectName: string;
   team: {
@@ -31,6 +33,7 @@ const tableData: Order[] = [
       image: "/images/user/user-17.jpg",
       name: "Lindsey Curtis",
       role: "Web Designer",
+      email: "lindsey@example.com",
     },
     projectName: "Agency Website",
     team: {
@@ -49,6 +52,7 @@ const tableData: Order[] = [
       image: "/images/user/user-18.jpg",
       name: "Kaiya George",
       role: "Project Manager",
+      email: "kaiya@example.com",
     },
     projectName: "Technology",
     team: {
@@ -63,6 +67,7 @@ const tableData: Order[] = [
       image: "/images/user/user-17.jpg",
       name: "Zain Geidt",
       role: "Content Writing",
+      email: "zain@example.com",
     },
     projectName: "Blog Writing",
     team: {
@@ -77,6 +82,7 @@ const tableData: Order[] = [
       image: "/images/user/user-20.jpg",
       name: "Abram Schleifer",
       role: "Digital Marketer",
+      email: "abram@example.com",
     },
     projectName: "Social Media",
     team: {
@@ -95,6 +101,7 @@ const tableData: Order[] = [
       image: "/images/user/user-21.jpg",
       name: "Carla George",
       role: "Front-end Developer",
+      email: "carla@example.com",
     },
     projectName: "Website",
     team: {
@@ -155,22 +162,15 @@ export default function BasicTableOne() {
             {tableData.map((order) => (
               <TableRow key={order.id}>
                 <TableCell className="px-5 py-4 sm:px-6 text-start">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 overflow-hidden rounded-full">
-                      <img
-                        width={40}
-                        height={40}
-                        src={order.user.image}
-                        alt={order.user.name}
-                      />
-                    </div>
+                  <div className="flex items-center space-x-3">
+                    <Avatar icon={true} size="small" />
                     <div>
-                      <span className="block font-medium text-gray-800 text-theme-sm dark:text-white/90">
+                      <h5 className="font-medium text-black dark:text-white">
                         {order.user.name}
-                      </span>
-                      <span className="block text-gray-500 text-theme-xs dark:text-gray-400">
-                        {order.user.role}
-                      </span>
+                      </h5>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {order.user.email}
+                      </p>
                     </div>
                   </div>
                 </TableCell>
