@@ -21,23 +21,18 @@ export default function SignInForm() {
     e.preventDefault();
     setError("");
     setIsLoading(true);
+    
     try {
       const response = await api.post('/api/auth/login', { email, password });
-      console.log('Login response:', response); // Debug log
       
       if (response && response.token) {
         localStorage.setItem('token', response.token);
-        console.log('Token stored:', response.token); // Debug log
-        // Redirect to the page they tried to visit or dashboard
         const from = (location.state as any)?.from?.pathname || '/dashboard';
-        console.log('Redirecting to:', from); // Debug log
         navigate(from, { replace: true });
       } else {
-        console.error('Invalid response format:', response); // Debug log
         setError('Invalid login response from server');
       }
     } catch (err: any) {
-      console.error('Login error:', err); // Debug log
       setError(err.message || 'Login failed');
     } finally {
       setIsLoading(false);
@@ -54,7 +49,6 @@ export default function SignInForm() {
           </Link>
         </div>
         <div>
-          {/* Error message */}
           {error && <div className="text-red-500 mb-4">{error}</div>}
           <form onSubmit={handleSubmit}>
             <div className="space-y-6">

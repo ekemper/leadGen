@@ -198,27 +198,98 @@ def register_routes(api):
                 'message': str(e)
             }), 500
 
+    @api.route('/campaigns', methods=['GET'])
+    @token_required
+    def get_campaigns():
+        """Get all campaigns."""
+        try:
+            campaigns = campaign_service.get_campaigns()
+            return jsonify({
+                'status': 'success',
+                'data': campaigns
+            }), 200
+        except Exception as e:
+            logger.error(f"Error fetching campaigns: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to fetch campaigns'
+            }), 500
+
     @api.route('/campaigns', methods=['POST'])
     @token_required
-    @log_function_call
     def create_campaign():
-        """
-        Create a campaign and fetch leads from Apollo API, saving them to the database.
-        """
+        """Create a new campaign without starting the lead generation process."""
+        try:
+            result = campaign_service.create_campaign()
+            return jsonify({
+                'status': 'success',
+                'data': result
+            }), 201
+        except Exception as e:
+            logger.error(f"Error creating campaign: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to create campaign'
+            }), 500
+
+    @api.route('/campaigns/<campaign_id>/start', methods=['POST'])
+    @token_required
+    @log_function_call
+    def start_campaign(campaign_id):
+        """Start the lead generation process for an existing campaign."""
         try:
             params = request.get_json()
+            if not params:
+                raise BadRequest("No parameters provided")
+
+            result = campaign_service.start_campaign(campaign_id, params)
+            return jsonify({
+                'status': 'success',
+                'data': result
+            }), 200
+        except ValueError as e:
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 400
+        except Exception as e:
+            logger.error(f"Error starting campaign: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to start campaign'
+            }), 500
+
+    @api.route('/campaigns/start', methods=['POST'])
+    @token_required
+    @log_function_call
+    def create_and_start_campaign():
+        """Create a campaign and immediately start the lead generation process."""
+        try:
+            params = request.get_json()
+            if not params:
+                raise BadRequest("No parameters provided")
+
             required_params = ['count', 'excludeGuessedEmails', 'excludeNoEmails', 'getEmails', 'searchUrl']
             for param in required_params:
                 if param not in params:
                     raise BadRequest(f"Missing required parameter: {param}")
 
             result = campaign_service.create_campaign_with_leads(params)
-
-            return jsonify(result), 201
+            return jsonify({
+                'status': 'success',
+                'data': result
+            }), 201
         except BadRequest as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 400
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 400
         except Exception as e:
-            return jsonify({'status': 'error', 'message': str(e)}), 500
+            logger.error(f"Error creating and starting campaign: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to create and start campaign'
+            }), 500
 
     @api.route('/leads', methods=['GET'])
     @token_required
@@ -332,15 +403,18 @@ def register_routes(api):
     @api.route('/organizations', methods=['POST'])
     @token_required
     def create_organization():
-        logger.debug('POST /organizations called')
-        data = request.get_json()
-        logger.debug(f'Request data: {data}')
-        if not data or 'name' not in data:
-            logger.debug('Missing name in request data')
-            raise BadRequest('Name is required')
-        org = organization_service.create_organization(data)
-        logger.debug(f'Organization created: {org}')
-        return jsonify({'status': 'success', 'data': org}), 201
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            result = organization_service.create_organization(data)
+            return jsonify(result), 201
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            logger.error(f"Error creating organization: {str(e)}")
+            return jsonify({'error': 'Internal server error'}), 500
 
     @api.route('/organizations', methods=['GET'])
     @token_required
@@ -361,13 +435,20 @@ def register_routes(api):
     @api.route('/organizations/<org_id>', methods=['PUT'])
     @token_required
     def update_organization(org_id):
-        data = request.get_json()
-        if not data:
-            raise BadRequest('No input data provided')
-        org = organization_service.update_organization(org_id, data)
-        if not org:
-            raise NotFound('Organization not found')
-        return jsonify({'status': 'success', 'data': org}), 200
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            result = organization_service.update_organization(org_id, data)
+            if result is None:
+                return jsonify({'error': 'Organization not found'}), 404
+            return jsonify({'status': 'success', 'data': result}), 200
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            logger.error(f"Error updating organization: {str(e)}")
+            return jsonify({'error': 'Internal server error'}), 500
 
     @api.route('/events', methods=['POST'])
     @token_required

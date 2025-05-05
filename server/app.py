@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -42,8 +42,32 @@ def create_app(test_config=None):
     else:
         app.config.update(test_config)
     
-    # Initialize extensions
-    CORS(app)
+    # Initialize extensions with CORS config
+    CORS(app, 
+         resources={
+             r"/*": {
+                 "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                 "allow_headers": ["Content-Type", "Authorization"],
+                 "expose_headers": ["Content-Type", "Authorization"],
+                 "supports_credentials": True,
+                 "allow_credentials": True,
+                 "max_age": 3600
+             }
+         })
+    
+    # Add CORS headers to all responses
+    @app.after_request
+    def after_request(response):
+        origin = request.headers.get('Origin')
+        if origin in ["http://localhost:5173", "http://127.0.0.1:5173"]:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Max-Age'] = '3600'
+        return response
+    
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,

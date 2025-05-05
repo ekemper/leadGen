@@ -18,7 +18,8 @@ import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
-import Campaigns from "./components/Campaigns";
+import CampaignsList from "./pages/CampaignsList";
+import CampaignDetail from "./pages/CampaignDetail";
 import OrganizationsList from "./pages/OrganizationsList";
 import OrganizationDetail from "./pages/OrganizationDetail";
 import OrganizationCreate from "./pages/OrganizationCreate";
@@ -37,7 +38,7 @@ export default function App() {
           {/* Protected Routes */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             {/* Redirect root to dashboard */}
-            <Route index path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Home />} />
 
             {/* Others Page */}
@@ -64,7 +65,8 @@ export default function App() {
             <Route path="/bar-chart" element={<BarChart />} />
 
             {/* Campaigns */}
-            <Route path="/campaigns" element={<Campaigns />} />
+            <Route path="/campaigns" element={<CampaignsList />} />
+            <Route path="/campaigns/:id" element={<CampaignDetail />} />
 
             {/* Organizations */}
             <Route path="/organizations" element={<OrganizationsList />} />
