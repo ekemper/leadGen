@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import SignIn from "./pages/AuthPages/SignIn";
 import SignUp from "./pages/AuthPages/SignUp";
 import NotFound from "./pages/OtherPage/NotFound";
@@ -22,6 +22,7 @@ import Campaigns from "./components/Campaigns";
 import OrganizationsList from "./pages/OrganizationsList";
 import OrganizationDetail from "./pages/OrganizationDetail";
 import OrganizationCreate from "./pages/OrganizationCreate";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 export default function App() {
   return (
@@ -29,9 +30,15 @@ export default function App() {
       <Router>
         <ScrollToTop />
         <Routes>
-          {/* Dashboard Layout */}
-          <Route element={<AppLayout />}>
-            <Route index path="/" element={<Home />} />
+          {/* Auth Routes - Not Protected */}
+          <Route path="/signin" element={<SignIn />} />
+          <Route path="/signup" element={<SignUp />} />
+
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            {/* Redirect root to dashboard */}
+            <Route index path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Home />} />
 
             {/* Others Page */}
             <Route path="/profile" element={<UserProfiles />} />
@@ -64,10 +71,6 @@ export default function App() {
             <Route path="/organizations/create" element={<OrganizationCreate />} />
             <Route path="/organizations/:id" element={<OrganizationDetail />} />
           </Route>
-
-          {/* Auth Layout */}
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
 
           {/* Fallback Route */}
           <Route path="*" element={<NotFound />} />

@@ -83,6 +83,7 @@ def register_routes(api):
     """Register all routes with the provided blueprint."""
     
     @api.route('/health', methods=['GET'])
+    @token_required
     def health_check():
         """Health check endpoint."""
         logger.debug('Health check endpoint called')
@@ -93,6 +94,7 @@ def register_routes(api):
         }), 200
 
     @api.route('/')
+    @token_required
     def root():
         """Root endpoint."""
         return jsonify({
@@ -101,6 +103,7 @@ def register_routes(api):
             'version': '1.0.0'
         }), 200
 
+    # Public routes (no token required)
     @api.route('/auth/signup', methods=['POST'])
     def signup():
         """Handle user registration."""
@@ -162,6 +165,7 @@ def register_routes(api):
                 'message': "An error occurred during login"
             }), 500
 
+    # Protected routes (token required)
     @api.route('/scrape', methods=['POST'])
     @token_required
     def scrape_url():

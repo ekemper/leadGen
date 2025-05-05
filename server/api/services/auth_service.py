@@ -92,7 +92,11 @@ class AuthService:
             
         # Create new user
         hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-        user = User(email=email.lower(), password=hashed)
+        user = User(
+            id=str(uuid.uuid4()),
+            email=email.lower(),
+            password=hashed
+        )
         
         try:
             db.session.add(user)

@@ -3,12 +3,13 @@ import { api } from '../config/api';
 // Helper to send event to backend
 async function sendEvent({ source, tag, data, type }: { source: 'browser'; tag: string; data: any; type: 'error' | 'message' | 'log'; }) {
   try {
-    await api.post('/api/events', {
-      source,
-      tag,
-      data,
-      type,
-    });
+    // Commented out event logging
+    // await api.post('/api/events', {
+    //   source,
+    //   tag,
+    //   data,
+    //   type,
+    // });
   } catch (err) {
     // Optionally, fallback to local logging if API fails
     // console.warn('Failed to send event:', err);
@@ -29,41 +30,45 @@ const originalLog = console.log;
 const originalError = console.error;
 
 console.log = function (...args) {
-  sendEvent({ source: 'browser', tag: 'console.log', data: { args }, type: 'log' });
+  // Commented out event logging
+  // sendEvent({ source: 'browser', tag: 'console.log', data: { args }, type: 'log' });
   originalLog.apply(console, args);
 };
 
 console.error = function (...args) {
-  sendEvent({ source: 'browser', tag: 'console.error', data: { args }, type: 'error' });
+  // Commented out event logging
+  // sendEvent({ source: 'browser', tag: 'console.error', data: { args }, type: 'error' });
   originalError.apply(console, args);
 };
 
 // Listen for uncaught errors
 window.addEventListener('error', function (event) {
-  sendEvent({
-    source: 'browser',
-    tag: 'window.onerror',
-    data: {
-      message: event.message,
-      filename: event.filename,
-      lineno: event.lineno,
-      colno: event.colno,
-      error: event.error ? event.error.stack || String(event.error) : null,
-    },
-    type: 'error',
-  });
+  // Commented out event logging
+  // sendEvent({
+  //   source: 'browser',
+  //   tag: 'window.onerror',
+  //   data: {
+  //     message: event.message,
+  //     filename: event.filename,
+  //     lineno: event.lineno,
+  //     colno: event.colno,
+  //     error: event.error ? event.error.stack || String(event.error) : null,
+  //   },
+  //   type: 'error',
+  // });
 });
 
 // Listen for unhandled promise rejections
 window.addEventListener('unhandledrejection', function (event) {
-  sendEvent({
-    source: 'browser',
-    tag: 'unhandledrejection',
-    data: {
-      reason: event.reason ? (event.reason.stack || String(event.reason)) : null,
-    },
-    type: 'error',
-  });
+  // Commented out event logging
+  // sendEvent({
+  //   source: 'browser',
+  //   tag: 'unhandledrejection',
+  //   data: {
+  //     reason: event.reason ? (event.reason.stack || String(event.reason)) : null,
+  //   },
+  //   type: 'error',
+  // });
 });
 
 // --- Network request logging ---
@@ -79,35 +84,37 @@ window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
   return originalFetch.apply(this, [input, init]).then(
     (response) => {
       const duration = performance.now() - start;
-      sendEvent({
-        source: 'browser',
-        tag: 'network',
-        data: {
-          method,
-          url,
-          status: response.status,
-          ok: response.ok,
-          duration,
-        },
-        type: response.ok ? 'log' : 'error',
-      });
+      // Commented out event logging
+      // sendEvent({
+      //   source: 'browser',
+      //   tag: 'network',
+      //   data: {
+      //     method,
+      //     url,
+      //     status: response.status,
+      //     ok: response.ok,
+      //     duration,
+      //   },
+      //   type: response.ok ? 'log' : 'error',
+      // });
       return response;
     },
     (error) => {
       const duration = performance.now() - start;
-      sendEvent({
-        source: 'browser',
-        tag: 'network',
-        data: {
-          method,
-          url,
-          status: null,
-          ok: false,
-          duration,
-          error: error?.message || String(error),
-        },
-        type: 'error',
-      });
+      // Commented out event logging
+      // sendEvent({
+      //   source: 'browser',
+      //   tag: 'network',
+      //   data: {
+      //     method,
+      //     url,
+      //     status: null,
+      //     ok: false,
+      //     duration,
+      //     error: error?.message || String(error),
+      //   },
+      //   type: 'error',
+      // });
       throw error;
     }
   );
@@ -135,18 +142,19 @@ function PatchedXMLHttpRequest(this: XMLHttpRequest) {
     xhr.addEventListener('loadend', function() {
       if (isEventApiUrl(url)) return;
       const duration = performance.now() - start;
-      sendEvent({
-        source: 'browser',
-        tag: 'network',
-        data: {
-          method,
-          url,
-          status: xhr.status,
-          ok: xhr.status >= 200 && xhr.status < 400,
-          duration,
-        },
-        type: xhr.status >= 200 && xhr.status < 400 ? 'log' : 'error',
-      });
+      // Commented out event logging
+      // sendEvent({
+      //   source: 'browser',
+      //   tag: 'network',
+      //   data: {
+      //     method,
+      //     url,
+      //     status: xhr.status,
+      //     ok: xhr.status >= 200 && xhr.status < 400,
+      //     duration,
+      //   },
+      //   type: xhr.status >= 200 && xhr.status < 400 ? 'log' : 'error',
+      // });
     });
     // @ts-ignore
     return send.apply(xhr, arguments);
