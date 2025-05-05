@@ -10,10 +10,30 @@ class CampaignService:
     def get_campaigns(self):
         """Get all campaigns."""
         try:
+            logger.info('Fetching all campaigns')
+            
+            # Ensure we have a valid database session
+            if not db.session.is_active:
+                logger.warning('Database session was not active, creating new session')
+                db.session.rollback()
+            
             campaigns = Campaign.query.order_by(Campaign.created_at.desc()).all()
-            return [campaign.to_dict() for campaign in campaigns]
+            logger.info(f'Found {len(campaigns)} campaigns')
+            
+            campaign_list = []
+            for campaign in campaigns:
+                try:
+                    campaign_dict = campaign.to_dict()
+                    campaign_list.append(campaign_dict)
+                except Exception as e:
+                    logger.error(f'Error converting campaign {campaign.id} to dict: {str(e)}', exc_info=True)
+                    continue
+            
+            logger.info(f'Successfully converted {len(campaign_list)} campaigns to dict')
+            return campaign_list
         except Exception as e:
-            logger.error(f"Error getting campaigns: {str(e)}")
+            logger.error(f'Error getting campaigns: {str(e)}', exc_info=True)
+            db.session.rollback()
             raise
 
     def get_campaign(self, campaign_id):
@@ -27,18 +47,28 @@ class CampaignService:
             logger.error(f"Error getting campaign: {str(e)}")
             raise
 
-    def create_campaign(self):
+    def create_campaign(self, data=None):
         """Create a new campaign without starting the lead generation process."""
         try:
-            campaign = Campaign()
+            if not data:
+                raise ValueError("No data provided")
+
+            # Validate required fields
+            required_fields = ['name', 'description', 'organization_id']
+            for field in required_fields:
+                if not data.get(field):
+                    raise ValueError(f"{field} is required")
+
+            campaign = Campaign(
+                name=data['name'],
+                description=data['description'],
+                organization_id=data['organization_id']
+            )
             db.session.add(campaign)
             db.session.commit()
 
-            campaign_data = {
-                'id': campaign.id,
-                'created_at': campaign.created_at.isoformat(),
-                'status': 'created'
-            }
+            campaign_data = campaign.to_dict()
+            campaign_data['status'] = 'created'
 
             logger.info({
                 'event': 'campaign_created',

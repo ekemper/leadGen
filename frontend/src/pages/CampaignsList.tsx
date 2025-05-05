@@ -24,18 +24,30 @@ interface Campaign {
   description: string;
 }
 
+interface Organization {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface FormErrors {
   searchUrl?: string;
   count?: string;
   name?: string;
   description?: string;
+  organization_id?: string;
 }
 
 const CampaignsList: React.FC = () => {
   const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
+  const [orgsLoading, setOrgsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [orgsError, setOrgsError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [formData, setFormData] = useState({
     count: 10,
@@ -44,7 +56,8 @@ const CampaignsList: React.FC = () => {
     getEmails: true,
     searchUrl: "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing",
     name: '',
-    description: ''
+    description: '',
+    organization_id: ''
   });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [createLoading, setCreateLoading] = useState(false);
@@ -52,7 +65,28 @@ const CampaignsList: React.FC = () => {
 
   useEffect(() => {
     fetchCampaigns();
+    fetchOrganizations();
   }, []);
+
+  const fetchOrganizations = async () => {
+    setOrgsLoading(true);
+    setOrgsError(null);
+    try {
+      const response = await api.get('/api/organizations');
+      console.log('Organizations API response:', response);
+      if (response && response.data) {
+        setOrganizations(response.data);
+      } else {
+        console.error('Unexpected API response structure:', response);
+        setOrgsError('Failed to load organizations: Unexpected response format');
+      }
+    } catch (err: any) {
+      console.error('Error fetching organizations:', err);
+      setOrgsError(err.message || 'Failed to load organizations');
+    } finally {
+      setOrgsLoading(false);
+    }
+  };
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
@@ -71,6 +105,10 @@ const CampaignsList: React.FC = () => {
     
     if (!formData.description.trim()) {
       errors.description = 'Description is required';
+    }
+
+    if (!formData.organization_id) {
+      errors.organization_id = 'Organization is required';
     }
 
     setFormErrors(errors);
@@ -92,7 +130,7 @@ const CampaignsList: React.FC = () => {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = 'checked' in e.target ? e.target.checked : undefined;
     setFormData(prev => ({
@@ -128,6 +166,37 @@ const CampaignsList: React.FC = () => {
   const renderCreateForm = () => (
     <form onSubmit={handleCreate} className="space-y-4 mb-8">
       <div>
+        <Label htmlFor="organization_id">Organization</Label>
+        {orgsLoading ? (
+          <div className="text-gray-400">Loading organizations...</div>
+        ) : orgsError ? (
+          <div className="text-red-500">{orgsError}</div>
+        ) : organizations.length === 0 ? (
+          <div className="text-gray-400">No organizations available. Please create an organization first.</div>
+        ) : (
+          <select
+            id="organization_id"
+            name="organization_id"
+            value={formData.organization_id}
+            onChange={handleChange}
+            disabled={createLoading}
+            className={`w-full px-3 py-2 border rounded-md ${
+              formErrors.organization_id ? 'border-red-500' : 'border-gray-300'
+            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+          >
+            <option value="">Select an organization</option>
+            {organizations.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {formErrors.organization_id && (
+          <p className="mt-1 text-sm text-red-500">{formErrors.organization_id}</p>
+        )}
+      </div>
+      <div>
         <Label htmlFor="name">Campaign Name</Label>
         <Input
           id="name"
@@ -160,7 +229,7 @@ const CampaignsList: React.FC = () => {
       {createError && <div className="text-red-500">{createError}</div>}
       <Button
         variant="primary"
-        disabled={createLoading || !formData.name.trim() || !formData.description.trim()}
+        disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id}
       >
         {createLoading ? 'Creating...' : 'Create Campaign'}
       </Button>

@@ -203,16 +203,19 @@ def register_routes(api):
     def get_campaigns():
         """Get all campaigns."""
         try:
+            logger.info('GET /campaigns endpoint called')
             campaigns = campaign_service.get_campaigns()
+            logger.info(f'Successfully retrieved {len(campaigns)} campaigns')
             return jsonify({
                 'status': 'success',
                 'data': campaigns
             }), 200
         except Exception as e:
-            logger.error(f"Error fetching campaigns: {str(e)}")
+            logger.error(f'Error fetching campaigns: {str(e)}', exc_info=True)
             return jsonify({
                 'status': 'error',
-                'message': 'Failed to fetch campaigns'
+                'message': 'Failed to fetch campaigns',
+                'error': str(e)
             }), 500
 
     @api.route('/campaigns/<campaign_id>', methods=['GET'])
@@ -242,7 +245,14 @@ def register_routes(api):
     def create_campaign():
         """Create a new campaign without starting the lead generation process."""
         try:
-            result = campaign_service.create_campaign()
+            data = request.get_json()
+            if not data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No data provided'
+                }), 400
+
+            result = campaign_service.create_campaign(data)
             return jsonify({
                 'status': 'success',
                 'data': result
