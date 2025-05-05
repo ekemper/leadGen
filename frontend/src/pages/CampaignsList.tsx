@@ -8,12 +8,20 @@ import Button from '../components/ui/button/Button';
 import Input from '../components/form/input/InputField';
 import Label from '../components/form/Label';
 import Checkbox from '../components/form/Checkbox';
+import Table from '../components/tables/Table';
+import TableHeader from '../components/tables/TableHeader';
+import TableBody from '../components/tables/TableBody';
+import TableRow from '../components/tables/TableRow';
+import TableCell from '../components/tables/TableCell';
+import Badge from '../components/ui/badge/Badge';
 
 interface Campaign {
   id: string;
   created_at: string;
   organization_id: string | null;
   status: string;
+  name: string;
+  description: string;
 }
 
 interface FormErrors {
@@ -85,7 +93,8 @@ const CampaignsList: React.FC = () => {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type } = e.target;
+    const checked = 'checked' in e.target ? e.target.checked : undefined;
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
@@ -193,24 +202,88 @@ const CampaignsList: React.FC = () => {
               ) : (
                 <>
                   {showCreateForm && renderCreateForm()}
-                  <ul className="divide-y divide-gray-700">
-                    {campaigns.map((campaign) => (
-                      <li key={campaign.id} className="py-4 flex items-center justify-between">
-                        <div>
-                          <div className="text-lg font-medium text-blue-400">
-                            {campaign.name || `Campaign ${campaign.id}`}
-                          </div>
-                          <div className="text-gray-400 text-sm">
-                            Created: {new Date(campaign.created_at).toLocaleString()}
-                          </div>
-                          <div className="text-gray-400 text-sm">
-                            Status: {campaign.status || 'created'}
-                          </div>
-                        </div>
-                        <Link to={`/campaigns/${campaign.id}`} className="text-blue-400 hover:text-blue-300 hover:underline text-sm">View</Link>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
+                    <div className="max-w-full overflow-x-auto">
+                      <Table>
+                        <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
+                          <TableRow>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Name
+                            </TableCell>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Description
+                            </TableCell>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Status
+                            </TableCell>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Created
+                            </TableCell>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Actions
+                            </TableCell>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+                          {campaigns.map((campaign) => (
+                            <TableRow key={campaign.id}>
+                              <TableCell className="px-5 py-4 sm:px-6 text-start">
+                                <Link
+                                  to={`/campaigns/${campaign.id}`}
+                                  className="text-blue-400 hover:text-blue-300 hover:underline"
+                                >
+                                  {campaign.name || `Campaign ${campaign.id}`}
+                                </Link>
+                              </TableCell>
+                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                {campaign.description || '-'}
+                              </TableCell>
+                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                <Badge
+                                  size="sm"
+                                  color={
+                                    campaign.status === "running"
+                                      ? "success"
+                                      : campaign.status === "pending"
+                                      ? "warning"
+                                      : "error"
+                                  }
+                                >
+                                  {campaign.status || 'created'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                {new Date(campaign.created_at).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                <Link
+                                  to={`/campaigns/${campaign.id}`}
+                                  className="text-blue-400 hover:text-blue-300 hover:underline"
+                                >
+                                  View
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
                 </>
               )}
             </>

@@ -215,6 +215,28 @@ def register_routes(api):
                 'message': 'Failed to fetch campaigns'
             }), 500
 
+    @api.route('/campaigns/<campaign_id>', methods=['GET'])
+    @token_required
+    def get_campaign(campaign_id):
+        """Get a single campaign by ID."""
+        try:
+            campaign = campaign_service.get_campaign(campaign_id)
+            if not campaign:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Campaign not found'
+                }), 404
+            return jsonify({
+                'status': 'success',
+                'data': campaign
+            }), 200
+        except Exception as e:
+            logger.error(f"Error fetching campaign: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to fetch campaign'
+            }), 500
+
     @api.route('/campaigns', methods=['POST'])
     @token_required
     def create_campaign():

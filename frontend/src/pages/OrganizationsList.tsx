@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { api } from '../config/api';
 import Input from '../components/form/input/InputField';
 import TextArea from '../components/form/input/TextArea';
 import Label from '../components/form/Label';
 import Button from '../components/ui/button/Button';
+import PageBreadcrumb from '../components/common/PageBreadCrumb';
+import ComponentCard from '../components/common/ComponentCard';
+import PageMeta from '../components/common/PageMeta';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from '../components/ui/table';
 
 interface Organization {
   id: string;
@@ -29,11 +39,9 @@ const OrganizationsList: React.FC = () => {
   const [createLoading, setCreateLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
     fetchOrgs();
-    // eslint-disable-next-line
   }, []);
 
   const validateForm = (): boolean => {
@@ -59,7 +67,6 @@ const OrganizationsList: React.FC = () => {
     try {
       const data = await api.get('/api/organizations');
       setOrgs(data.data);
-      // Show create form if no orgs exist
       setShowCreateForm(data.data.length === 0);
     } catch (err: any) {
       setError(err.message);
@@ -78,7 +85,7 @@ const OrganizationsList: React.FC = () => {
     setCreateError(null);
     setCreateLoading(true);
     try {
-      const data = await api.post('/api/organizations', {
+      await api.post('/api/organizations', {
         name: createName,
         description: createDescription,
       });
@@ -86,7 +93,7 @@ const OrganizationsList: React.FC = () => {
       setCreateDescription('');
       setFormErrors({});
       setShowCreateForm(false);
-      await fetchOrgs(); // Refresh the list
+      await fetchOrgs();
     } catch (err: any) {
       setCreateError(err.message);
     } finally {
@@ -130,51 +137,99 @@ const OrganizationsList: React.FC = () => {
   );
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold text-white">Organizations</h1>
-        {orgs.length > 0 && (
-          <Button
-            variant="primary"
-            onClick={() => setShowCreateForm(!showCreateForm)}
-          >
-            {showCreateForm ? 'Cancel' : 'Create Organization'}
-          </Button>
-        )}
-      </div>
+    <>
+      <PageMeta
+        title="Organizations | LeadGen"
+        description="Manage your organizations"
+      />
+      <PageBreadcrumb pageTitle="Organizations" />
+      <div className="space-y-5 sm:space-y-6">
+        <ComponentCard title="Organizations">
+          <div className="flex justify-between items-center mb-4">
+            {orgs.length > 0 && (
+              <Button
+                variant="primary"
+                onClick={() => setShowCreateForm(!showCreateForm)}
+              >
+                {showCreateForm ? 'Cancel' : 'Create Organization'}
+              </Button>
+            )}
+          </div>
 
-      {loading ? (
-        <div className="text-gray-400">Loading organizations...</div>
-      ) : error ? (
-        <div className="text-red-500">{error}</div>
-      ) : (
-        <>
-          {orgs.length === 0 ? (
-            <div className="text-center">
-              <h2 className="text-xl text-gray-400 mb-8">There are no orgs yet - please create one!</h2>
-              {renderCreateForm()}
-            </div>
+          {loading ? (
+            <div className="text-gray-400">Loading organizations...</div>
+          ) : error ? (
+            <div className="text-red-500">{error}</div>
           ) : (
             <>
-              {showCreateForm && renderCreateForm()}
-              <ul className="divide-y divide-gray-700">
-                {orgs.map((org) => (
-                  <li key={org.id} className="py-4 flex items-center justify-between">
-                    <div>
-                      <Link to={`/organizations/${org.id}`} className="text-lg font-medium text-blue-400 hover:text-blue-300 hover:underline">
-                        {org.name}
-                      </Link>
-                      <div className="text-gray-400 text-sm">{org.description}</div>
+              {orgs.length === 0 ? (
+                <div className="text-center">
+                  <h2 className="text-xl text-gray-400 mb-8">There are no organizations yet - please create one!</h2>
+                  {renderCreateForm()}
+                </div>
+              ) : (
+                <>
+                  {showCreateForm && renderCreateForm()}
+                  <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
+                    <div className="max-w-full overflow-x-auto">
+                      <Table>
+                        <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
+                          <TableRow>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Name
+                            </TableCell>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Description
+                            </TableCell>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
+                              Created
+                            </TableCell>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+                          {orgs.map((org) => (
+                            <TableRow key={org.id}>
+                              <TableCell className="px-5 py-4 sm:px-6 text-start">
+                                <Link to={`/organizations/${org.id}`} className="font-medium text-black dark:text-white hover:text-blue-500 dark:hover:text-blue-400">
+                                  {org.name}
+                                </Link>
+                              </TableCell>
+                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                {org.description ? (
+                                  <div className="max-w-md whitespace-pre-wrap break-words">
+                                    {org.description.length > 100 
+                                      ? `${org.description.substring(0, 100)}...` 
+                                      : org.description}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">(No description)</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                {new Date(org.created_at).toLocaleDateString()}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
-                    <Link to={`/organizations/${org.id}`} className="text-blue-400 hover:text-blue-300 hover:underline text-sm">View</Link>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                </>
+              )}
             </>
           )}
-        </>
-      )}
-    </div>
+        </ComponentCard>
+      </div>
+    </>
   );
 };
 

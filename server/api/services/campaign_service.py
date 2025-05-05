@@ -16,6 +16,17 @@ class CampaignService:
             logger.error(f"Error getting campaigns: {str(e)}")
             raise
 
+    def get_campaign(self, campaign_id):
+        """Get a single campaign by ID."""
+        try:
+            campaign = Campaign.query.get(campaign_id)
+            if not campaign:
+                return None
+            return campaign.to_dict()
+        except Exception as e:
+            logger.error(f"Error getting campaign: {str(e)}")
+            raise
+
     def create_campaign(self):
         """Create a new campaign without starting the lead generation process."""
         try:

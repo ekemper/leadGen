@@ -210,7 +210,7 @@ const OrganizationDetail: React.FC = () => {
                 </div>
               ) : (
                 <div 
-                  className="mt-2 text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-500 dark:hover:text-blue-400"
+                  className="mt-2 text-gray-600 dark:text-gray-400 cursor-pointer hover:text-blue-500 dark:hover:text-blue-400 max-w-2xl whitespace-pre-wrap break-words"
                   onClick={() => startEdit('description')}
                 >
                   {org.description || <span className="text-gray-400">(No description)</span>}
