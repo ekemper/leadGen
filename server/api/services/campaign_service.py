@@ -1,7 +1,7 @@
 from server.models import Campaign
 from server.config.database import db
 from server.background_services.apollo_service import ApolloService
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 from server.models.campaign import CampaignStatus
 from typing import Dict, Any, Optional
 
@@ -12,15 +12,15 @@ class CampaignService:
     def get_campaigns(self):
         """Get all campaigns."""
         try:
-            logger.info('Fetching all campaigns')
+            server_logger.info('Fetching all campaigns')
             
             # Ensure we have a valid database session
             if not db.session.is_active:
-                logger.warning('Database session was not active, creating new session')
+                server_logger.warning('Database session was not active, creating new session')
                 db.session.rollback()
             
             campaigns = Campaign.query.order_by(Campaign.created_at.desc()).all()
-            logger.info(f'Found {len(campaigns)} campaigns')
+            server_logger.info(f'Found {len(campaigns)} campaigns')
             
             campaign_list = []
             for campaign in campaigns:
@@ -28,13 +28,13 @@ class CampaignService:
                     campaign_dict = campaign.to_dict()
                     campaign_list.append(campaign_dict)
                 except Exception as e:
-                    logger.error(f'Error converting campaign {campaign.id} to dict: {str(e)}', exc_info=True)
+                    server_logger.error(f'Error converting campaign {campaign.id} to dict: {str(e)}', exc_info=True)
                     continue
             
-            logger.info(f'Successfully converted {len(campaign_list)} campaigns to dict')
+            server_logger.info(f'Successfully converted {len(campaign_list)} campaigns to dict')
             return campaign_list
         except Exception as e:
-            logger.error(f'Error getting campaigns: {str(e)}', exc_info=True)
+            server_logger.error(f'Error getting campaigns: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
@@ -46,7 +46,7 @@ class CampaignService:
                 return None
             return campaign.to_dict()
         except Exception as e:
-            logger.error(f"Error getting campaign: {str(e)}")
+            server_logger.error(f"Error getting campaign: {str(e)}")
             raise
 
     def create_campaign(self, data=None):
@@ -70,7 +70,7 @@ class CampaignService:
             db.session.add(campaign)
             db.session.commit()
 
-            logger.info({
+            server_logger.info({
                 'event': 'campaign_created',
                 'campaign_id': campaign.id
             })
@@ -78,7 +78,7 @@ class CampaignService:
             return campaign.to_dict()
         except Exception as e:
             db.session.rollback()
-            logger.error({
+            server_logger.error({
                 'event': 'create_campaign_error',
                 'message': 'Error occurred while creating campaign',
                 'exception': str(e)
@@ -109,7 +109,7 @@ class CampaignService:
             )
 
             # Kick off background task chain using RQ job dependencies
-            logger.info({
+            server_logger.info({
                 'event': 'trigger_rq_chain',
                 'message': 'About to trigger fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task -> email_copy_generation_task chain',
                 'params': params,
@@ -130,7 +130,7 @@ class CampaignService:
             job4 = enqueue_email_copy_generation({'campaign_id': campaign.id}, depends_on=job3)
             campaign.add_job_id('generate_emails', job4.id)
 
-            logger.info({
+            server_logger.info({
                 'event': 'rq_chain_triggered',
                 'message': 'RQ chain triggered successfully',
                 'params': params,
@@ -141,7 +141,7 @@ class CampaignService:
             return campaign.to_dict()
         except Exception as e:
             db.session.rollback()
-            logger.error({
+            server_logger.error({
                 'event': 'start_campaign_error',
                 'message': 'Error occurred while starting campaign',
                 'campaign_id': campaign_id,
@@ -159,7 +159,7 @@ class CampaignService:
             # Start the campaign
             return self.start_campaign(campaign_data['id'], params)
         except Exception as e:
-            logger.error({
+            server_logger.error({
                 'event': 'create_campaign_with_leads_error',
                 'message': 'Error occurred while creating and starting campaign',
                 'params': params,

@@ -2,7 +2,7 @@ import os
 import requests
 from server.models import Campaign, Lead
 from server.config.database import db
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 from server.models.campaign import CampaignStatus
 from typing import Dict, Any, List
 
@@ -34,7 +34,7 @@ class EmailVerifierService:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Error verifying email {email}: {str(e)}")
+            server_logger.error(f"Error verifying email {email}: {str(e)}", extra={'component': 'server'})
             return {
                 'status': 'error',
                 'error': str(e)
@@ -64,7 +64,7 @@ class EmailVerifierService:
 
             # Get all leads for the campaign
             leads = Lead.query.filter_by(campaign_id=campaign_id).all()
-            logger.info(f"Found {len(leads)} leads to verify for campaign {campaign_id}")
+            server_logger.info(f"Found {len(leads)} leads to verify for campaign {campaign_id}", extra={'component': 'server'})
 
             verified_count = 0
             errors = []
@@ -80,11 +80,11 @@ class EmailVerifierService:
 
                     # Log progress periodically
                     if verified_count % 10 == 0:
-                        logger.info(f"Verified {verified_count}/{len(leads)} emails for campaign {campaign_id}")
+                        server_logger.info(f"Verified {verified_count}/{len(leads)} emails for campaign {campaign_id}", extra={'component': 'server'})
 
                 except Exception as e:
                     error_msg = f"Error verifying email for lead {lead.id}: {str(e)}"
-                    logger.error(error_msg)
+                    server_logger.error(error_msg, extra={'component': 'server'})
                     errors.append(error_msg)
 
             db.session.commit()
@@ -100,7 +100,7 @@ class EmailVerifierService:
         except Exception as e:
             db.session.rollback()
             error_msg = f"Error verifying emails for campaign {campaign_id}: {str(e)}"
-            logger.error(error_msg)
+            server_logger.error(error_msg, extra={'component': 'server'})
             if campaign:
                 campaign.update_status(
                     CampaignStatus.FAILED,

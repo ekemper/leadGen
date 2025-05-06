@@ -5,7 +5,7 @@ from server.background_services.openai_service import OpenAIService
 from server.models import Campaign
 from server.models.campaign import CampaignStatus
 from server.config.database import db
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 from rq import Queue, get_current_job
 from redis import Redis
 import traceback
@@ -21,16 +21,35 @@ def update_campaign_status(campaign_id, status, message=None, error=None):
             campaign = Campaign.query.get(campaign_id)
             if campaign:
                 campaign.update_status(status, message, error)
-                logger.info(f"Campaign {campaign_id} status updated to {status}")
+                server_logger.info(f"Campaign {campaign_id} status updated to {status}")
+                combined_logger.info(f"Campaign {campaign_id} status updated to {status}", extra={
+                    'component': 'server',
+                    'campaign_id': campaign_id,
+                    'status': status,
+                    'message': message,
+                    'error': error
+                })
         except Exception as e:
-            logger.error(f"Error updating campaign status: {str(e)}")
+            server_logger.error(f"Error updating campaign status: {str(e)}")
+            combined_logger.error(f"Error updating campaign status: {str(e)}", extra={
+                'component': 'server',
+                'campaign_id': campaign_id,
+                'error': str(e)
+            })
             db.session.rollback()
 
 def handle_task_error(campaign_id, error, task_name):
     """Handle task errors consistently."""
     error_msg = f"Error in {task_name}: {str(error)}"
-    logger.error(error_msg)
-    logger.error(traceback.format_exc())
+    server_logger.error(error_msg)
+    server_logger.error(traceback.format_exc())
+    combined_logger.error(error_msg, extra={
+        'component': 'server',
+        'campaign_id': campaign_id,
+        'task_name': task_name,
+        'error': str(error),
+        'traceback': traceback.format_exc()
+    })
     update_campaign_status(campaign_id, CampaignStatus.FAILED, error=error_msg)
     raise error
 
@@ -38,12 +57,22 @@ def fetch_and_save_leads_task(params, campaign_id):
     """Fetch and save leads from Apollo."""
     with flask_app.app_context():
         try:
-            logger.info(f"Starting fetch_and_save_leads_task for campaign {campaign_id}")
+            server_logger.info(f"Starting fetch_and_save_leads_task for campaign {campaign_id}")
+            combined_logger.info(f"Starting fetch_and_save_leads_task for campaign {campaign_id}", extra={
+                'component': 'server',
+                'campaign_id': campaign_id,
+                'params': params
+            })
             update_campaign_status(campaign_id, CampaignStatus.FETCHING_LEADS, 'Fetching leads from Apollo')
             
             result = ApolloService().fetch_leads(params, campaign_id)
             
-            logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
+            server_logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
+            combined_logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}", extra={
+                'component': 'server',
+                'campaign_id': campaign_id,
+                'count': result.get('count', 0)
+            })
             update_campaign_status(campaign_id, CampaignStatus.LEADS_FETCHED, f"Fetched {result.get('count', 0)} leads")
             
             return {'campaign_id': campaign_id, 'status': 'success', 'count': result.get('count', 0)}
@@ -55,7 +84,11 @@ def enriching_leads_task(result):
     with flask_app.app_context():
         try:
             campaign_id = result['campaign_id']
-            logger.info(f"Starting enriching_leads_task for campaign {campaign_id}")
+            server_logger.info(f"Starting enriching_leads_task for campaign {campaign_id}")
+            combined_logger.info(f"Starting enriching_leads_task for campaign {campaign_id}", extra={
+                'component': 'server',
+                'campaign_id': campaign_id
+            })
             update_campaign_status(campaign_id, CampaignStatus.ENRICHING, 'Enriching leads with additional data')
             
             # TODO: Implement lead enrichment
@@ -71,13 +104,22 @@ def email_verification_task(result):
     with flask_app.app_context():
         try:
             campaign_id = result['campaign_id']
-            logger.info(f"Starting email_verification_task for campaign {campaign_id}")
+            server_logger.info(f"Starting email_verification_task for campaign {campaign_id}")
+            combined_logger.info(f"Starting email_verification_task for campaign {campaign_id}", extra={
+                'component': 'server',
+                'campaign_id': campaign_id
+            })
             update_campaign_status(campaign_id, CampaignStatus.VERIFYING_EMAILS, 'Verifying email addresses')
             
             verifier = EmailVerifierService()
             count = verifier.verify_emails_for_campaign(campaign_id)
             
-            logger.info(f"Successfully verified {count} emails for campaign {campaign_id}")
+            server_logger.info(f"Successfully verified {count} emails for campaign {campaign_id}")
+            combined_logger.info(f"Successfully verified {count} emails for campaign {campaign_id}", extra={
+                'component': 'server',
+                'campaign_id': campaign_id,
+                'verified_count': count
+            })
             update_campaign_status(campaign_id, CampaignStatus.EMAILS_VERIFIED, f"Verified {count} email addresses")
             
             return {'campaign_id': campaign_id, 'verified_count': count}
@@ -89,7 +131,11 @@ def email_copy_generation_task(result):
     with flask_app.app_context():
         try:
             campaign_id = result['campaign_id']
-            logger.info(f"Starting email_copy_generation_task for campaign {campaign_id}")
+            server_logger.info(f"Starting email_copy_generation_task for campaign {campaign_id}")
+            combined_logger.info(f"Starting email_copy_generation_task for campaign {campaign_id}", extra={
+                'component': 'server',
+                'campaign_id': campaign_id
+            })
             update_campaign_status(campaign_id, CampaignStatus.GENERATING_EMAILS, 'Generating personalized email copy')
             
             # TODO: Implement email copy generation

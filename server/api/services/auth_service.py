@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from flask import current_app
 from server.models import User
 from server.config.database import db
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 from server.api.services.validation_service import ValidationService
 from email_validator import validate_email, EmailNotValidError
 from werkzeug.exceptions import BadRequest, Unauthorized, Forbidden

@@ -42,5 +42,8 @@ def init_api(app):
     # Apply rate limits to routes
     limiter.limit("10/minute", exempt_when=lambda: app.config['TESTING'])(api)
     
+    # Special rate limit for events API to allow more frequent logging
+    limiter.limit("1000 per hour", exempt_when=lambda: app.config['TESTING'])(api.route('/events', methods=['POST']))
+    
     # Register blueprint
     app.register_blueprint(api) 

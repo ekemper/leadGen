@@ -1,7 +1,7 @@
 from datetime import datetime
 import uuid
 from server.config.database import db
-import logging
+from server.utils.logging_config import server_logger, combined_logger
 from sqlalchemy.dialects.postgresql import JSON
 from enum import Enum
 from typing import Dict, Any, Optional
@@ -31,12 +31,13 @@ class Campaign(db.Model):
     organization_id = db.Column(db.String(36), db.ForeignKey('organizations.id'), nullable=False)
     status = db.Column(db.String(50), default=CampaignStatus.CREATED, nullable=False)
     status_message = db.Column(db.Text, nullable=True)
-    last_error = db.Column(db.Text, nullable=True)
+    status_error = db.Column(db.Text, nullable=True)
     job_status = db.Column(JSON, nullable=True)
     job_ids = db.Column(JSON, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def __init__(self, name=None, description=None, organization_id=None, id=None, created_at=None, status=None, 
-                 status_message=None, last_error=None, job_status=None, job_ids=None):
+                 status_message=None, status_error=None, job_status=None, job_ids=None):
         self.id = id or str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -44,7 +45,7 @@ class Campaign(db.Model):
         self.organization_id = organization_id
         self.status = status or CampaignStatus.CREATED
         self.status_message = status_message
-        self.last_error = last_error
+        self.status_error = status_error
         self.job_status = job_status or {}
         self.job_ids = job_ids or {}
 
@@ -59,39 +60,75 @@ class Campaign(db.Model):
         """
         try:
             self.status = status
-            if message:
-                self.status_message = message
-            if error:
-                self.last_error = error
+            self.status_message = message
+            self.status_error = error
             db.session.commit()
-            logger.info(f"Campaign {self.id} status updated to {status}")
+            server_logger.info(f"Campaign {self.id} status updated to {status}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'status': status,
+                'message': message,
+                'error': error
+            })
+            combined_logger.info(f"Campaign {self.id} status updated to {status}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'status': status,
+                'message': message,
+                'error': error
+            })
         except Exception as e:
+            server_logger.error(f"Error updating campaign status: {str(e)}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'error': str(e)
+            })
+            combined_logger.error(f"Error updating campaign status: {str(e)}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'error': str(e)
+            })
             db.session.rollback()
-            logger.error(f"Error updating campaign status: {str(e)}")
             raise
 
-    def update_job_status(self, job_id: str, status: str, details: Optional[Dict[str, Any]] = None) -> None:
+    def update_job_status(self, job_id: str, status: str) -> None:
         """
         Update the status of a specific job.
         
         Args:
             job_id: The ID of the job
             status: The new status
-            details: Optional additional details about the job
         """
         try:
-            if not self.job_status:
-                self.job_status = {}
-            self.job_status[job_id] = {
-                'status': status,
-                'updated_at': datetime.utcnow().isoformat(),
-                'details': details or {}
-            }
-            db.session.commit()
-            logger.info(f"Campaign {self.id} job {job_id} status updated to {status}")
+            if job_id in self.job_ids:
+                self.job_ids[job_id]['status'] = status
+                db.session.commit()
+                server_logger.info(f"Campaign {self.id} job {job_id} status updated to {status}", extra={
+                    'component': 'server',
+                    'campaign_id': self.id,
+                    'job_id': job_id,
+                    'status': status
+                })
+                combined_logger.info(f"Campaign {self.id} job {job_id} status updated to {status}", extra={
+                    'component': 'server',
+                    'campaign_id': self.id,
+                    'job_id': job_id,
+                    'status': status
+                })
         except Exception as e:
+            server_logger.error(f"Error updating job status: {str(e)}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'job_id': job_id,
+                'error': str(e)
+            })
+            combined_logger.error(f"Error updating job status: {str(e)}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'job_id': job_id,
+                'error': str(e)
+            })
             db.session.rollback()
-            logger.error(f"Error updating job status: {str(e)}")
             raise
 
     def add_job_id(self, job_type: str, job_id: str) -> None:
@@ -105,12 +142,39 @@ class Campaign(db.Model):
         try:
             if not self.job_ids:
                 self.job_ids = {}
-            self.job_ids[job_type] = job_id
+            self.job_ids[job_id] = {
+                'type': job_type,
+                'status': 'pending'
+            }
             db.session.commit()
-            logger.info(f"Campaign {self.id} added job {job_id} of type {job_type}")
+            server_logger.info(f"Campaign {self.id} added job {job_id} of type {job_type}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'job_id': job_id,
+                'job_type': job_type
+            })
+            combined_logger.info(f"Campaign {self.id} added job {job_id} of type {job_type}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'job_id': job_id,
+                'job_type': job_type
+            })
         except Exception as e:
+            server_logger.error(f"Error adding job ID: {str(e)}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'job_id': job_id,
+                'job_type': job_type,
+                'error': str(e)
+            })
+            combined_logger.error(f"Error adding job ID: {str(e)}", extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'job_id': job_id,
+                'job_type': job_type,
+                'error': str(e)
+            })
             db.session.rollback()
-            logger.error(f"Error adding job ID: {str(e)}")
             raise
 
     def to_dict(self) -> Dict[str, Any]:
@@ -120,16 +184,25 @@ class Campaign(db.Model):
                 'id': self.id,
                 'name': self.name,
                 'description': self.description,
-                'created_at': self.created_at.isoformat() if self.created_at else None,
                 'organization_id': self.organization_id,
-                'status': self.status,
+                'status': self.status.value if self.status else None,
                 'status_message': self.status_message,
-                'last_error': self.last_error,
-                'job_status': self.job_status,
-                'job_ids': self.job_ids
+                'status_error': self.status_error,
+                'job_ids': self.job_ids,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
             }
         except Exception as e:
-            logger.error(f'Error converting campaign {self.id} to dict: {str(e)}')
+            server_logger.error(f'Error converting campaign {self.id} to dict: {str(e)}', extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'error': str(e)
+            })
+            combined_logger.error(f'Error converting campaign {self.id} to dict: {str(e)}', extra={
+                'component': 'server',
+                'campaign_id': self.id,
+                'error': str(e)
+            })
             raise
 
     def __repr__(self) -> str:

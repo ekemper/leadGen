@@ -9,7 +9,8 @@ function handleAuthError(response: Response) {
                 // Only clear tokens if it's an actual auth error
                 if (data.message?.toLowerCase().includes('token') || 
                     data.message?.toLowerCase().includes('unauthorized') ||
-                    data.message?.toLowerCase().includes('forbidden')) {
+                    data.message?.toLowerCase().includes('forbidden') ||
+                    data.message?.toLowerCase().includes('user not found')) {
                     localStorage.clear();
                     sessionStorage.clear();
                     setTimeout(() => {

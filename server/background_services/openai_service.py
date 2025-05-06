@@ -3,7 +3,7 @@ import json
 import requests
 from server.models.lead import Lead
 from server.config.database import db
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 from typing import Dict, Any, Optional
 from server.models import Campaign
 from server.models.campaign import CampaignStatus
@@ -74,7 +74,7 @@ Email:"""
 
         except Exception as e:
             error_msg = f"Error generating email copy for lead {lead.id}: {str(e)}"
-            logger.error(error_msg)
+            server_logger.error(error_msg, extra={'component': 'OpenAIService'})
             raise
 
     def generate_email_copies_for_campaign(self, campaign_id: str) -> int:
@@ -101,7 +101,7 @@ Email:"""
 
             # Get all leads for the campaign
             leads = Lead.query.filter_by(campaign_id=campaign_id).all()
-            logger.info(f"Found {len(leads)} leads to generate emails for campaign {campaign_id}")
+            server_logger.info(f"Found {len(leads)} leads to generate emails for campaign {campaign_id}", extra={'component': 'OpenAIService'})
 
             generated_count = 0
             errors = []
@@ -117,11 +117,11 @@ Email:"""
 
                     # Log progress periodically
                     if generated_count % 10 == 0:
-                        logger.info(f"Generated {generated_count}/{len(leads)} emails for campaign {campaign_id}")
+                        server_logger.info(f"Generated {generated_count}/{len(leads)} emails for campaign {campaign_id}", extra={'component': 'OpenAIService'})
 
                 except Exception as e:
                     error_msg = f"Error generating email for lead {lead.id}: {str(e)}"
-                    logger.error(error_msg)
+                    server_logger.error(error_msg, extra={'component': 'OpenAIService'})
                     errors.append(error_msg)
 
             db.session.commit()
@@ -137,7 +137,7 @@ Email:"""
         except Exception as e:
             db.session.rollback()
             error_msg = f"Error generating emails for campaign {campaign_id}: {str(e)}"
-            logger.error(error_msg)
+            server_logger.error(error_msg, extra={'component': 'OpenAIService'})
             if campaign:
                 campaign.update_status(
                     CampaignStatus.FAILED,

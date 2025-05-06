@@ -2,7 +2,7 @@ import os
 import requests
 from server.models.lead import Lead
 from server.config.database import db
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 from typing import Dict, Any, List
 
 class PerplexityService:
@@ -78,19 +78,19 @@ class PerplexityService:
         
         for attempt in range(self.MAX_RETRIES):
             try:
-                logger.info(f"Enriching lead {lead.id} (attempt {attempt + 1}/{self.MAX_RETRIES})")
+                server_logger.info(f"Enriching lead {lead.id} (attempt {attempt + 1}/{self.MAX_RETRIES})", extra={'component': 'server'})
                 response = requests.post(self.API_URL, json=prompt, headers=self.headers, timeout=30)
                 response.raise_for_status()
                 return response.json()
             except requests.RequestException as e:
                 error_msg = f"Perplexity API request failed for lead {lead.id}: {str(e)}"
-                logger.error(error_msg)
+                server_logger.error(error_msg, extra={'component': 'server'})
                 if attempt < self.MAX_RETRIES - 1:
                     continue
                 return {'error': error_msg}
             except Exception as e:
                 error_msg = f"Unexpected error enriching lead {lead.id}: {str(e)}"
-                logger.error(error_msg)
+                server_logger.error(error_msg, extra={'component': 'server'})
                 return {'error': error_msg}
 
     def enrich_leads(self, campaign_id: str) -> Dict[str, Any]:
@@ -106,11 +106,11 @@ class PerplexityService:
 
         try:
             leads = db.session.query(Lead).filter_by(campaign_id=campaign_id).all()
-            logger.info(f"Found {len(leads)} leads for campaign {campaign_id}")
+            server_logger.info(f"Found {len(leads)} leads for campaign {campaign_id}", extra={'component': 'server'})
             
             # Filter leads that passed email verification
             valid_leads = [lead for lead in leads if lead.email_verification and lead.email_verification.get('result') == 'ok']
-            logger.info(f"Found {len(valid_leads)} valid leads for enrichment out of {len(leads)} total")
+            server_logger.info(f"Found {len(valid_leads)} valid leads for enrichment out of {len(leads)} total", extra={'component': 'server'})
             
             processed = 0
             errors = []
@@ -126,15 +126,15 @@ class PerplexityService:
                         processed += 1
                 except Exception as e:
                     error_msg = f"Failed to enrich lead {lead.id}: {str(e)}"
-                    logger.error(error_msg)
+                    server_logger.error(error_msg, extra={'component': 'server'})
                     errors.append(error_msg)
                     lead.enrichment_results = {'error': error_msg}
 
             try:
                 db.session.commit()
-                logger.info(f"Successfully enriched {processed} leads for campaign {campaign_id}")
+                server_logger.info(f"Successfully enriched {processed} leads for campaign {campaign_id}", extra={'component': 'server'})
                 if errors:
-                    logger.warning(f"Completed with {len(errors)} errors: {errors}")
+                    server_logger.warning(f"Completed with {len(errors)} errors: {errors}", extra={'component': 'server'})
                 return {
                     'processed': processed,
                     'errors': errors
@@ -142,12 +142,12 @@ class PerplexityService:
             except Exception as e:
                 db.session.rollback()
                 error_msg = f"Database error while saving enrichment results: {str(e)}"
-                logger.error(error_msg)
+                server_logger.error(error_msg, extra={'component': 'server'})
                 raise RuntimeError(error_msg)
 
         except Exception as e:
             error_msg = f"Unexpected error in enrich_leads: {str(e)}"
-            logger.error(error_msg)
+            server_logger.error(error_msg, extra={'component': 'server'})
             raise RuntimeError(error_msg)
         finally:
             db.session.remove() 

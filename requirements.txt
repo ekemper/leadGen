@@ -15,4 +15,5 @@ trafilatura
 python-json-logger
 email-validator
 bcrypt
-PyJWT 
+PyJWT
+openai>=1.0.0 

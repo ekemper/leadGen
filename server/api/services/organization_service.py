@@ -1,6 +1,6 @@
 from server.models import Organization
 from server.config.database import db
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 import re
 from html import escape
 
@@ -58,7 +58,7 @@ class OrganizationService:
             return org.to_dict()
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error creating organization: {str(e)}")
+            server_logger.error(f"Error creating organization: {str(e)}", extra={'component': 'server'})
             raise
 
     def get_organization(self, org_id):
@@ -92,5 +92,5 @@ class OrganizationService:
             return org.to_dict()
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error updating organization: {str(e)}")
+            server_logger.error(f"Error updating organization: {str(e)}", extra={'component': 'server'})
             raise 

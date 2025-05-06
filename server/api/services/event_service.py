@@ -1,6 +1,6 @@
 from server.models import Event
 from server.config.database import db
-from server.utils.logger import logger
+from server.utils.logging_config import browser_logger, combined_logger
 from werkzeug.exceptions import NotFound, BadRequest
 import os
 import json
@@ -17,10 +17,35 @@ class EventService:
             )
             db.session.add(event)
             db.session.commit()
+            
+            # Log to browser logger if source is browser
+            if data['source'] == 'browser':
+                browser_logger.info(
+                    f"Browser event: {data['tag']}",
+                    extra={
+                        'tag': data['tag'],
+                        'type': data['type'],
+                        'data': data['data']
+                    }
+                )
+                combined_logger.info(
+                    f"Browser event: {data['tag']}",
+                    extra={
+                        'component': 'browser',
+                        'tag': data['tag'],
+                        'type': data['type'],
+                        'data': data['data']
+                    }
+                )
+            
             return event.to_dict()
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error creating event: {str(e)}")
+            browser_logger.error(f"Error creating event: {str(e)}")
+            combined_logger.error(
+                f"Error creating event: {str(e)}",
+                extra={'component': 'browser', 'error': str(e)}
+            )
             raise BadRequest(str(e))
 
     def get_event(self, event_id):
@@ -31,36 +56,34 @@ class EventService:
 
     def get_events(self):
         events = Event.query.order_by(Event.created_at.desc()).all()
-        return [event.to_dict() for event in events] 
+        return [event.to_dict() for event in events]
 
     def handle_console_logs(self, logs):
-        """Handle console logs from the browser and write them to a file."""
+        """Handle console logs from the browser."""
         try:
-            # Create logs directory if it doesn't exist
-            log_dir = os.path.join(os.getcwd(), 'logs')
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
-
-            # Create or append to console.log file
-            log_file = os.path.join(log_dir, 'console.log')
-            
-            # Format logs for file writing
-            formatted_logs = []
+            # Log each console log entry
             for log in logs:
-                formatted_log = {
-                    'timestamp': log['timestamp'],
-                    'level': log['level'],
-                    'message': log['message'],
-                    'data': log.get('data', [])
-                }
-                formatted_logs.append(formatted_log)
+                browser_logger.info(
+                    f"Browser console log: {log['message']}",
+                    extra={
+                        'level': log['level'],
+                        'message': log['message'],
+                        'data': log.get('data', []),
+                        'timestamp': log['timestamp']
+                    }
+                )
+                combined_logger.info(
+                    f"Browser console log: {log['message']}",
+                    extra={
+                        'component': 'browser',
+                        'level': log['level'],
+                        'message': log['message'],
+                        'data': log.get('data', []),
+                        'timestamp': log['timestamp']
+                    }
+                )
 
-            # Write to file
-            with open(log_file, 'a') as f:
-                for log in formatted_logs:
-                    f.write(json.dumps(log) + '\n')
-
-            # Also create an event in the database
+            # Create event in database
             event = Event(
                 source='browser',
                 tag='console',
@@ -70,8 +93,12 @@ class EventService:
             db.session.add(event)
             db.session.commit()
 
-            return {'status': 'success', 'message': 'Logs written successfully'}
+            return {'status': 'success', 'message': 'Logs processed successfully'}
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error handling console logs: {str(e)}")
+            browser_logger.error(f"Error handling console logs: {str(e)}")
+            combined_logger.error(
+                f"Error handling console logs: {str(e)}",
+                extra={'component': 'browser', 'error': str(e)}
+            )
             raise BadRequest(str(e)) 

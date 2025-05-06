@@ -11,21 +11,10 @@ from server.utils.middleware import request_middleware
 from server.config.database import db, init_db
 from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
-import logging
+from server.utils.logging_config import server_logger, combined_logger
 
 print('sys.path:', sys.path)
 print('CWD:', os.getcwd())
-
-# Set global log level to WARNING to reduce noise
-logging.basicConfig(level=logging.WARNING)
-
-# Reduce noise from specific libraries
-logging.getLogger('werkzeug').setLevel(logging.ERROR)
-logging.getLogger('flask_limiter').setLevel(logging.ERROR)
-logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
-
-# Enable SQLAlchemy engine and pool logging for debugging SQL connection errors
-logging.getLogger('sqlalchemy.pool').setLevel(logging.INFO)
 
 def create_app(test_config=None):
     """Create and configure the Flask application"""
@@ -68,6 +57,7 @@ def create_app(test_config=None):
             response.headers['Access-Control-Max-Age'] = '3600'
         return response
     
+    # Configure rate limiting
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
@@ -94,6 +84,14 @@ def create_app(test_config=None):
                 'message': error.description
             }
         }
+        server_logger.error(
+            f"HTTP error: {error.name}",
+            extra={
+                'error_code': error.code,
+                'error_name': error.name,
+                'error_message': error.description
+            }
+        )
         return jsonify(response), error.code
 
     @app.errorhandler(BadRequest)
@@ -107,6 +105,13 @@ def create_app(test_config=None):
                 'message': str(error.description)
             }
         }
+        server_logger.error(
+            "Bad request error",
+            extra={
+                'error_code': 400,
+                'error_message': str(error.description)
+            }
+        )
         return jsonify(response), 400
 
     @app.errorhandler(Exception)
@@ -120,17 +125,37 @@ def create_app(test_config=None):
                 'message': str(error)
             }
         }
+        server_logger.error(
+            "Unhandled exception",
+            extra={
+                'error_code': 500,
+                'error_type': type(error).__name__,
+                'error_message': str(error)
+            }
+        )
         return jsonify(response), 500
     
+    # Log application startup
+    server_logger.info("Flask application initialized")
+    combined_logger.info(
+        "Flask application initialized",
+        extra={
+            'component': 'server',
+            'config': {
+                'debug': app.debug,
+                'testing': app.testing,
+                'environment': os.getenv('FLASK_ENV', 'development')
+            }
+        }
+    )
+
     return app
 
 # Only create the app if running directly
 if __name__ == '__main__':
-    from server.utils.logger import logger
-    
     app = create_app()
     
-    logger.info('Starting application', extra={
+    server_logger.info('Starting application', extra={
         'environment': os.getenv('FLASK_ENV', 'development'),
         'debug_mode': os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     })

@@ -3,12 +3,38 @@
     {
       "type": "file",
       "path": "./logs/server.log",
-      "format": "json"
+      "format": "json",
+      "description": "Server-side application logs"
     },
     {
       "type": "file",
       "path": "./logs/browser.log",
-      "format": "json"
+      "format": "json",
+      "description": "Browser-side application logs"
+    },
+    {
+      "type": "file",
+      "path": "./logs/worker.log",
+      "format": "json",
+      "description": "Background worker logs"
+    },
+    {
+      "type": "file",
+      "path": "./logs/combined.log",
+      "format": "json",
+      "description": "Combined logs from all components"
+    },
+    {
+      "type": "file",
+      "path": "./logs/console.log",
+      "format": "text",
+      "description": "Console output logs"
+    },
+    {
+      "type": "file",
+      "path": "./logs/error.log",
+      "format": "json",
+      "description": "Error logs from all components"
     }
   ],
   "server": {
@@ -17,5 +43,16 @@
   },
   "envFiles": [
     ".env"
-  ]
+  ],
+  "logConfig": {
+    "maxFileSize": "10MB",
+    "backupCount": 5,
+    "logDirectory": "./logs",
+    "components": [
+      "server",
+      "browser",
+      "worker",
+      "combined"
+    ]
+  }
 } 

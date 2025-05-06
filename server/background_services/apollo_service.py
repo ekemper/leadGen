@@ -1,11 +1,10 @@
 import os
 import requests
-import logging
 from server.models.lead import Lead
 from server.config.database import db
 from typing import Dict, Any, List
 from dotenv import load_dotenv
-from server.utils.logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 from server.models import Campaign
 from server.models.campaign import CampaignStatus
 
@@ -52,7 +51,7 @@ class ApolloService:
             
             # Get run ID and wait for completion
             run_id = response.json()['data']['id']
-            logger.info(f"Started Apollo scraper run {run_id}")
+            server_logger.info(f"Started Apollo scraper run {run_id}", extra={'component': 'server'})
             
             # Wait for completion and get results
             results = self._wait_for_completion(run_id)
@@ -75,7 +74,7 @@ class ApolloService:
                     created_count += 1
                 except Exception as e:
                     error_msg = f"Error saving lead: {str(e)}"
-                    logger.error(error_msg)
+                    server_logger.error(error_msg, extra={'component': 'server'})
                     errors.append(error_msg)
             
             db.session.commit()
@@ -94,7 +93,7 @@ class ApolloService:
         except Exception as e:
             db.session.rollback()
             error_msg = f"Error fetching leads: {str(e)}"
-            logger.error(error_msg)
+            server_logger.error(error_msg, extra={'component': 'server'})
             if campaign:
                 campaign.update_status(
                     CampaignStatus.FAILED,

@@ -1,7 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 import os
 from sqlalchemy.exc import SQLAlchemyError
-import logging
+from server.utils.logging_config import server_logger, combined_logger
 
 # Create the SQLAlchemy instance without initializing it
 db = SQLAlchemy()
@@ -13,43 +13,40 @@ def init_db(app, test_config=None):
         app: Flask application instance
         test_config: Optional dictionary containing test configuration
     """
-    # Configure SQLAlchemy
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    logger = logging.getLogger('database_config')
-    
-    if test_config is not None:
-        # Use test configuration if provided
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {}
-        logger.info('Using in-memory SQLite database for testing.')
-    else:
-        # Get database URL from environment or use SQLite for development
-        db_url = os.getenv('NEON_CONNECTION_STRING')
-        if not db_url:
-            logger.error('NEON_CONNECTION_STRING must be set for application runtime.')
-            raise RuntimeError('NEON_CONNECTION_STRING must be set for application runtime.')
-        if 'neon.tech' not in db_url:
-            logger.error(f'NEON_CONNECTION_STRING does not appear to be a Neon connection string: {db_url}')
-            raise RuntimeError('NEON_CONNECTION_STRING does not appear to be a Neon connection string.')
-        app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-            'pool_size': 5,
-            'pool_timeout': 30,
-            'pool_recycle': 60,
-            'max_overflow': 2,
-            'pool_pre_ping': True,
-        }
-        logger.info(f'Using Neon database: {db_url}')
-    
     try:
-        # Initialize the SQLAlchemy app
+        db_url = os.getenv('NEON_CONNECTION_STRING')
+        
+        if os.getenv('FLASK_ENV') == 'testing':
+            server_logger.info('Using in-memory SQLite database for testing.', extra={'component': 'server'})
+            combined_logger.info('Using in-memory SQLite database for testing.', extra={'component': 'server'})
+            db_url = 'sqlite:///:memory:'
+        elif not db_url:
+            error_msg = 'NEON_CONNECTION_STRING must be set for application runtime.'
+            server_logger.error(error_msg, extra={'component': 'server'})
+            combined_logger.error(error_msg, extra={'component': 'server'})
+            raise ValueError(error_msg)
+        elif not db_url.startswith('postgresql://'):
+            error_msg = f'NEON_CONNECTION_STRING does not appear to be a Neon connection string: {db_url}'
+            server_logger.error(error_msg, extra={'component': 'server'})
+            combined_logger.error(error_msg, extra={'component': 'server'})
+            raise ValueError(error_msg)
+        else:
+            server_logger.info(f'Using Neon database: {db_url}', extra={'component': 'server'})
+            combined_logger.info(f'Using Neon database: {db_url}', extra={'component': 'server'})
+        
+        app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        
         db.init_app(app)
         
-        # Create tables if they don't exist
         with app.app_context():
             db.create_all()
             
-        logger.info('Database initialized successfully.')
-    except SQLAlchemyError as e:
-        logger.error(f"Database initialization failed: {str(e)}")
+        server_logger.info('Database initialized successfully.', extra={'component': 'server'})
+        combined_logger.info('Database initialized successfully.', extra={'component': 'server'})
+        
+    except Exception as e:
+        error_msg = f"Database initialization failed: {str(e)}"
+        server_logger.error(error_msg, extra={'component': 'server'})
+        combined_logger.error(error_msg, extra={'component': 'server'})
         raise 

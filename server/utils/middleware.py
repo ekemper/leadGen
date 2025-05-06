@@ -2,7 +2,7 @@ import uuid
 import time
 from functools import wraps
 from flask import request, g
-from .logger import logger
+from server.utils.logging_config import server_logger, combined_logger
 
 def generate_request_id():
     """Generate a unique request ID."""
@@ -26,7 +26,11 @@ def log_request_info():
     if hasattr(g, 'status_code'):
         extra['status_code'] = g.status_code
     
-    logger.info('Request processed', extra=extra)
+    server_logger.info('Request processed', extra=extra)
+    combined_logger.info('Request processed', extra={
+        'component': 'server',
+        **extra
+    })
 
 def request_middleware(app):
     """Configure request middleware for the Flask app."""
@@ -40,16 +44,18 @@ def request_middleware(app):
         
         # Log incoming request
         if request.path != '/health':
-            logger.info(
-                'Request started',
-                extra={
-                    'method': request.method,
-                    'path': request.path,
-                    'remote_addr': request.remote_addr,
-                    'request_id': g.request_id,
-                    'user_agent': request.user_agent.string
-                }
-            )
+            extra = {
+                'method': request.method,
+                'path': request.path,
+                'remote_addr': request.remote_addr,
+                'request_id': g.request_id,
+                'user_agent': request.user_agent.string
+            }
+            server_logger.info('Request started', extra=extra)
+            combined_logger.info('Request started', extra={
+                'component': 'server',
+                **extra
+            })
     
     @app.after_request
     def after_request(response):
@@ -62,17 +68,19 @@ def request_middleware(app):
     @app.teardown_request
     def teardown_request(exception=None):
         if exception:
-            logger.error(
-                'Request failed',
-                extra={
-                    'error': str(exception),
-                    'request_id': getattr(g, 'request_id', None),
-                    'method': request.method,
-                    'path': request.path,
-                    'remote_addr': request.remote_addr,
-                    'user_agent': request.user_agent.string
-                }
-            )
+            extra = {
+                'error': str(exception),
+                'request_id': getattr(g, 'request_id', None),
+                'method': request.method,
+                'path': request.path,
+                'remote_addr': request.remote_addr,
+                'user_agent': request.user_agent.string
+            }
+            server_logger.error('Request failed', extra=extra)
+            combined_logger.error('Request failed', extra={
+                'component': 'server',
+                **extra
+            })
         else:
             log_request_info()
 
@@ -84,27 +92,31 @@ def log_function_call(func):
         try:
             result = func(*args, **kwargs)
             duration_ms = int((time.time() - start_time) * 1000)
-            logger.info(
-                f'Function {func.__name__} completed',
-                extra={
-                    'function': func.__name__,
-                    'duration_ms': duration_ms,
-                    'success': True,
-                    'request_id': getattr(g, 'request_id', None)
-                }
-            )
+            extra = {
+                'function': func.__name__,
+                'duration_ms': duration_ms,
+                'success': True,
+                'request_id': getattr(g, 'request_id', None)
+            }
+            server_logger.info(f'Function {func.__name__} completed', extra=extra)
+            combined_logger.info(f'Function {func.__name__} completed', extra={
+                'component': 'server',
+                **extra
+            })
             return result
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
-            logger.error(
-                f'Function {func.__name__} failed',
-                extra={
-                    'function': func.__name__,
-                    'duration_ms': duration_ms,
-                    'error': str(e),
-                    'success': False,
-                    'request_id': getattr(g, 'request_id', None)
-                }
-            )
+            extra = {
+                'function': func.__name__,
+                'duration_ms': duration_ms,
+                'error': str(e),
+                'success': False,
+                'request_id': getattr(g, 'request_id', None)
+            }
+            server_logger.error(f'Function {func.__name__} failed', extra=extra)
+            combined_logger.error(f'Function {func.__name__} failed', extra={
+                'component': 'server',
+                **extra
+            })
             raise
     return wrapper 

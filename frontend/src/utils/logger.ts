@@ -46,10 +46,12 @@ class Logger {
   private originalXHR: typeof window.XMLHttpRequest;
   private logQueue: LogEntry[] = [];
   private isProcessing: boolean = false;
-  private readonly BATCH_SIZE = 10;
-  private readonly FLUSH_INTERVAL = 5000; // 5 seconds
-  private readonly MAX_RETRIES = 3;
+  private readonly BATCH_SIZE = 50;
+  private readonly FLUSH_INTERVAL = 30000;
+  private readonly MAX_RETRIES = 5;
   private retryCount: number = 0;
+  private lastFlushTime: number = 0;
+  private readonly MIN_FLUSH_INTERVAL = 10000;
 
   private constructor() {
     // Store original methods
@@ -254,6 +256,12 @@ class Logger {
   private async flushLogs(): Promise<void> {
     if (this.isProcessing || this.logQueue.length === 0) return;
 
+    // Check if enough time has passed since last flush
+    const now = Date.now();
+    if (now - this.lastFlushTime < this.MIN_FLUSH_INTERVAL) {
+      return;
+    }
+
     this.isProcessing = true;
     const logsToSend = [...this.logQueue];
     this.logQueue = [];
@@ -266,18 +274,29 @@ class Logger {
         type: 'log'
       });
       this.retryCount = 0; // Reset retry count on success
-    } catch (error) {
+      this.lastFlushTime = now;
+    } catch (error: any) {
       // If sending fails, put logs back in queue
       this.logQueue = [...logsToSend, ...this.logQueue];
-      this.originalConsole.error('Failed to send logs to server:', error);
-
-      // Implement retry logic
-      if (this.retryCount < this.MAX_RETRIES) {
+      
+      // Check if it's a rate limit error
+      if (error.message?.includes('429') || error.message?.includes('TOO MANY REQUESTS')) {
+        // Double the wait time for rate limit errors
+        const waitTime = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
+        this.originalConsole.warn(`Rate limited. Waiting ${waitTime/1000} seconds before retry.`);
+        setTimeout(() => this.flushLogs(), waitTime);
         this.retryCount++;
-        setTimeout(() => this.flushLogs(), 1000 * this.retryCount); // Exponential backoff
       } else {
-        this.originalConsole.error('Max retries reached for sending logs to server');
-        this.retryCount = 0;
+        this.originalConsole.error('Failed to send logs to server:', error);
+        // Implement retry logic with exponential backoff
+        if (this.retryCount < this.MAX_RETRIES) {
+          this.retryCount++;
+          const waitTime = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
+          setTimeout(() => this.flushLogs(), waitTime);
+        } else {
+          this.originalConsole.error('Max retries reached for sending logs to server');
+          this.retryCount = 0;
+        }
       }
     } finally {
       this.isProcessing = false;
