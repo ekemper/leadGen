@@ -1,10 +1,11 @@
 # Deployment Guide
 
-This project is now intended to be run and deployed without Docker or containers.
+This project is intended to be run and deployed without Docker or containers.
 
 ## Prerequisites
 - Python 3.9+
-- Node.js 20.x
+- Node.js 20.x+
+- PostgreSQL 13+
 
 ## Backend Deployment
 1. Set up a Python virtual environment:
@@ -14,17 +15,19 @@ This project is now intended to be run and deployed without Docker or containers
    ```
 2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install -r server/requirements.txt
    ```
-3. Set environment variables as needed (see `.env` example).
+3. Set environment variables as needed (see `example.env`).
 4. Run database migrations:
    ```bash
    flask db upgrade
    ```
 5. Start the Flask app:
    ```bash
-   flask run --port 5001
+   python server/app.py
    ```
+   - Runs on port 5001 by default.
+   - For production, use a WSGI server like gunicorn.
 
 ## Frontend Deployment
 1. Navigate to the frontend directory:

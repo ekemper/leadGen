@@ -1,45 +1,34 @@
 # Frontend Documentation
 
 ## Overview
-The frontend of our Lead Generation application is built using modern web technologies to provide a responsive and user-friendly interface.
+The frontend of our Lead Generation application is built using React, Vite, TypeScript, and Tailwind CSS to provide a responsive and user-friendly interface.
 
 ## Tech Stack
-- Next.js
+- React 19
+- Vite
 - TypeScript
 - Tailwind CSS
-- React Query for data fetching
-- React Hook Form for form management
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- npm or yarn
+- Node.js (v20.x or higher)
+- npm
 
 ### Installation
 1. Navigate to the frontend directory:
 ```bash
 cd frontend
 ```
-
 2. Install dependencies:
 ```bash
 npm install
-# or
-yarn install
 ```
-
-3. Set up environment variables:
-```bash
-cp .env.example .env.local
-```
-
-4. Start the development server:
+3. Start the development server:
 ```bash
 npm run dev
-# or
-yarn dev
 ```
+- The frontend runs on port 5173 by default.
 
 ## Project Structure
 ```
@@ -49,47 +38,27 @@ frontend/
 │   ├── pages/        # Page components and routing
 │   ├── hooks/        # Custom React hooks
 │   ├── utils/        # Utility functions
-│   ├── types/        # TypeScript type definitions
-│   ├── styles/       # Global styles and Tailwind config
-│   └── api/          # API integration and services
-├── public/           # Static assets
-└── tests/            # Frontend tests
+│   └── assets/       # Static assets
+├── public/           # Static files
+└── ...
 ```
 
 ## Development Guidelines
-
-### Component Structure
 - Use functional components with TypeScript
-- Implement proper prop typing
-- Follow the container/presenter pattern for complex components
-
-### Styling
-- Use Tailwind CSS classes for styling
-- Create custom utility classes in `tailwind.config.js`
+- Use Tailwind CSS for styling
 - Follow mobile-first responsive design
+- Use React Context or local state as needed
 
-### State Management
-- Use React Query for server state
-- Implement React Context for global state when necessary
-- Utilize local state for component-specific data
-
-### Testing
-- Write unit tests for components using Jest and React Testing Library
-- Implement integration tests for critical user flows
-- Run tests with `npm test` or `yarn test`
+## Testing
+- Write unit tests for components using React Testing Library
+- Run tests with `npm test`
 
 ## Build and Deployment
 ```bash
 # Create production build
 npm run build
-# or
-yarn build
-
-# Start production server
-npm start
-# or
-yarn start
 ```
+- Serve the static files in `frontend/dist` using your preferred web server or hosting platform.
 
 ## Best Practices
 - Follow ESLint and Prettier configurations
