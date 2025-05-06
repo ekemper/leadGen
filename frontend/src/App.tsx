@@ -24,10 +24,39 @@ import OrganizationsList from "./pages/OrganizationsList";
 import OrganizationDetail from "./pages/OrganizationDetail";
 import OrganizationCreate from "./pages/OrganizationCreate";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import { logger } from './utils/logger';
+import { Component, ErrorInfo, ReactNode } from 'react';
+
+// Initialize logger
+logger;
+
+// Error Boundary component to catch React errors
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    logger.logError(error, { errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <h1>Something went wrong. Please check the console for details.</h1>;
+    }
+
+    return this.props.children;
+  }
+}
 
 export default function App() {
   return (
-    <>
+    <ErrorBoundary>
       <Router>
         <ScrollToTop />
         <Routes>
@@ -78,6 +107,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
-    </>
+    </ErrorBoundary>
   );
 }

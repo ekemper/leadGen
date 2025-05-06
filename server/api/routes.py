@@ -485,11 +485,31 @@ def register_routes(api):
     @api.route('/events', methods=['POST'])
     @token_required
     def create_event():
-        data = request.get_json()
-        if not data or not all(k in data for k in ('source', 'tag', 'data', 'type')):
-            raise BadRequest('Missing required event fields')
-        event = event_service.create_event(data)
-        return jsonify({'status': 'success', 'data': event}), 201
+        """Create a new event."""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No data provided'
+                }), 400
+
+            # Special handling for console logs
+            if data.get('tag') == 'console' and data.get('source') == 'browser':
+                result = event_service.handle_console_logs(data['data'])
+            else:
+                result = event_service.create_event(data)
+
+            return jsonify({
+                'status': 'success',
+                'data': result
+            }), 201
+        except Exception as e:
+            logger.error(f"Error creating event: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to create event'
+            }), 500
 
     @api.route('/events', methods=['GET'])
     @token_required
