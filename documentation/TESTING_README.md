@@ -1,7 +1,23 @@
-# Testing Documentation
+# Testing Guide
 
-## Overview
-This document outlines the testing strategy and procedures for both frontend and backend components of the Lead Generation application.
+## Prerequisites
+- Python 3.9+
+- All backend dependencies installed (see requirements.txt)
+
+## Running Tests
+
+1. Activate your virtual environment:
+   ```bash
+   source venv/bin/activate
+   ```
+2. Run the test suite:
+   ```bash
+   pytest
+   ```
+
+## Notes
+- Ensure your environment variables are set as needed for testing (see `.env`).
+- No Docker or container setup is required or supported.
 
 ## Backend Testing
 

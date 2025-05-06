@@ -14,9 +14,8 @@ A modern authentication template built with Flask (Backend) and React + Vite (Fr
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- Node.js 20.x (for local development without Docker)
-- Python 3.9+ (for local development without Docker)
+- Node.js 20.x
+- Python 3.9+
 
 ## Project Structure
 
@@ -40,23 +39,7 @@ ALLOWED_ORIGINS=http://localhost:3000
 DATABASE_URL=sqlite:///app.db
 ```
 
-## Running with Docker (Recommended)
-
-1. Build and start the containers:
-   ```bash
-   docker-compose up --build
-   ```
-
-2. Access the applications:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5001
-
-3. Stop the containers:
-   ```bash
-   docker-compose down
-   ```
-
-## Running Locally (Without Docker)
+## Running the Application
 
 ### Backend Setup
 
@@ -154,29 +137,6 @@ pytest
 - HTTP-only cookies
 - Session security
 - Account lockout after multiple failed login attempts
-
-## Production Deployment
-
-For production deployment:
-
-1. Update environment variables with production values
-2. Build production images:
-   ```bash
-   docker-compose -f docker-compose.prod.yml build
-   ```
-3. Deploy using your preferred hosting service
-
-## Troubleshooting
-
-1. If the frontend can't connect to the backend:
-   - Check if both services are running
-   - Verify CORS settings in backend
-   - Check if VITE_API_URL is correctly set
-
-2. If containers fail to start:
-   - Check if ports 3000 and 5001 are available
-   - Verify environment variables
-   - Check Docker logs: `docker-compose logs`
 
 ## License
 
