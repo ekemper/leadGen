@@ -22,6 +22,10 @@ interface Campaign {
   status: string;
   name: string;
   description: string;
+  status_message?: string;
+  last_error?: string;
+  job_status?: Record<string, any>;
+  job_ids?: Record<string, string>;
 }
 
 interface Organization {
@@ -39,6 +43,51 @@ interface FormErrors {
   description?: string;
   organization_id?: string;
 }
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'completed':
+      return 'success';
+    case 'created':
+      return 'info';
+    case 'fetching_leads':
+    case 'enriching':
+    case 'verifying_emails':
+    case 'generating_emails':
+      return 'warning';
+    case 'failed':
+      return 'error';
+    default:
+      return 'info';
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'created':
+      return 'Created';
+    case 'fetching_leads':
+      return 'Fetching Leads';
+    case 'leads_fetched':
+      return 'Leads Fetched';
+    case 'enriching':
+      return 'Enriching Leads';
+    case 'enriched':
+      return 'Leads Enriched';
+    case 'verifying_emails':
+      return 'Verifying Emails';
+    case 'emails_verified':
+      return 'Emails Verified';
+    case 'generating_emails':
+      return 'Generating Emails';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    default:
+      return status;
+  }
+};
 
 const CampaignsList: React.FC = () => {
   const navigate = useNavigate();
@@ -325,16 +374,20 @@ const CampaignsList: React.FC = () => {
                               <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
                                 <Badge
                                   size="sm"
-                                  color={
-                                    campaign.status === "running"
-                                      ? "success"
-                                      : campaign.status === "pending"
-                                      ? "warning"
-                                      : "error"
-                                  }
+                                  color={getStatusColor(campaign.status)}
                                 >
-                                  {campaign.status || 'created'}
+                                  {getStatusLabel(campaign.status)}
                                 </Badge>
+                                {campaign.status_message && (
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    {campaign.status_message}
+                                  </div>
+                                )}
+                                {campaign.last_error && (
+                                  <div className="text-xs text-red-400 mt-1">
+                                    {campaign.last_error}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
                                 {new Date(campaign.created_at).toLocaleString()}

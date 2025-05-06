@@ -1,3 +1,5 @@
+export {};
+
 import { api } from '../config/api';
 
 interface LogEntry {

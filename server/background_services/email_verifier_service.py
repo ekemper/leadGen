@@ -1,49 +1,109 @@
 import os
 import requests
-from server.models.lead import Lead
+from server.models import Campaign, Lead
 from server.config.database import db
-from sqlalchemy.orm import scoped_session
+from server.utils.logger import logger
+from server.models.campaign import CampaignStatus
+from typing import Dict, Any, List
 
 class EmailVerifierService:
     """Service for verifying emails using MillionVerifier API."""
 
-    def __init__(self, api_key=None):
-        self.api_key = api_key or os.getenv('MILLIONVERIFIER_API_KEY')
-        self.base_url = 'https://api.millionverifier.com/api/v3'
+    def __init__(self):
+        self.api_key = os.getenv('MILLIONVERIFIER_API_KEY')
+        if not self.api_key:
+            raise ValueError("MILLIONVERIFIER_API_KEY environment variable is not set")
+        self.base_url = "https://api.millionverifier.com/api/v3/"
+        self.max_retries = 3
+        self.retry_delay = 1  # seconds
 
-    def verify_email(self, email):
+    def verify_email(self, email: str) -> Dict[str, Any]:
         """
-        Verify an email address using MillionVerifier API.
+        Verify a single email address.
+        
         Args:
-            email (str): The email address to verify.
+            email: The email address to verify
+            
         Returns:
-            dict: The API response as a dictionary.
+            Dict containing verification results
         """
-        params = {
-            'api': self.api_key,
-            'email': email
-        }
         try:
-            response = requests.get(self.base_url, params=params, timeout=10)
+            response = requests.get(
+                f"{self.base_url}?api={self.api_key}&email={email}"
+            )
             response.raise_for_status()
             return response.json()
-        except requests.RequestException as e:
-            return {'result': 'error', 'error': str(e)}
+        except Exception as e:
+            logger.error(f"Error verifying email {email}: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
 
-    def verify_emails_for_campaign(self, campaign_id):
+    def verify_emails_for_campaign(self, campaign_id: str) -> int:
         """
-        Verify emails for all leads in a given campaign and update their records.
+        Verify all email addresses for leads in a campaign.
+        
         Args:
-            campaign_id (str): The campaign ID to filter leads.
+            campaign_id: ID of the campaign to verify emails for
+            
         Returns:
-            int: Number of leads processed.
+            Number of emails verified
         """
         try:
-            leads = db.session.query(Lead).filter_by(campaign_id=campaign_id).all()
+            # Get campaign
+            campaign = Campaign.query.get(campaign_id)
+            if not campaign:
+                raise ValueError(f"Campaign {campaign_id} not found")
+
+            # Update campaign status
+            campaign.update_status(
+                CampaignStatus.VERIFYING_EMAILS,
+                "Verifying email addresses"
+            )
+
+            # Get all leads for the campaign
+            leads = Lead.query.filter_by(campaign_id=campaign_id).all()
+            logger.info(f"Found {len(leads)} leads to verify for campaign {campaign_id}")
+
+            verified_count = 0
+            errors = []
+
             for lead in leads:
-                result = self.verify_email(lead.email)
-                lead.email_verification = result
+                try:
+                    if not lead.email:
+                        continue
+
+                    result = self.verify_email(lead.email)
+                    lead.email_verification = result
+                    verified_count += 1
+
+                    # Log progress periodically
+                    if verified_count % 10 == 0:
+                        logger.info(f"Verified {verified_count}/{len(leads)} emails for campaign {campaign_id}")
+
+                except Exception as e:
+                    error_msg = f"Error verifying email for lead {lead.id}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+
             db.session.commit()
-            return len(leads)
-        finally:
-            db.session.remove() 
+
+            # Update campaign status
+            campaign.update_status(
+                CampaignStatus.EMAILS_VERIFIED,
+                f"Verified {verified_count} emails" + (f" with {len(errors)} errors" if errors else "")
+            )
+
+            return verified_count
+
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Error verifying emails for campaign {campaign_id}: {str(e)}"
+            logger.error(error_msg)
+            if campaign:
+                campaign.update_status(
+                    CampaignStatus.FAILED,
+                    error=error_msg
+                )
+            raise 

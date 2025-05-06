@@ -3,6 +3,11 @@ import json
 import requests
 from server.models.lead import Lead
 from server.config.database import db
+from server.utils.logger import logger
+from typing import Dict, Any, Optional
+from server.models import Campaign
+from server.models.campaign import CampaignStatus
+import openai
 
 class OpenAIService:
     """
@@ -10,185 +15,132 @@ class OpenAIService:
     """
 
     API_URL = "https://api.openai.com/v1/chat/completions"
+    MAX_RETRIES = 3
+    RETRY_DELAY = 1  # seconds
 
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
-            raise RuntimeError("OPENAI_API_KEY environment variable is not set.")
+            raise ValueError("OPENAI_API_KEY environment variable is not set")
+        openai.api_key = self.api_key
 
-    def generate_email_copy(self, lead, enrichment_results):
+    def generate_email_copy(self, lead: Lead, enrichment_data: Dict[str, Any]) -> str:
         """
-        Generate a personalized email opener for a lead using OpenAI.
-
+        Generate personalized email copy for a lead.
+        
         Args:
-            lead: Lead object or dict
-            enrichment_results: dict or str (from Perplexity enrichment)
+            lead: The lead to generate email copy for
+            enrichment_data: Additional data about the lead
+            
         Returns:
-            str: The generated email opener (icebreaker)
+            Generated email copy
         """
-        # Extract lead info
-        if isinstance(lead, dict):
-            name = lead.get('name', '')
-            company = lead.get('company_name', '')
-        else:
-            name = lead.name
-            company = lead.company_name
-
-        enrichment_summary = enrichment_results if isinstance(enrichment_results, str) else str(enrichment_results)
-
-        system_prompt = (
-            "You are a professional cold email copywriter. "
-            "Your objective is to write highly personalized email openers using the information you're given."
-        )
-
-        user_prompt = f"""
-            <prompt>
-            <task>Create a personalized email opener</task>
-            <input>
-                <summary>{enrichment_summary}</summary>
-            </input>
-            <guidelines>
-                <constraint>Keep it under 20 words</constraint>
-                <constraint>Craft a unique message that is specific</constraint>
-                <constraint>Find any plausible connection wherever possible</constraint>
-                <constraint>End the icebreaker with the one-line phrase \"thought I'd reach out.\"</constraint>
-                <constraint>Don't use overly excited tones of voice with exclamation points</constraint>
-            </guidelines>
-            <tone>stoic and casual</tone>
-            <format>
-                <output_type>JSON</output_type>
-                <json_format>Valid JSON with proper line breaks</json_format>
-            </format>
-            <example>
-                <opener>Hey Amy,\n\nCan deeply relate to your mission of building a calm company culture and focusing on passion that you posted about. Thought I'd reach out.</opener>
-            </example>
-            </prompt>
-            """
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": "gpt-4o",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.7
-        }
-
-        response = requests.post(self.API_URL, json=data, headers=headers, timeout=30)
-        response.raise_for_status()
-        result = response.json()
-        content = result['choices'][0]['message']['content'].strip()
-
-        # Try to parse the JSON output for the icebreaker
         try:
-            opener_json = json.loads(content)
-            return (
-                opener_json.get('icebreaker') or
-                opener_json.get('opener') or
-                content
+            # Construct prompt
+            prompt = f"""Write a personalized email to {lead.name} at {lead.company_name}.
+
+Company Information:
+{enrichment_data.get('company_description', 'No company description available')}
+
+Lead Information:
+- Name: {lead.name}
+- Company: {lead.company_name}
+- Role: {enrichment_data.get('role', 'Unknown')}
+- Industry: {enrichment_data.get('industry', 'Unknown')}
+
+Additional Context:
+{enrichment_data.get('additional_context', 'No additional context available')}
+
+Write a professional, personalized email that:
+1. Shows understanding of their business
+2. Offers specific value
+3. Has a clear call to action
+4. Is concise and engaging
+
+Email:"""
+
+            # Call OpenAI API
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a professional email copywriter."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=500
             )
-        except Exception:
-            return content
 
-    def generate_email_copies_for_campaign(self, campaign_id):
+            return response.choices[0].message.content.strip()
+
+        except Exception as e:
+            error_msg = f"Error generating email copy for lead {lead.id}: {str(e)}"
+            logger.error(error_msg)
+            raise
+
+    def generate_email_copies_for_campaign(self, campaign_id: str) -> int:
         """
-        For a given campaign_id, generate and persist email copy for all leads with enrichment_results.
+        Generate email copies for all leads in a campaign.
+        
         Args:
-            campaign_id (str): The campaign ID to filter leads.
+            campaign_id: ID of the campaign to generate emails for
+            
         Returns:
-            int: Number of leads updated
+            Number of emails generated
         """
-        print(f"OpenAIService.generate_email_copies_for_campaign called for campaign_id={campaign_id}")
         try:
-            leads = db.session.query(Lead).filter(
-                Lead.campaign_id == campaign_id,
-                Lead.enrichment_results.isnot(None)
-            ).all()
-            print(f"Found {len(leads)} leads with enrichment_results for campaign {campaign_id}.")
-            count = 0
+            # Get campaign
+            campaign = Campaign.query.get(campaign_id)
+            if not campaign:
+                raise ValueError(f"Campaign {campaign_id} not found")
+
+            # Update campaign status
+            campaign.update_status(
+                CampaignStatus.GENERATING_EMAILS,
+                "Generating personalized email copy"
+            )
+
+            # Get all leads for the campaign
+            leads = Lead.query.filter_by(campaign_id=campaign_id).all()
+            logger.info(f"Found {len(leads)} leads to generate emails for campaign {campaign_id}")
+
+            generated_count = 0
+            errors = []
+
             for lead in leads:
                 try:
-                    # Save the full OpenAI response (parsed JSON or raw content)
-                    response_content = self._get_full_openai_response(lead, lead.enrichment_results)
-                    lead.email_copy = response_content
-                    db.session.commit()
-                    count += 1
+                    if not lead.enrichment_results:
+                        continue
+
+                    email_copy = self.generate_email_copy(lead, lead.enrichment_results)
+                    lead.email_copy = email_copy
+                    generated_count += 1
+
+                    # Log progress periodically
+                    if generated_count % 10 == 0:
+                        logger.info(f"Generated {generated_count}/{len(leads)} emails for campaign {campaign_id}")
+
                 except Exception as e:
-                    print(f"OpenAI email copy generation failed for lead {lead.id}: {e}")
-            return count
-        finally:
-            db.session.remove()
+                    error_msg = f"Error generating email for lead {lead.id}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
 
-    def _get_full_openai_response(self, lead, enrichment_results):
-        """
-        Helper to get the full OpenAI response (parsed JSON or raw content) for saving.
-        """
-        # Extract lead info
-        if isinstance(lead, dict):
-            name = lead.get('name', '')
-            company = lead.get('company_name', '')
-        else:
-            name = lead.name
-            company = lead.company_name
+            db.session.commit()
 
-        enrichment_summary = enrichment_results if isinstance(enrichment_results, str) else str(enrichment_results)
+            # Update campaign status
+            campaign.update_status(
+                CampaignStatus.COMPLETED,
+                f"Generated {generated_count} emails" + (f" with {len(errors)} errors" if errors else "")
+            )
 
-        system_prompt = (
-            "You are a professional cold email copywriter. "
-            "Your objective is to write highly personalized email openers using the information you're given."
-        )
+            return generated_count
 
-        user_prompt = f"""
-<prompt>
-  <task>Create a personalized email opener</task>
-  <input>
-    <summary>{enrichment_summary}</summary>
-  </input>
-  <guidelines>
-    <constraint>Keep it under 20 words</constraint>
-    <constraint>Craft a unique message that is specific</constraint>
-    <constraint>Find any plausible connection wherever possible</constraint>
-    <constraint>End the icebreaker with the one-line phrase \"thought I'd reach out.\"</constraint>
-    <constraint>Don't use overly excited tones of voice with exclamation points</constraint>
-  </guidelines>
-  <tone>stoic and casual</tone>
-  <format>
-    <output_type>JSON</output_type>
-    <json_format>Valid JSON with proper line breaks</json_format>
-  </format>
-  <example>
-    <opener>Hey Amy,\n\nCan deeply relate to your mission of building a calm company culture and focusing on passion that you posted about. Thought I'd reach out.</opener>
-  </example>
-</prompt>
-"""
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": "gpt-4o",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.7
-        }
-
-        print(f' ----> making the request to openai: {data}')
-
-        response = requests.post(self.API_URL, json=data, headers=headers, timeout=30)
-        response.raise_for_status()
-        result = response.json()
-        content = result['choices'][0]['message']['content'].strip()
-        # Try to parse JSON, but fallback to raw content
-        try:
-            return json.loads(content)
-        except Exception:
-            return content 
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Error generating emails for campaign {campaign_id}: {str(e)}"
+            logger.error(error_msg)
+            if campaign:
+                campaign.update_status(
+                    CampaignStatus.FAILED,
+                    error=error_msg
+                )
+            raise 

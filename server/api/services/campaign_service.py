@@ -2,6 +2,8 @@ from server.models import Campaign
 from server.config.database import db
 from server.background_services.apollo_service import ApolloService
 from server.utils.logger import logger
+from server.models.campaign import CampaignStatus
+from typing import Dict, Any, Optional
 
 class CampaignService:
     def __init__(self):
@@ -62,20 +64,18 @@ class CampaignService:
             campaign = Campaign(
                 name=data['name'],
                 description=data['description'],
-                organization_id=data['organization_id']
+                organization_id=data['organization_id'],
+                status=CampaignStatus.CREATED
             )
             db.session.add(campaign)
             db.session.commit()
-
-            campaign_data = campaign.to_dict()
-            campaign_data['status'] = 'created'
 
             logger.info({
                 'event': 'campaign_created',
                 'campaign_id': campaign.id
             })
 
-            return campaign_data
+            return campaign.to_dict()
         except Exception as e:
             db.session.rollback()
             logger.error({
@@ -103,8 +103,10 @@ class CampaignService:
                     raise ValueError(f"Missing required parameter: {param}")
 
             # Update campaign status
-            campaign.status = 'starting'
-            db.session.commit()
+            campaign.update_status(
+                CampaignStatus.FETCHING_LEADS,
+                "Starting lead generation process"
+            )
 
             # Kick off background task chain using RQ job dependencies
             logger.info({
@@ -116,23 +118,27 @@ class CampaignService:
 
             # Enqueue the first job
             job1 = enqueue_fetch_and_save_leads(params, campaign.id)
+            campaign.add_job_id('fetch_leads', job1.id)
+            
             # Chain the next jobs using depends_on
             job2 = enqueue_email_verification({'campaign_id': campaign.id}, depends_on=job1)
+            campaign.add_job_id('email_verification', job2.id)
+            
             job3 = enqueue_enriching_leads({'campaign_id': campaign.id}, depends_on=job2)
+            campaign.add_job_id('enrich_leads', job3.id)
+            
             job4 = enqueue_email_copy_generation({'campaign_id': campaign.id}, depends_on=job3)
+            campaign.add_job_id('generate_emails', job4.id)
 
             logger.info({
                 'event': 'rq_chain_triggered',
-                'message': 'RQ chain (fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task -> email_copy_generation_task) called',
+                'message': 'RQ chain triggered successfully',
                 'params': params,
-                'campaign_id': campaign.id
+                'campaign_id': campaign.id,
+                'job_ids': campaign.job_ids
             })
 
-            return {
-                'id': campaign.id,
-                'status': 'starting',
-                'message': 'Campaign started successfully'
-            }
+            return campaign.to_dict()
         except Exception as e:
             db.session.rollback()
             logger.error({
