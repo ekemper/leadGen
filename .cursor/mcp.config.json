@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "type": "file",
+      "path": "./logs/docker.log",
+      "format": "json"
+    }
+  ],
+  "server": {
+    "host": "localhost",
+    "port": 8080
+  },
+  "envFiles": [
+    ".env"
+  ]
+} 

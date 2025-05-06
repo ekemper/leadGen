@@ -5,8 +5,8 @@ from datetime import timedelta
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
 DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
 
-# Database settings
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///app.db')
+## Database settings are handled in the database config module.
+## NEON_CONNECTION_STRING must be set for application runtime.
 
 # JWT settings
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key')

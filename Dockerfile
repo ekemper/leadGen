@@ -1,7 +1,6 @@
 # Base stage for shared dependencies
 FROM python:3.9-slim as base
 
-# Set working directory
 WORKDIR /app
 
 # Set environment variables
@@ -16,36 +15,42 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy only requirements first for better caching
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Development stage
 FROM base as development
 ENV FLASK_ENV=development \
-    FLASK_DEBUG=1
+    FLASK_DEBUG=1 \
+    PYTHONPATH=/app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the rest of the code (this is the layer that changes most during dev)
+COPY . /app
 
-# Create non-root user but allow write permissions for development
+RUN chmod +x /app/server/startup.sh
+RUN ls -l /app
+
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
+
+EXPOSE 5001
+
+CMD ["/app/server/startup.sh"]
 
 # Production stage
 FROM base as production
-ENV FLASK_ENV=production
+ENV FLASK_ENV=production \
+    PYTHONPATH=/app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . /app
 
-# Copy the application code
-COPY server/ .
+RUN chmod +x /app/server/startup.sh
+RUN ls -l /app
 
-# Create non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Expose port (Heroku will override this with $PORT)
-EXPOSE 5000
+EXPOSE 5001
 
-# Run the application using Heroku's $PORT
-CMD gunicorn --bind 0.0.0.0:$PORT app:app 
+CMD ["/app/server/startup.sh"] 

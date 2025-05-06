@@ -2,30 +2,21 @@ version: '3.8'
 
 services:
   web:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
+      target: development
     ports:
-      - "5000:5000"
+      - "5001:5001"
     volumes:
-      - ./server:/app
+      - ./server:/app/server
+      - ./logs/docker.log:/app/docker.log
     environment:
       - FLASK_ENV=development
-      - FLASK_APP=app.py
-    depends_on:
-      - db
-    command: flask run --host=0.0.0.0
-
-  db:
-    image: postgres:13
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=leadgen
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - PORT=5001
+      # Uncomment the next line to enable debug/verbose logging
+      - FLASK_DEBUG=1
+    command: ["sh", "/app/startup.sh"]
 
 volumes:
   postgres_data: 

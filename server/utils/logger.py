@@ -34,42 +34,30 @@ def setup_logger():
     """Configure the application logger."""
     logger = logging.getLogger('auth_app')
     logger.setLevel(logging.INFO)
-    
-    # Create logs directory if it doesn't exist
-    log_dir = 'logs'
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-        
+
     # File handler for all logs
-    all_logs_file = os.path.join(log_dir, 'auth.log')
-    file_handler = logging.FileHandler(all_logs_file)
+    docker_log_file = '/app/docker.log'
+    file_handler = logging.FileHandler(docker_log_file)
     file_handler.setLevel(logging.INFO)
-    
-    # Error log file handler
-    error_logs_file = os.path.join(log_dir, 'error.log')
-    error_file_handler = logging.FileHandler(error_logs_file)
-    error_file_handler.setLevel(logging.ERROR)
-    
+
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO if os.getenv('FLASK_ENV') == 'development' else logging.ERROR)
-    
+
     # Create formatter
     formatter = CustomJsonFormatter(
         '%(timestamp)s %(level)s %(name)s %(message)s',
         json_ensure_ascii=False
     )
-    
+
     # Set formatter for all handlers
     file_handler.setFormatter(formatter)
-    error_file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
-    
+
     # Add handlers to logger
     logger.addHandler(file_handler)
-    logger.addHandler(error_file_handler)
     logger.addHandler(console_handler)
-    
+
     return logger
 
 # Create logger instance
