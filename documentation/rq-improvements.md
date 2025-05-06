@@ -56,17 +56,17 @@ def start_campaign(self, campaign_id, params):
 ```
 
 ### 3. Queue Configuration
-Missing queue configuration options.
+The system uses a single queue with the following configuration:
 
-**Recommendation:**
 ```python
-# In tasks.py
-rq_queue = Queue(
-    name='default',
-    connection=redis_conn,
-    default_timeout=3600,  # 1 hour timeout
-    job_timeout=1800      # 30 minutes per job
-)
+QUEUE_CONFIG = {
+    'default': {
+        'timeout': 3600,      # 1 hour queue timeout
+        'job_timeout': 1800,  # 30 minutes per job
+        'retry_after': 300,   # 5 minutes retry delay
+        'max_retries': 3      # Maximum number of retries
+    }
+}
 ```
 
 ### 4. Worker Management
@@ -76,27 +76,19 @@ Current worker implementation is basic.
 ```python
 # In run_worker.py
 import os
-from rq import Worker, Queue, Connection
-from redis import Redis
+from rq import Worker, Connection
 from server.app import create_app
-from rq.worker import HerokuWorker as Worker
-
-def get_redis_connection():
-    return Redis(
-        host=os.getenv('REDIS_HOST', 'localhost'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
-        password=os.getenv('REDIS_PASSWORD'),
-        db=int(os.getenv('REDIS_DB', 0))
-    )
+from server.config.queue_config import get_redis_connection, QUEUE_CONFIG
 
 flask_app = create_app()
+redis_conn = get_redis_connection()
 
 if __name__ == '__main__':
-    with Connection(get_redis_connection()):
+    with Connection(redis_conn):
         worker = Worker(
-            queues=['default', 'high', 'low'],
-            name=os.getenv('WORKER_NAME', 'worker.{}'.format(os.getpid())),
-            connection=get_redis_connection()
+            queues=['default'],
+            name=f'worker.{os.getpid()}',
+            connection=redis_conn
         )
         worker.work(
             with_scheduler=True,
@@ -181,6 +173,4 @@ def update_campaign_status(campaign_id, status, message=None):
 - Implement retry mechanisms for failed tasks
 - Add monitoring dashboard
 - Set up alerts for failed jobs
-- Consider implementing job prioritization
-- Add job progress tracking
-- Implement job cancellation mechanism 
+- Consider implementing job cancellation mechanism

@@ -63,24 +63,20 @@ class EventService:
         try:
             # Log each console log entry
             for log in logs:
+                log_data = {
+                    'level': log['level'],
+                    'console_message': log['message'],  # renamed to avoid conflict
+                    'data': log.get('data', []),
+                    'timestamp': log['timestamp']
+                }
+                
                 browser_logger.info(
-                    f"Browser console log: {log['message']}",
-                    extra={
-                        'level': log['level'],
-                        'message': log['message'],
-                        'data': log.get('data', []),
-                        'timestamp': log['timestamp']
-                    }
+                    "Browser console log received",
+                    extra=log_data
                 )
                 combined_logger.info(
-                    f"Browser console log: {log['message']}",
-                    extra={
-                        'component': 'browser',
-                        'level': log['level'],
-                        'message': log['message'],
-                        'data': log.get('data', []),
-                        'timestamp': log['timestamp']
-                    }
+                    "Browser console log received",
+                    extra={**log_data, 'component': 'browser'}
                 )
 
             # Create event in database
@@ -96,9 +92,9 @@ class EventService:
             return {'status': 'success', 'message': 'Logs processed successfully'}
         except Exception as e:
             db.session.rollback()
-            browser_logger.error(f"Error handling console logs: {str(e)}")
+            browser_logger.error("Error handling console logs", extra={'error': str(e)})
             combined_logger.error(
-                f"Error handling console logs: {str(e)}",
+                "Error handling console logs",
                 extra={'component': 'browser', 'error': str(e)}
             )
             raise BadRequest(str(e)) 

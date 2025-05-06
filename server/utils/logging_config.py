@@ -19,7 +19,7 @@ class LogSanitizer:
     # Patterns for sensitive data
     SENSITIVE_PATTERNS = {
         'email': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-        'phone': r'\+?[1-9]\d{1,14}',
+        'phone': r'(?:\+?[1-9]\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',  # More specific phone pattern
         'credit_card': r'\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b',
         'api_key': r'(?i)(api[_-]?key|apikey|token|secret)[_-]?[=:]\s*[\w\-\.]+',
         'password': r'(?i)(password|passwd|pwd)[_-]?[=:]\s*[\w\-\.]+',
@@ -86,21 +86,26 @@ class LogSanitizer:
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
     def add_fields(self, log_record, record, message_dict):
+        # Add basic fields first
         super(CustomJsonFormatter, self).add_fields(log_record, record, message_dict)
         
-        # Add timestamp
+        # Add timestamp if not present
         if not log_record.get('timestamp'):
             log_record['timestamp'] = datetime.utcnow().isoformat()
         
-        # Add log level
-        if log_record.get('level'):
-            log_record['level'] = log_record['level'].upper()
-        else:
-            log_record['level'] = record.levelname
+        # Add log level if not present
+        if not log_record.get('level'):
+            log_record['level'] = record.levelname.upper()
             
-        # Add component name
+        # Add component name if not present
         if not log_record.get('component'):
             log_record['component'] = record.name
+            
+        # Handle message field properly
+        if 'message' in message_dict:
+            log_record['message'] = message_dict['message']
+        elif hasattr(record, 'message'):
+            log_record['message'] = record.message
 
 class SanitizingFilter(logging.Filter):
     """Filter to sanitize log records before they are processed."""
@@ -116,10 +121,11 @@ def setup_logger(name, log_file, level=logging.INFO):
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
 
-    # Create formatter
+    # Create formatter with explicit format string
     formatter = CustomJsonFormatter(
-        '%(timestamp)s %(level)s %(name)s %(message)s',
-        json_ensure_ascii=False
+        fmt='%(timestamp)s %(level)s %(name)s %(message)s %(component)s',
+        json_ensure_ascii=False,
+        reserved_attrs=[]  # Allow all attributes to be processed
     )
 
     # Create rotating file handler

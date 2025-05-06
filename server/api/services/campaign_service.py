@@ -49,22 +49,16 @@ class CampaignService:
             server_logger.error(f"Error getting campaign: {str(e)}")
             raise
 
-    def create_campaign(self, data=None):
-        """Create a new campaign without starting the lead generation process."""
+    def create_campaign(self, name: str):
+        """Create a new campaign with just a name."""
         try:
-            if not data:
-                raise ValueError("No data provided")
-
-            # Validate required fields
-            required_fields = ['name', 'description', 'organization_id']
-            for field in required_fields:
-                if not data.get(field):
-                    raise ValueError(f"{field} is required")
+            if not name:
+                raise ValueError("Name is required")
 
             campaign = Campaign(
-                name=data['name'],
-                description=data['description'],
-                organization_id=data['organization_id'],
+                name=name,
+                description="",  # Optional field
+                organization_id=None,  # Optional field
                 status=CampaignStatus.CREATED
             )
             db.session.add(campaign)
@@ -85,7 +79,7 @@ class CampaignService:
             })
             raise
 
-    def start_campaign(self, campaign_id, params):
+    def start_campaign(self, campaign_id):
         """Start the lead generation process for an existing campaign."""
         try:
             # Import RQ enqueue helpers here to avoid circular import
@@ -96,17 +90,20 @@ class CampaignService:
             if not campaign:
                 raise ValueError(f"Campaign with id {campaign_id} not found")
 
-            # Validate required parameters
-            required_params = ['count', 'excludeGuessedEmails', 'excludeNoEmails', 'getEmails', 'searchUrl']
-            for param in required_params:
-                if param not in params:
-                    raise ValueError(f"Missing required parameter: {param}")
-
             # Update campaign status
             campaign.update_status(
                 CampaignStatus.FETCHING_LEADS,
                 "Starting lead generation process"
             )
+
+            # Default parameters for Apollo search
+            params = {
+                'count': 100,
+                'excludeGuessedEmails': True,
+                'excludeNoEmails': True,
+                'getEmails': True,
+                'searchUrl': 'https://www.apollo.io/search'
+            }
 
             # Kick off background task chain using RQ job dependencies
             server_logger.info({
@@ -145,7 +142,6 @@ class CampaignService:
                 'event': 'start_campaign_error',
                 'message': 'Error occurred while starting campaign',
                 'campaign_id': campaign_id,
-                'params': params,
                 'exception': str(e)
             })
             raise
@@ -154,10 +150,10 @@ class CampaignService:
         """Create a campaign and immediately start the lead generation process."""
         try:
             # Create the campaign first
-            campaign_data = self.create_campaign()
+            campaign_data = self.create_campaign(params.get('name', 'New Campaign'))
             
             # Start the campaign
-            return self.start_campaign(campaign_data['id'], params)
+            return self.start_campaign(campaign_data['id'])
         except Exception as e:
             server_logger.error({
                 'event': 'create_campaign_with_leads_error',

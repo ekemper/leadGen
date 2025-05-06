@@ -1,18 +1,12 @@
 import os
 import sys
-from rq import Worker, Queue, Connection
-from redis import Redis
+import signal
+from datetime import datetime
+from rq import Worker, Connection
+from rq.worker import StopRequested
 from server.app import create_app
 from server.utils.logging_config import worker_logger, combined_logger
-
-def get_redis_connection():
-    """Get Redis connection with configuration from environment variables."""
-    return Redis(
-        host=os.getenv('REDIS_HOST', 'localhost'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
-        password=os.getenv('REDIS_PASSWORD'),
-        db=int(os.getenv('REDIS_DB', 0))
-    )
+from server.config.queue_config import get_redis_connection, QUEUE_CONFIG
 
 # Create Flask app context
 flask_app = create_app()
@@ -20,7 +14,29 @@ flask_app = create_app()
 # Configure Redis connection
 redis_conn = get_redis_connection()
 
+def handle_sigterm(signum, frame):
+    """Handle SIGTERM signal gracefully."""
+    worker_logger.info("Received SIGTERM signal, shutting down gracefully...")
+    combined_logger.info(
+        "Received SIGTERM signal, shutting down gracefully...",
+        extra={'component': 'worker', 'signal': 'SIGTERM'}
+    )
+    raise StopRequested()
+
+def handle_sigint(signum, frame):
+    """Handle SIGINT signal gracefully."""
+    worker_logger.info("Received SIGINT signal, shutting down gracefully...")
+    combined_logger.info(
+        "Received SIGINT signal, shutting down gracefully...",
+        extra={'component': 'worker', 'signal': 'SIGINT'}
+    )
+    raise StopRequested()
+
 if __name__ == '__main__':
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, handle_sigterm)
+    signal.signal(signal.SIGINT, handle_sigint)
+
     worker_logger.info("Starting RQ worker...")
     combined_logger.info(
         "Starting RQ worker",
@@ -30,24 +46,31 @@ if __name__ == '__main__':
                 'host': os.getenv('REDIS_HOST', 'localhost'),
                 'port': os.getenv('REDIS_PORT', 6379),
                 'db': os.getenv('REDIS_DB', 0)
-            }
+            },
+            'queue_config': QUEUE_CONFIG,
+            'start_time': datetime.utcnow().isoformat()
         }
     )
     
     try:
         with Connection(redis_conn):
-            # Create worker with multiple queues
+            # Create worker with default queue
             worker = Worker(
-                queues=['default', 'high', 'low'],
+                queues=['default'],
                 name=f'worker.{os.getpid()}',
-                connection=redis_conn
+                connection=redis_conn,
+                default_worker_ttl=QUEUE_CONFIG['default']['timeout'],
+                default_result_ttl=QUEUE_CONFIG['default']['job_timeout']
             )
             
             worker_logger.info(
                 f"Worker {worker.name} started",
                 extra={
                     'worker_name': worker.name,
-                    'queues': worker.queues
+                    'queues': worker.queues,
+                    'queue_config': QUEUE_CONFIG,
+                    'pid': os.getpid(),
+                    'start_time': datetime.utcnow().isoformat()
                 }
             )
             combined_logger.info(
@@ -55,21 +78,33 @@ if __name__ == '__main__':
                 extra={
                     'component': 'worker',
                     'worker_name': worker.name,
-                    'queues': worker.queues
+                    'queues': worker.queues,
+                    'queue_config': QUEUE_CONFIG,
+                    'pid': os.getpid(),
+                    'start_time': datetime.utcnow().isoformat()
                 }
             )
             
+            # Start worker with supported configuration
             worker.work(
                 with_scheduler=True,
                 burst=False,
                 logging_level='INFO'
             )
+    except StopRequested:
+        worker_logger.info("Worker stopped gracefully")
+        combined_logger.info(
+            "Worker stopped gracefully",
+            extra={'component': 'worker', 'stop_time': datetime.utcnow().isoformat()}
+        )
+        sys.exit(0)
     except Exception as e:
         worker_logger.error(
             "Worker failed to start",
             extra={
                 'error': str(e),
-                'error_type': type(e).__name__
+                'error_type': type(e).__name__,
+                'traceback': sys.exc_info()
             }
         )
         combined_logger.error(
@@ -77,7 +112,8 @@ if __name__ == '__main__':
             extra={
                 'component': 'worker',
                 'error': str(e),
-                'error_type': type(e).__name__
+                'error_type': type(e).__name__,
+                'traceback': sys.exc_info()
             }
         )
         sys.exit(1) 

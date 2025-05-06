@@ -26,8 +26,14 @@ redis-server
 
 ## 3. RQ Job Queue
 
-RQ jobs are enqueued using the helpers in `server/tasks.py`:
+RQ jobs are enqueued using the helpers in `server/tasks.py`. The system uses a single queue with the following configuration:
 
+- Queue timeout: 1 hour
+- Job timeout: 30 minutes
+- Retry delay: 5 minutes
+- Maximum retries: 3
+
+Example usage:
 ```
 from server.tasks import enqueue_fetch_and_save_leads, enqueue_email_verification, enqueue_enriching_leads
 
@@ -44,15 +50,21 @@ job3 = enqueue_enriching_leads({'campaign_id': campaign_id}, depends_on=job2)
 From your project root, run:
 
 ```
-rq worker
+python server/run_worker.py
 ```
 
-This will listen for jobs on the default queue.
+This will start a worker with the following configuration:
+- Processes jobs from the default queue
+- Monitors job status every second
+- Restarts after processing 1000 jobs (prevents memory leaks)
+- Handles graceful shutdown on SIGTERM/SIGINT
+- Provides detailed logging with timestamps and process information
 
 ---
 
-## 5. Monitoring (Optional)
+## 5. Monitoring
 
+### RQ Dashboard
 You can monitor jobs using [RQ Dashboard](https://github.com/eoranged/rq-dashboard):
 
 ```
@@ -61,6 +73,18 @@ rq-dashboard
 ```
 
 Then visit [http://localhost:9181](http://localhost:9181).
+
+### Logging
+The worker provides detailed logging:
+- Job start/end times
+- Process IDs
+- Error tracebacks
+- Queue configuration
+- Worker status
+
+Logs are available in:
+- Worker logs: `logs/worker.log`
+- Combined logs: `logs/combined.log`
 
 ---
 
@@ -79,9 +103,12 @@ Each job will only run after its dependency completes successfully.
 ---
 
 ## 7. Troubleshooting
-- Make sure Redis is running before starting the worker.
-- If you change code, restart your RQ workers.
-- For advanced scheduling, see [rq-scheduler](https://github.com/rq/rq-scheduler).
+- Make sure Redis is running before starting the worker
+- If you change code, restart your RQ workers
+- Check the logs for any job failures or retries
+- Monitor job timeouts and adjust configuration if needed
+- Check worker logs for detailed error information
+- Monitor worker restarts (occurs every 1000 jobs)
 
 ---
 
