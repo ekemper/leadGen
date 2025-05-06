@@ -2,7 +2,12 @@
   "sources": [
     {
       "type": "file",
-      "path": "./logs/docker.log",
+      "path": "./logs/server.log",
+      "format": "json"
+    },
+    {
+      "type": "file",
+      "path": "./logs/browser.log",
       "format": "json"
     }
   ],

@@ -1,5 +1,7 @@
 # API Documentation
 
+> For setup, environment variables, and how to run the backend, see the main `README.md` in the project root.
+
 ## Environment Setup
 1. Create a Python virtual environment:
 ```bash
@@ -12,7 +14,6 @@ python -m venv venv
 source venv/bin/activate
 ```
 
-
 3. Install dependencies:
 ```bash
 pip install -r requirements.txt
@@ -20,7 +21,7 @@ pip install -r requirements.txt
 
 ## Base URL
 ```
-Development: http://localhost:5000/api
+Development: http://localhost:5001/api
 Production: https://[your-app].herokuapp.com/api
 ```
 

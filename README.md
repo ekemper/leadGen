@@ -1,6 +1,6 @@
-# Auth Template Application
+# LeadGen Application
 
-A modern authentication template built with Flask (Backend) and React + Vite (Frontend).
+A modern lead generation platform with a Flask backend and React + Vite frontend.
 
 ## Features
 
@@ -14,129 +14,88 @@ A modern authentication template built with Flask (Backend) and React + Vite (Fr
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- Node.js 20.x (for local development without Docker)
-- Python 3.9+ (for local development without Docker)
+- Python 3.9+
+- Node.js 20.x+
+- PostgreSQL 13+ (for production/local DB)
 
 ## Project Structure
 
 ```
-auth-template/
-├── api/            # Backend API modules
-├── config/         # Configuration files
+leadGen/
+├── server/         # Flask backend
 ├── frontend/       # React + Vite frontend
-├── tests/         # Test files
-└── utils/         # Utility functions
+├── config/         # Shared configuration
+├── documentation/  # Project documentation
+├── migrations/     # Database migrations
+├── logs/           # Log files
+└── ...
 ```
 
 ## Environment Variables
 
-Create a `.env` file in the root directory with the following variables:
+- Copy `example.env` to `.env` and fill in secrets and DB connection info.
+- Key variables: `DATABASE_URL`, `SECRET_KEY`, `ALLOWED_ORIGINS`, `FLASK_ENV`, `FLASK_DEBUG`, etc.
 
-```env
-FLASK_DEBUG=1
-SECRET_KEY=your-secret-key-here
-ALLOWED_ORIGINS=http://localhost:3000
-DATABASE_URL=sqlite:///app.db
-```
+## Running the Application
 
-## Running with Docker (Recommended)
-
-1. Build and start the containers:
-   ```bash
-   docker-compose up --build
-   ```
-
-2. Access the applications:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5001
-
-3. Stop the containers:
-   ```bash
-   docker-compose down
-   ```
-
-## Running Locally (Without Docker)
-
-### Backend Setup
-
+### Backend (Flask API)
 1. Create and activate a virtual environment:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate
    ```
-
 2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install -r server/requirements.txt
    ```
-
-3. Run the Flask application:
-   ```bash
-   flask run --port 5001
-   ```
-
-### Database Migrations
-
-The application uses Flask-Migrate for database migrations. Here are the key commands:
-
-1. Initialize migrations (first time only):
-   ```bash
-   flask db init
-   ```
-
-2. Create a new migration:
-   ```bash
-   flask db migrate -m "Description of the changes"
-   ```
-
-3. Apply migrations:
+3. Run database migrations:
    ```bash
    flask db upgrade
    ```
-
-4. Reverse migrations:
+4. Start the backend server:
    ```bash
-   flask db downgrade
+   python server/app.py
    ```
+   - Runs on port 5001 by default.
+   - For production, use a WSGI server like gunicorn.
 
-Note: Make sure to set the `FLASK_APP=migrations.py` environment variable before running migration commands.
-
-### Frontend Setup
-
+### Frontend (React + Vite)
 1. Navigate to the frontend directory:
    ```bash
    cd frontend
    ```
-
 2. Install dependencies:
    ```bash
    npm install
    ```
-
 3. Start the development server:
    ```bash
    npm run dev
    ```
+   - Runs on port 5173 by default.
+   - For production, build with `npm run build` and serve the static files.
+
+## Database
+- Uses PostgreSQL in production, SQLite for tests.
+- Migrations managed with Flask-Migrate:
+  - `flask db migrate -m "message"`
+  - `flask db upgrade`
+- See `documentation/DATABASE_README.md` for advanced DB setup and management.
 
 ## Testing
+- **Backend:** Run `pytest` in the project root (ensure venv is active).
+- **Frontend:** Run `npm test` in the `frontend` directory.
 
-Run the test suite:
-```bash
-pytest
-```
+## Production Deployment
+- Use a production WSGI server (e.g., gunicorn) for Flask.
+- Serve frontend static files with a web server (nginx, Vercel, Netlify, etc.).
+- Set all environment variables to production values.
 
-## API Endpoints
-
-### Authentication Endpoints
-
-- `POST /api/auth/signup`: Register a new user
-  - Required fields: email, password, confirm_password
-  - Returns: User registration confirmation
-
-- `POST /api/auth/login`: Login user
-  - Required fields: email, password
-  - Returns: JWT access token
+## Notes
+- No Docker or container setup is required or supported.
+- All CORS and session settings are managed via environment variables and `config/settings.py`.
+- API base URL (dev): `http://localhost:5001/api`
+- Frontend dev URL: `http://localhost:5173`
 
 ## Development Notes
 
@@ -154,29 +113,6 @@ pytest
 - HTTP-only cookies
 - Session security
 - Account lockout after multiple failed login attempts
-
-## Production Deployment
-
-For production deployment:
-
-1. Update environment variables with production values
-2. Build production images:
-   ```bash
-   docker-compose -f docker-compose.prod.yml build
-   ```
-3. Deploy using your preferred hosting service
-
-## Troubleshooting
-
-1. If the frontend can't connect to the backend:
-   - Check if both services are running
-   - Verify CORS settings in backend
-   - Check if VITE_API_URL is correctly set
-
-2. If containers fail to start:
-   - Check if ports 3000 and 5001 are available
-   - Verify environment variables
-   - Check Docker logs: `docker-compose logs`
 
 ## License
 
