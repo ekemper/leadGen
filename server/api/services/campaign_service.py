@@ -115,17 +115,13 @@ class CampaignService:
 
             # Enqueue the first job
             job1 = enqueue_fetch_and_save_leads(params, campaign.id)
-            campaign.add_job_id('fetch_leads', job1.id)
             
             # Chain the next jobs using depends_on
             job2 = enqueue_email_verification({'campaign_id': campaign.id}, depends_on=job1)
-            campaign.add_job_id('email_verification', job2.id)
             
             job3 = enqueue_enriching_leads({'campaign_id': campaign.id}, depends_on=job2)
-            campaign.add_job_id('enrich_leads', job3.id)
             
             job4 = enqueue_email_copy_generation({'campaign_id': campaign.id}, depends_on=job3)
-            campaign.add_job_id('generate_emails', job4.id)
 
             server_logger.info({
                 'event': 'rq_chain_triggered',

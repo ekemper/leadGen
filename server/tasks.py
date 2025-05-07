@@ -8,7 +8,7 @@ from server.config.database import db
 from server.utils.logging_config import server_logger, combined_logger
 from rq import get_current_job
 from server.config.queue_config import get_queue, QUEUE_CONFIG
-from server.utils.job_storage import store_job_result
+from server.models.job import Job
 import traceback
 from datetime import datetime
 
@@ -115,7 +115,16 @@ def fetch_and_save_leads_task(params, campaign_id):
             # Store job result
             job = get_current_job()
             if job:
-                store_job_result(job, result)
+                Job.create(
+                    campaign_id=campaign_id,
+                    job_type='fetch_leads',
+                    status='completed',
+                    result=result,
+                    error=None,
+                    started_at=datetime.utcnow(),
+                    ended_at=datetime.utcnow(),
+                    execution_time=result.get('execution_time', 0)
+                )
             
             return {'campaign_id': campaign_id, 'status': 'success', 'count': result.get('count', 0)}
         except Exception as e:
@@ -145,7 +154,16 @@ def enriching_leads_task(result):
             # Store job result
             job = get_current_job()
             if job:
-                store_job_result(job, {'status': 'success', 'campaign_id': campaign_id})
+                Job.create(
+                    campaign_id=campaign_id,
+                    job_type='enrich_leads',
+                    status='completed',
+                    result={'status': 'success', 'campaign_id': campaign_id},
+                    error=None,
+                    started_at=datetime.utcnow(),
+                    ended_at=datetime.utcnow(),
+                    execution_time=result.get('execution_time', 0)
+                )
             
             return {'campaign_id': campaign_id, 'status': 'success'}
         except Exception as e:
@@ -182,7 +200,16 @@ def email_verification_task(result):
             # Store job result
             job = get_current_job()
             if job:
-                store_job_result(job, {'verified_count': count, 'campaign_id': campaign_id})
+                Job.create(
+                    campaign_id=campaign_id,
+                    job_type='email_verification',
+                    status='completed',
+                    result={'verified_count': count, 'campaign_id': campaign_id},
+                    error=None,
+                    started_at=datetime.utcnow(),
+                    ended_at=datetime.utcnow(),
+                    execution_time=result.get('execution_time', 0)
+                )
             
             return {'campaign_id': campaign_id, 'verified_count': count}
         except Exception as e:
@@ -212,7 +239,16 @@ def email_copy_generation_task(result):
             # Store job result
             job = get_current_job()
             if job:
-                store_job_result(job, {'status': 'success', 'campaign_id': campaign_id})
+                Job.create(
+                    campaign_id=campaign_id,
+                    job_type='email_copy_generation',
+                    status='completed',
+                    result={'status': 'success', 'campaign_id': campaign_id},
+                    error=None,
+                    started_at=datetime.utcnow(),
+                    ended_at=datetime.utcnow(),
+                    execution_time=result.get('execution_time', 0)
+                )
             
             return {'campaign_id': campaign_id, 'status': 'success'}
         except Exception as e:

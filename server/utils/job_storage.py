@@ -1,3 +1,6 @@
+# This module is now deprecated. Job results are persisted in the Postgres Job table.
+# All logic for storing and retrieving job results should use the Job model.
+
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from rq.registry import FinishedJobRegistry, FailedJobRegistry

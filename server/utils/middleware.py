@@ -14,13 +14,7 @@ def log_request_info():
     if request.path == '/health':
         return
     
-    extra = {
-        'method': request.method,
-        'path': request.path,
-        'remote_addr': request.remote_addr,
-        'request_id': getattr(g, 'request_id', None),
-    }
-    
+    extra = dict(g.request_context)
     if hasattr(g, 'start_time'):
         extra['duration_ms'] = int((time.time() - g.start_time) * 1000)
     if hasattr(g, 'status_code'):
@@ -37,20 +31,22 @@ def request_middleware(app):
     
     @app.before_request
     def before_request():
-        # Add request ID to g
-        g.request_id = generate_request_id()
-        # Store start time
+        # Accept request ID from header or generate new
+        request_id = request.headers.get('X-Request-ID') or generate_request_id()
+        g.request_id = request_id
+        # Build context object
+        g.request_context = {
+            'request_id': request_id,
+            'user_id': getattr(getattr(g, 'current_user', None), 'id', None),
+            'session_id': request.cookies.get('session'),
+            'client_ip': request.remote_addr,
+            'user_agent': request.user_agent.string,
+        }
         g.start_time = time.time()
         
         # Log incoming request
         if request.path != '/health':
-            extra = {
-                'method': request.method,
-                'path': request.path,
-                'remote_addr': request.remote_addr,
-                'request_id': g.request_id,
-                'user_agent': request.user_agent.string
-            }
+            extra = dict(g.request_context)
             server_logger.info('Request started', extra=extra)
             combined_logger.info('Request started', extra={
                 'component': 'server',
@@ -68,14 +64,8 @@ def request_middleware(app):
     @app.teardown_request
     def teardown_request(exception=None):
         if exception:
-            extra = {
-                'error': str(exception),
-                'request_id': getattr(g, 'request_id', None),
-                'method': request.method,
-                'path': request.path,
-                'remote_addr': request.remote_addr,
-                'user_agent': request.user_agent.string
-            }
+            extra = dict(g.request_context)
+            extra['error'] = str(exception)
             server_logger.error('Request failed', extra=extra)
             combined_logger.error('Request failed', extra={
                 'component': 'server',
@@ -85,19 +75,19 @@ def request_middleware(app):
             log_request_info()
 
 def log_function_call(func):
-    """Decorator to log function calls with timing information."""
+    """Decorator to log function calls with timing information and request context."""
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.time()
         try:
             result = func(*args, **kwargs)
             duration_ms = int((time.time() - start_time) * 1000)
-            extra = {
+            extra = dict(getattr(g, 'request_context', {}))
+            extra.update({
                 'function': func.__name__,
                 'duration_ms': duration_ms,
-                'success': True,
-                'request_id': getattr(g, 'request_id', None)
-            }
+                'success': True
+            })
             server_logger.info(f'Function {func.__name__} completed', extra=extra)
             combined_logger.info(f'Function {func.__name__} completed', extra={
                 'component': 'server',
@@ -106,13 +96,13 @@ def log_function_call(func):
             return result
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
-            extra = {
+            extra = dict(getattr(g, 'request_context', {}))
+            extra.update({
                 'function': func.__name__,
                 'duration_ms': duration_ms,
                 'error': str(e),
-                'success': False,
-                'request_id': getattr(g, 'request_id', None)
-            }
+                'success': False
+            })
             server_logger.error(f'Function {func.__name__} failed', extra=extra)
             combined_logger.error(f'Function {func.__name__} failed', extra={
                 'component': 'server',

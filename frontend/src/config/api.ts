@@ -1,4 +1,5 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+import { getRequestId } from '../utils/requestId';
 
 function handleAuthError(response: Response) {
     // Only handle authentication errors, not other 401/403 responses
@@ -34,15 +35,24 @@ function getAuthHeaders(): Record<string, string> {
     return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
+const defaultHeaders: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Origin': 'http://localhost:5173',
+};
+
 const defaultOptions: RequestInit = {
     credentials: 'include',
     mode: 'cors',
-    headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Origin': 'http://localhost:5173',
-    } as HeadersInit,
+    headers: defaultHeaders,
 };
+
+function withRequestId(headers: Record<string, string>): Record<string, string> {
+    return {
+        ...headers,
+        'X-Request-ID': getRequestId(),
+    };
+}
 
 export const api = {
     get: async (endpoint: string, params?: any) => {
@@ -54,14 +64,14 @@ export const api = {
                 }
             });
         }
-        
+        const headers: Record<string, string> = {
+            ...defaultHeaders,
+            ...getAuthHeaders(),
+        };
         const response = await fetch(url.toString(), {
             ...defaultOptions,
             method: 'GET',
-            headers: {
-                ...defaultOptions.headers,
-                ...getAuthHeaders(),
-            },
+            headers: withRequestId(headers),
         });
         handleAuthError(response);
         const responseData = await response.json();
@@ -74,14 +84,15 @@ export const api = {
     },
     
     post: async (endpoint: string, data: any) => {
+        const headers: Record<string, string> = {
+            ...defaultHeaders,
+            ...getAuthHeaders(),
+        };
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...defaultOptions,
             method: 'POST',
             body: JSON.stringify(data),
-            headers: {
-                ...defaultOptions.headers,
-                ...getAuthHeaders(),
-            },
+            headers: withRequestId(headers),
         });
         handleAuthError(response);
         const responseData = await response.json();
@@ -94,14 +105,15 @@ export const api = {
     },
 
     put: async (endpoint: string, data: any) => {
+        const headers: Record<string, string> = {
+            ...defaultHeaders,
+            ...getAuthHeaders(),
+        };
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...defaultOptions,
             method: 'PUT',
             body: JSON.stringify(data),
-            headers: {
-                ...defaultOptions.headers,
-                ...getAuthHeaders(),
-            },
+            headers: withRequestId(headers),
         });
         handleAuthError(response);
         const responseData = await response.json();

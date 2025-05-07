@@ -1,4 +1,7 @@
 """
+DEPRECATED: Use scripts/full_db_reset.py for all reset, migration, and seeding operations.
+This script is retained for backward compatibility and for importable seeding logic only.
+
 Database Reset and Migration Script
 
 This script performs a complete reset of the database and runs all migrations.
@@ -14,9 +17,10 @@ from server.config.database import db
 from server.app import create_app
 from flask_migrate import Migrate
 from sqlalchemy import text, inspect
-from server.models import Organization, Campaign, User
+from server.models import Organization, Campaign, User, Lead, Event
 from server.models.campaign import CampaignStatus
-from datetime import datetime
+from server.models.job import Job
+from datetime import datetime, timedelta
 import uuid
 import bcrypt
 
@@ -63,72 +67,131 @@ def run_migrations(app):
 
 def seed_database(app):
     """
-    Seeds the database with initial data.
-    This includes:
-    1. A default organization
-    2. A test user
-    3. Sample campaigns with proper status fields
+    Seeds the database with initial data for all tables, ensuring meaningful relationships.
+    - 1 default organization
+    - 2 users
+    - 2 campaigns (each linked to org)
+    - 2 jobs per campaign
+    - 3 leads per campaign
+    - 2 events (linked to campaigns, users)
     """
     print("\nStep 3: Seeding database...")
     with app.app_context():
         try:
-            # Create test user with hashed password
+            # --- Users ---
             password = "password123"
             hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-            test_user = User(
-                email="test@example.com",
-                password=hashed,
-                failed_attempts=0
-            )
-            db.session.add(test_user)
-            db.session.flush()  # Flush to get the user ID
+            user1 = User(email="test@example.com", password=hashed, failed_attempts=0)
+            user2 = User(email="admin@example.com", password=hashed, failed_attempts=0)
+            db.session.add_all([user1, user2])
+            db.session.flush()
 
-            # Create default organization
+            # --- Organization ---
             default_org = Organization(
                 name="Default Organization",
                 description="This is the default organization created during database seeding."
             )
             db.session.add(default_org)
-            db.session.flush()  # Flush to get the organization ID
+            db.session.flush()
 
-            # Create sample campaigns with proper status fields
-            sample_campaigns = [
-                Campaign(
-                    name="Sample SEO Campaign",
-                    description="A sample campaign targeting SEO professionals",
-                    organization_id=default_org.id,
-                    status=CampaignStatus.CREATED,
-                    status_message="Campaign created and ready to start",
-                    job_status={},
-                    job_ids={}
+            # --- Campaigns ---
+            campaign1 = Campaign(
+                name="Sample SEO Campaign",
+                description="A sample campaign targeting SEO professionals",
+                organization_id=default_org.id,
+                status=CampaignStatus.CREATED,
+                status_message="Campaign created and ready to start"
+            )
+            campaign2 = Campaign(
+                name="Sample Marketing Campaign",
+                description="A sample campaign targeting marketing professionals",
+                organization_id=default_org.id,
+                status=CampaignStatus.COMPLETED,
+                status_message="Campaign completed successfully"
+            )
+            db.session.add_all([campaign1, campaign2])
+            db.session.flush()
+
+            # --- Jobs ---
+            now = datetime.utcnow()
+            jobs = [
+                Job(
+                    campaign_id=campaign1.id,
+                    job_type="fetch_leads",
+                    status="completed",
+                    result={"leads_fetched": 100},
+                    started_at=now - timedelta(minutes=10),
+                    ended_at=now - timedelta(minutes=9),
+                    execution_time=60.0
                 ),
-                Campaign(
-                    name="Sample Marketing Campaign",
-                    description="A sample campaign targeting marketing professionals",
-                    organization_id=default_org.id,
-                    status=CampaignStatus.COMPLETED,
-                    status_message="Campaign completed successfully",
-                    job_status={
-                        "fetch_leads": {"status": "completed", "timestamp": datetime.utcnow().isoformat()},
-                        "enrich_leads": {"status": "completed", "timestamp": datetime.utcnow().isoformat()},
-                        "email_verification": {"status": "completed", "timestamp": datetime.utcnow().isoformat()},
-                        "generate_emails": {"status": "completed", "timestamp": datetime.utcnow().isoformat()}
-                    },
-                    job_ids={
-                        "fetch_leads": str(uuid.uuid4()),
-                        "enrich_leads": str(uuid.uuid4()),
-                        "email_verification": str(uuid.uuid4()),
-                        "generate_emails": str(uuid.uuid4())
-                    }
-                )
+                Job(
+                    campaign_id=campaign1.id,
+                    job_type="enrich_leads",
+                    status="completed",
+                    result={"enriched": 100},
+                    started_at=now - timedelta(minutes=8),
+                    ended_at=now - timedelta(minutes=7),
+                    execution_time=60.0
+                ),
+                Job(
+                    campaign_id=campaign2.id,
+                    job_type="fetch_leads",
+                    status="completed",
+                    result={"leads_fetched": 200},
+                    started_at=now - timedelta(minutes=20),
+                    ended_at=now - timedelta(minutes=19),
+                    execution_time=60.0
+                ),
+                Job(
+                    campaign_id=campaign2.id,
+                    job_type="enrich_leads",
+                    status="completed",
+                    result={"enriched": 200},
+                    started_at=now - timedelta(minutes=18),
+                    ended_at=now - timedelta(minutes=17),
+                    execution_time=60.0
+                ),
             ]
+            db.session.add_all(jobs)
+            db.session.flush()
 
-            for campaign in sample_campaigns:
-                db.session.add(campaign)
+            # --- Leads ---
+            leads = []
+            for i, campaign in enumerate([campaign1, campaign2], start=1):
+                for j in range(1, 4):
+                    lead = Lead(
+                        name=f"Lead {i}-{j}",
+                        email=f"lead{i}{j}@example.com",
+                        company_name=f"Company {i}-{j}",
+                        phone=f"555-000{i}{j}",
+                        status="new",
+                        source="apollo",
+                        notes=f"Seeded lead {i}-{j}",
+                        campaign_id=campaign.id,
+                        raw_lead_data={"source": "seed", "index": j}
+                    )
+                    leads.append(lead)
+            db.session.add_all(leads)
+            db.session.flush()
 
-            # Commit all changes
+            # --- Events ---
+            event1 = Event(
+                source="api",
+                tag="campaign_created",
+                data={"campaign_id": campaign1.id, "user_id": user1.id},
+                type="log"
+            )
+            event2 = Event(
+                source="browser",
+                tag="lead_imported",
+                data={"lead_id": leads[0].id, "user_id": user2.id},
+                type="message"
+            )
+            db.session.add_all([event1, event2])
+
             db.session.commit()
             print("Database seeding complete!")
+            print(f"Seeded: 2 users, 1 org, 2 campaigns, 4 jobs, 6 leads, 2 events.")
 
         except Exception as e:
             db.session.rollback()
@@ -136,9 +199,7 @@ def seed_database(app):
             raise
 
 def main():
-    """
-    Main function that orchestrates the database reset, migration, and seeding process.
-    """
+    print("WARNING: This script is deprecated. Use scripts/full_db_reset.py instead for all reset, migration, and seeding operations.")
     print("Starting database reset and migration process...")
     
     # Create Flask application instance

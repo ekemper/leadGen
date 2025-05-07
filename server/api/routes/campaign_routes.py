@@ -3,6 +3,7 @@ from server.models import Campaign
 from server.api.services.campaign_service import CampaignService
 from server.utils.logging_config import server_logger, combined_logger
 from server.models.campaign_status import CampaignStatus
+from server.models.job import Job
 
 campaign_bp = Blueprint('campaign', __name__)
 
@@ -62,9 +63,9 @@ def get_campaign_results(campaign_id):
         campaign = CampaignService().get_campaign(campaign_id)
         if not campaign:
             return jsonify({'error': 'Campaign not found'}), 404
-        
-        results = campaign.get_job_results()
-        return jsonify(results)
+        jobs = Job.query.filter_by(campaign_id=campaign_id).all()
+        results = [job.to_dict() for job in jobs]
+        return jsonify({'jobs': results})
     except Exception as e:
         server_logger.error(f"Error getting campaign results for {campaign_id}: {str(e)}")
         combined_logger.error(f"Error getting campaign results for {campaign_id}", extra={

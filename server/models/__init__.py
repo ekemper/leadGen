@@ -6,5 +6,6 @@ from server.models.lead import Lead
 from server.models.campaign import Campaign
 from server.models.organization import Organization
 from server.models.event import Event
+from server.models.job import Job
 
-__all__ = ['User', 'Lead', 'Campaign', 'Organization', 'Event'] 
+__all__ = ['User', 'Lead', 'Campaign', 'Organization', 'Event', 'Job'] 
