@@ -22,7 +22,8 @@ class OpenAIService:
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        openai.api_key = self.api_key
+        # openai.api_key = self.api_key  # Deprecated in openai>=1.0.0
+        self.client = openai.OpenAI(api_key=self.api_key)  # New client instance
 
     def generate_email_copy(self, lead: Lead, enrichment_data: Dict[str, Any]) -> str:
         """
@@ -59,8 +60,9 @@ Write a professional, personalized email that:
 
 Email:"""
 
-            # Call OpenAI API
-            response = openai.ChatCompletion.create(
+            # Call OpenAI API (openai>=1.0.0 interface)
+            # See: https://github.com/openai/openai-python/discussions/742
+            response = self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional email copywriter."},
