@@ -9,7 +9,7 @@ import json
 from typing import Any, Dict, Union
 
 # Constants
-LOG_DIR = os.path.join(os.getcwd(), 'logs')
+LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs'))
 MAX_BYTES = 10 * 1024 * 1024  # 10MB
 BACKUP_COUNT = 5
 
@@ -52,11 +52,24 @@ class LogSanitizer:
     @classmethod
     def sanitize_dict(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Sanitize a dictionary of data."""
+        if not isinstance(data, dict):
+            return data
+            
         sanitized = {}
         for key, value in data.items():
             # Check if the key itself is sensitive
             if any(sensitive in key.lower() for sensitive in cls.SENSITIVE_FIELDS):
-                sanitized[key] = "[REDACTED]"
+                # Use specific redaction message based on the field type
+                if 'email' in key.lower():
+                    sanitized[key] = "[REDACTED_EMAIL]"
+                elif 'phone' in key.lower():
+                    sanitized[key] = "[REDACTED_PHONE]"
+                elif 'api_key' in key.lower():
+                    sanitized[key] = "[REDACTED_API_KEY]"
+                elif 'password' in key.lower():
+                    sanitized[key] = "[REDACTED_PASSWORD]"
+                else:
+                    sanitized[key] = "[REDACTED]"
             else:
                 sanitized[key] = cls.sanitize_value(value)
         return sanitized
@@ -79,8 +92,8 @@ class LogSanitizer:
                 record.args = cls.sanitize_value(record.args)
         
         # Sanitize extra fields
-        if hasattr(record, 'extra'):
-            record.extra = cls.sanitize_dict(record.extra)
+        if hasattr(record, 'data'):
+            record.data = cls.sanitize_dict(record.data)
         
         return record
 
@@ -97,9 +110,9 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
         if not log_record.get('level'):
             log_record['level'] = record.levelname.upper()
             
-        # Add component name if not present
-        if not log_record.get('component'):
-            log_record['component'] = record.name
+        # Add source name if not present
+        if not log_record.get('source'):
+            log_record['source'] = record.name
             
         # Handle message field properly
         if 'message' in message_dict:
@@ -123,23 +136,27 @@ def setup_logger(name, log_file, level=logging.INFO):
 
     # Create formatter with explicit format string
     formatter = CustomJsonFormatter(
-        fmt='%(timestamp)s %(level)s %(name)s %(message)s %(component)s',
+        fmt='%(timestamp)s %(level)s %(name)s %(message)s %(source)s',
         json_ensure_ascii=False,
         reserved_attrs=[]  # Allow all attributes to be processed
     )
 
-    # Create rotating file handler
+    # Create rotating file handler with explicit mode
+    log_path = os.path.join(LOG_DIR, log_file)
     file_handler = RotatingFileHandler(
-        os.path.join(LOG_DIR, log_file),
+        log_path,
         maxBytes=MAX_BYTES,
         backupCount=BACKUP_COUNT,
-        encoding='utf-8'
+        encoding='utf-8',
+        mode='a'  # Append mode
     )
     file_handler.setFormatter(formatter)
+    file_handler.setLevel(level)
 
     # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
+    console_handler.setLevel(level)
 
     # Create logger
     logger = logging.getLogger(name)
@@ -157,6 +174,19 @@ def setup_logger(name, log_file, level=logging.INFO):
 
     # Prevent propagation to root logger
     logger.propagate = False
+
+    # Verify file handler is working
+    try:
+        logger.info(f"Logger {name} initialized")
+        # Ensure the file exists and is writable
+        if not os.path.exists(log_path):
+            raise IOError(f"Log file {log_path} was not created")
+        if not os.access(log_path, os.W_OK):
+            raise IOError(f"Log file {log_path} is not writable")
+    except Exception as e:
+        console_handler.setLevel(logging.ERROR)
+        logger.error(f"Failed to initialize logger: {str(e)}")
+        raise
 
     return logger
 

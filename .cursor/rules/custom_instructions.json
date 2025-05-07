@@ -1,0 +1,256 @@
+{
+  "name": "Full-Stack App Quality Rules",
+  "description": "Comprehensive rule set to maintain consistency, safety, and performance across a full-stack Python/React application.",
+  "rules": [
+    {
+      "id": "architecture-pattern-consistency",
+      "description": "Ensure new code adheres to established architectural and design patterns in both frontend and backend.",
+      "severity": "warning"
+    },
+    {
+      "id": "conflicting-patterns-detection",
+      "description": "Detect newly introduced patterns that conflict with the existing project conventions.",
+      "severity": "warning"
+    },
+    {
+      "id": "external-dependency-usage",
+      "description": "Verify that external dependencies are installed, imported, and used correctly and consistently.",
+      "severity": "error"
+    },
+    {
+      "id": "migration-management",
+      "description": "Check if model changes require new migrations and verify the migration reflects model updates.",
+      "severity": "error"
+    },
+    {
+      "id": "existing-relationship-check",
+      "description": "Always check existing relationships and constraints before modifying database schemas.",
+      "severity": "error"
+    },
+    {
+      "id": "migration-script-pairing",
+      "description": "Provide both model updates and corresponding migration files when making database changes.",
+      "severity": "error"
+    },
+    {
+      "id": "model-reference-validity",
+      "description": "Ensure correct and efficient use of database models and relationships in all operations.",
+      "severity": "error"
+    },
+    {
+      "id": "api-payload-alignment",
+      "description": "Verify consistency between frontend and backend request/response payloads.",
+      "severity": "error"
+    },
+    {
+      "id": "error-handling",
+      "description": "Ensure new code includes appropriate error handling logic for edge cases and API failures.",
+      "severity": "warning"
+    },
+    {
+      "id": "validation-match",
+      "description": "Confirm validation rules are applied consistently across frontend forms and backend models.",
+      "severity": "error"
+    },
+    {
+      "id": "test-coverage",
+      "description": "Check that new features include appropriate test coverage (unit, integration, end-to-end).",
+      "severity": "warning"
+    },
+    {
+      "id": "regression-protection",
+      "description": "Ensure new changes do not break existing functionality or data integrity.",
+      "severity": "error"
+    },
+    {
+      "id": "project-structure-integrity",
+      "description": "Maintain file organization, consistent naming conventions, and grouping of related logic.",
+      "severity": "warning"
+    },
+    {
+      "id": "change-justification",
+      "description": "Require reasoning or context for major changes or new implementations.",
+      "severity": "info"
+    },
+    {
+      "id": "complex-logic-clarity",
+      "description": "Document complex logic or assumptions made during implementation.",
+      "severity": "info"
+    },
+    {
+      "id": "secure-data-handling",
+      "description": "Ensure sensitive data is not exposed in logs or responses and input is properly sanitized.",
+      "severity": "error"
+    },
+    {
+      "id": "authz-authn-guards",
+      "description": "Ensure proper authentication and authorization checks are enforced at every entry point.",
+      "severity": "error"
+    },
+    {
+      "id": "query-efficiency",
+      "description": "Optimize database queries and avoid unnecessary joins or full-table scans.",
+      "severity": "warning"
+    },
+    {
+      "id": "frontend-performance",
+      "description": "Ensure React components are performant and avoid unnecessary re-renders or data fetching.",
+      "severity": "warning"
+    },
+    {
+      "id": "ux-feedback-consistency",
+      "description": "Ensure clear and consistent UI feedback for user actions, including loading and error states.",
+      "severity": "warning"
+    },
+    {
+      "id": "backward-compatibility",
+      "description": "Confirm that changes maintain compatibility with existing app behavior unless explicitly versioned.",
+      "severity": "warning"
+    },
+    {
+      "id": "deployment-awareness",
+      "description": "Consider deployment impact and include steps or scripts if manual deployment actions are required.",
+      "severity": "info"
+    },
+    {
+      "id": "code-review-standards",
+      "description": "Define explicit code review criteria including code style, documentation requirements, and performance benchmarks.",
+      "severity": "error",
+      "criteria": {
+        "documentation": "All new functions and classes must have docstrings",
+        "type_hints": "Python type hints required for all function parameters and returns",
+        "complexity": "Maximum cyclomatic complexity of 10 per function",
+        "test_coverage": "Minimum 80% test coverage for new code"
+      }
+    },
+    {
+      "id": "ai-interaction-guidelines",
+      "description": "Define how to structure requests to AI agents for optimal results",
+      "severity": "info",
+      "guidelines": {
+        "context_providing": "Always provide relevant file paths and current state",
+        "change_scope": "Specify exact scope of changes needed",
+        "constraints": "List any specific constraints or requirements",
+        "validation": "Define how to validate AI-suggested changes"
+      }
+    },
+    {
+      "id": "change-management-protocol",
+      "description": "Define how changes should be proposed, reviewed, and implemented",
+      "severity": "error",
+      "protocol": {
+        "proposal_format": "Changes must be proposed with clear before/after examples",
+        "review_process": "Changes must be reviewed against existing patterns",
+        "implementation_steps": "Clear steps for implementing changes",
+        "rollback_plan": "Plan for reverting changes if needed"
+      }
+    },
+    {
+      "id": "dependency-management",
+      "description": "Rules for managing and updating dependencies",
+      "severity": "error",
+      "rules": {
+        "version_pinning": "All dependencies must have pinned versions",
+        "update_process": "Process for updating dependencies",
+        "compatibility_check": "Check for compatibility before updates",
+        "security_scan": "Regular security scanning of dependencies"
+      }
+    },
+    {
+      "id": "error-handling-standards",
+      "description": "Define how errors should be handled and logged",
+      "severity": "error",
+      "standards": {
+        "error_categories": "Define different error categories and handling",
+        "logging_format": "Standardized logging format",
+        "error_recovery": "Recovery procedures for different error types",
+        "user_feedback": "How to present errors to users"
+      }
+    },
+    {
+      "id": "performance-metrics",
+      "description": "Define performance benchmarks and monitoring requirements",
+      "severity": "warning",
+      "metrics": {
+        "response_time": "Maximum acceptable response times",
+        "resource_usage": "Resource usage limits",
+        "scalability": "Scalability requirements",
+        "monitoring": "Required monitoring points"
+      }
+    },
+    {
+      "id": "security-standards",
+      "description": "Define security requirements and best practices",
+      "severity": "error",
+      "standards": {
+        "input_validation": "Required input validation rules",
+        "authentication": "Authentication requirements",
+        "authorization": "Authorization rules",
+        "data_protection": "Data protection requirements"
+      }
+    },
+    {
+      "id": "information-gathering-protocol",
+      "description": "Define the process for gathering necessary information and clarification before proceeding with any changes, ensuring compliance with all custom rules",
+      "severity": "error",
+      "protocol": {
+        "required_context": {
+          "file_paths": "List of relevant files that need to be considered",
+          "current_state": "Current state of the codebase or feature",
+          "dependencies": "Any dependencies or related components",
+          "environment": "Development environment details"
+        },
+        "clarification_checklist": {
+          "scope": "Verify the exact scope of changes needed",
+          "constraints": "Identify any technical or business constraints",
+          "success_criteria": "Define what constitutes successful implementation",
+          "validation_method": "How to validate the changes"
+        },
+        "review_points": {
+          "before_start": "Confirm understanding of requirements",
+          "during_implementation": "Verify approach aligns with requirements",
+          "before_completion": "Ensure all requirements are met"
+        },
+        "escalation_criteria": {
+          "ambiguous_requirements": "When requirements are unclear or conflicting",
+          "technical_uncertainty": "When technical approach is uncertain",
+          "scope_concerns": "When scope seems too broad or unclear",
+          "dependency_issues": "When dependencies are unclear or potentially problematic"
+        },
+        "rules_compliance_check": {
+          "purpose": "Ensure all custom rules are properly considered and followed",
+          "verification_points": {
+            "architecture": "Verify compliance with architectural patterns",
+            "security": "Confirm security requirements are met",
+            "performance": "Ensure performance criteria are addressed",
+            "documentation": "Check documentation requirements",
+            "testing": "Verify test coverage requirements",
+            "error_handling": "Confirm error handling standards",
+            "dependencies": "Check dependency management rules"
+          },
+          "compliance_validation": {
+            "pre_implementation": "Review how proposed changes will comply with rules",
+            "during_implementation": "Monitor rule compliance during development",
+            "post_implementation": "Verify all rules have been followed"
+          },
+          "non_compliance_handling": {
+            "identification": "Process for identifying rule violations",
+            "resolution": "Steps to address non-compliance",
+            "documentation": "Documentation of compliance issues and resolutions"
+          }
+        }
+      }
+    },
+    {
+      "id": "documentation-requirements",
+      "description": "Define documentation standards for code and APIs",
+      "severity": "warning",
+      "requirements": {
+        "code_documentation": "Required code documentation",
+        "api_documentation": "API documentation requirements",
+        "architecture_documentation": "Architecture documentation",
+        "deployment_documentation": "Deployment documentation"
+      }
+    }
+  ]
+} 

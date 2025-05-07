@@ -79,7 +79,7 @@ class CampaignService:
             })
             raise
 
-    def start_campaign(self, campaign_id):
+    def start_campaign(self, campaign_id, params=None):
         """Start the lead generation process for an existing campaign."""
         try:
             # Import RQ enqueue helpers here to avoid circular import
@@ -90,48 +90,86 @@ class CampaignService:
             if not campaign:
                 raise ValueError(f"Campaign with id {campaign_id} not found")
 
+            # Validate campaign status
+            if campaign.status not in [CampaignStatus.CREATED, CampaignStatus.FAILED]:
+                raise ValueError(f"Cannot start campaign in {campaign.status} status")
+
             # Update campaign status
             campaign.update_status(
                 CampaignStatus.FETCHING_LEADS,
                 "Starting lead generation process"
             )
 
-            # Default parameters for Apollo search
-            params = {
-                'count': 100,
-                'excludeGuessedEmails': True,
-                'excludeNoEmails': True,
-                'getEmails': True,
-                'searchUrl': 'https://www.apollo.io/search'
+            # Validate and prepare search parameters
+            if not params:
+                raise ValueError("Search parameters are required")
+
+            search_params = {
+                'count': int(params.get('count', 100)),
+                'excludeGuessedEmails': bool(params.get('excludeGuessedEmails', True)),
+                'excludeNoEmails': bool(params.get('excludeNoEmails', True)),
+                'getEmails': bool(params.get('getEmails', True)),
+                'searchUrl': str(params.get('searchUrl', ''))
             }
+
+            # Validate required parameters
+            if not search_params['searchUrl']:
+                raise ValueError("Search URL is required")
+
+            # Validate search URL
+            if not search_params['searchUrl'].startswith('https://app.apollo.io/'):
+                raise ValueError("Invalid Apollo.io search URL")
+
+            # Validate count
+            if search_params['count'] < 1 or search_params['count'] > 100:
+                raise ValueError("Count must be between 1 and 100")
 
             # Kick off background task chain using RQ job dependencies
             server_logger.info({
                 'event': 'trigger_rq_chain',
-                'message': 'About to trigger fetch_and_save_leads_task -> email_verification_task -> enriching_leads_task -> email_copy_generation_task chain',
-                'params': params,
+                'message': 'Starting lead generation process',
+                'params': search_params,
                 'campaign_id': campaign.id
             })
 
-            # Enqueue the first job
-            job1 = enqueue_fetch_and_save_leads(params, campaign.id)
-            
-            # Chain the next jobs using depends_on
-            job2 = enqueue_email_verification({'campaign_id': campaign.id}, depends_on=job1)
-            
-            job3 = enqueue_enriching_leads({'campaign_id': campaign.id}, depends_on=job2)
-            
-            job4 = enqueue_email_copy_generation({'campaign_id': campaign.id}, depends_on=job3)
+            try:
+                # Enqueue the first job
+                job1 = enqueue_fetch_and_save_leads(search_params, campaign.id)
+                
+                # Chain the next jobs using depends_on
+                job2 = enqueue_email_verification({'campaign_id': campaign.id}, depends_on=job1)
+                
+                job3 = enqueue_enriching_leads({'campaign_id': campaign.id}, depends_on=job2)
+                
+                job4 = enqueue_email_copy_generation({'campaign_id': campaign.id}, depends_on=job3)
 
-            server_logger.info({
-                'event': 'rq_chain_triggered',
-                'message': 'RQ chain triggered successfully',
-                'params': params,
-                'campaign_id': campaign.id,
-                'job_ids': campaign.job_ids
-            })
+                # Update campaign with job IDs
+                campaign.job_ids = {
+                    'fetch_leads': job1.id,
+                    'verify_emails': job2.id,
+                    'enrich_leads': job3.id,
+                    'generate_emails': job4.id
+                }
+                db.session.commit()
 
-            return campaign.to_dict()
+                server_logger.info({
+                    'event': 'rq_chain_triggered',
+                    'message': 'Lead generation process started successfully',
+                    'campaign_id': campaign.id,
+                    'job_ids': campaign.job_ids
+                })
+
+                return campaign.to_dict()
+
+            except Exception as e:
+                # If job enqueuing fails, update campaign status
+                campaign.update_status(
+                    CampaignStatus.FAILED,
+                    f"Failed to start lead generation process: {str(e)}"
+                )
+                db.session.commit()
+                raise
+
         except Exception as e:
             db.session.rollback()
             server_logger.error({
@@ -139,7 +177,7 @@ class CampaignService:
                 'message': 'Error occurred while starting campaign',
                 'campaign_id': campaign_id,
                 'exception': str(e)
-            })
+            }, exc_info=True)
             raise
 
     def create_campaign_with_leads(self, params):

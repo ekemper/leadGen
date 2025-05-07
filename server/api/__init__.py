@@ -6,7 +6,8 @@ from flask_cors import CORS
 def create_api_blueprint():
     """Create and configure the API blueprint"""
     api = Blueprint('api', __name__, url_prefix='/api')
-    CORS(api)
+    # CORS is now handled at the app level
+    # CORS(api)
 
     # Register routes
     from .routes import register_routes
@@ -16,17 +17,7 @@ def create_api_blueprint():
 
 def init_api(app):
     """Initialize API blueprint and its configurations"""
-    # Configure CORS for API routes
-    CORS(app, resources={
-        r"/api/auth/*": {"origins": app.config.get('ALLOWED_ORIGINS', '*').split(','),
-                    "methods": ["POST"],
-                    "allow_headers": ["Content-Type", "Authorization"]},
-        r"/api/fetch_apollo_leads": {"origins": app.config.get('ALLOWED_ORIGINS', '*').split(','),
-                                "methods": ["POST"],
-                                "allow_headers": ["Content-Type"]},
-        r"/api/": {"origins": "*"}  # Allow all origins for the root path
-    })
-
+    # CORS is now handled at the app level
     # Configure rate limiting
     limiter = Limiter(
         get_remote_address,

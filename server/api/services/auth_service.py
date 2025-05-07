@@ -76,18 +76,67 @@ class AuthService:
         Raises:
             BadRequest: For validation errors
         """
+        # Log signup attempt
+        server_logger.info(
+            "Signup attempt",
+            extra={
+                'email': email,
+                'action': 'signup_attempt'
+            }
+        )
+        
         # Validate passwords match
         if password != confirm_password:
+            server_logger.warning(
+                "Signup failed: passwords do not match",
+                extra={
+                    'email': email,
+                    'action': 'signup_failed',
+                    'reason': 'password_mismatch'
+                }
+            )
             raise BadRequest("Passwords do not match")
             
         # Validate password strength
-        cls.validate_password(password)
-        
+        try:
+            cls.validate_password(password)
+        except BadRequest as e:
+            server_logger.warning(
+                "Signup failed: invalid password",
+                extra={
+                    'email': email,
+                    'action': 'signup_failed',
+                    'reason': 'invalid_password',
+                    'error': str(e)
+                }
+            )
+            raise
+            
         # Validate email format
-        cls.validate_email_format(email)
+        try:
+            cls.validate_email_format(email)
+        except BadRequest as e:
+            server_logger.warning(
+                "Signup failed: invalid email",
+                extra={
+                    'email': email,
+                    'action': 'signup_failed',
+                    'reason': 'invalid_email',
+                    'error': str(e)
+                }
+            )
+            raise
         
         # Check if user already exists
         if User.query.filter_by(email=email.lower()).first():
+            server_logger.warning(
+                "Signup failed: email already registered",
+                extra={
+                    'email': email,
+                    'action': 'signup_failed',
+                    'reason': 'email_exists'
+                }
+            )
             raise BadRequest("Email already registered")
             
         # Create new user
@@ -101,9 +150,40 @@ class AuthService:
         try:
             db.session.add(user)
             db.session.commit()
+            
+            # Log successful registration
+            server_logger.info(
+                "User registered successfully",
+                extra={
+                    'user_id': user.id,
+                    'email': email,
+                    'action': 'signup_success'
+                }
+            )
+            
+            # Log to combined logger as well
+            combined_logger.info(
+                "New user registration",
+                extra={
+                    'user_id': user.id,
+                    'email': email,
+                    'action': 'signup_success',
+                    'component': 'auth_service'
+                }
+            )
+            
             return {'success': True, 'message': 'User registered successfully'}
         except Exception as e:
             db.session.rollback()
+            server_logger.error(
+                "Error creating user",
+                extra={
+                    'email': email,
+                    'action': 'signup_failed',
+                    'reason': 'database_error',
+                    'error': str(e)
+                }
+            )
             raise BadRequest(f"Error creating user: {str(e)}")
 
     @classmethod

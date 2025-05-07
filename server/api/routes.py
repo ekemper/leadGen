@@ -41,10 +41,14 @@ def token_required(f):
         
         # Get token from Authorization header
         auth_header = request.headers.get('Authorization')
+        logger.debug(f"Auth header: {auth_header}")
+        
         if auth_header and auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
+            logger.debug(f"Token extracted: {token[:10]}...")
         
         if not token:
+            logger.error("No token found in request")
             return jsonify({
                 'status': 'error',
                 'message': 'Token is missing'
@@ -56,6 +60,7 @@ def token_required(f):
             current_user = User.query.filter_by(id=data['user_id']).first()
             
             if not current_user:
+                logger.error(f"User not found for token: {token[:10]}...")
                 return jsonify({
                     'status': 'error',
                     'message': 'User not found'
@@ -66,12 +71,14 @@ def token_required(f):
             return f(*args, **kwargs)
             
         except jwt.ExpiredSignatureError:
+            logger.error("Token has expired")
             return jsonify({
                 'status': 'error',
                 'message': 'Token has expired'
             }), 401
             
-        except jwt.InvalidTokenError:
+        except jwt.InvalidTokenError as e:
+            logger.error(f"Invalid token: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'message': 'Invalid token'
@@ -264,28 +271,57 @@ def register_routes(api):
                 'message': 'Failed to create campaign'
             }), 500
 
-    @api.route('/campaigns/<campaign_id>/start', methods=['POST'])
+    @api.route('/campaigns/<campaign_id>/start', methods=['POST', 'OPTIONS'])
     @token_required
     @log_function_call
     def start_campaign(campaign_id):
         """Start the lead generation process for an existing campaign."""
+        if request.method == 'OPTIONS':
+            return '', 200
+            
         try:
             params = request.get_json()
             if not params:
-                raise BadRequest("No parameters provided")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No parameters provided'
+                }), 400
+
+            # Validate required parameters
+            required_params = ['count', 'excludeGuessedEmails', 'excludeNoEmails', 'getEmails', 'searchUrl']
+            missing_params = [param for param in required_params if param not in params]
+            if missing_params:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Missing required parameters: {", ".join(missing_params)}'
+                }), 400
+
+            # Validate parameter types
+            if not isinstance(params['count'], int) or params['count'] < 1:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Count must be a positive integer'
+                }), 400
+
+            if not isinstance(params['searchUrl'], str) or not params['searchUrl'].startswith('https://app.apollo.io/'):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Invalid Apollo.io search URL'
+                }), 400
 
             result = campaign_service.start_campaign(campaign_id, params)
             return jsonify({
                 'status': 'success',
                 'data': result
             }), 200
+
         except ValueError as e:
             return jsonify({
                 'status': 'error',
                 'message': str(e)
             }), 400
         except Exception as e:
-            logger.error(f"Error starting campaign: {str(e)}")
+            logger.error(f"Error starting campaign: {str(e)}", exc_info=True)
             return jsonify({
                 'status': 'error',
                 'message': 'Failed to start campaign'

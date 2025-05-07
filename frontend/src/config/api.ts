@@ -32,7 +32,14 @@ function handleAuthError(response: Response) {
 
 function getAuthHeaders(): Record<string, string> {
     const token = localStorage.getItem('token');
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
+    if (!token) {
+        return {};
+    }
+    return {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+    };
 }
 
 const defaultHeaders: Record<string, string> = {
@@ -64,14 +71,11 @@ export const api = {
                 }
             });
         }
-        const headers: Record<string, string> = {
-            ...defaultHeaders,
-            ...getAuthHeaders(),
-        };
+        const headers = withRequestId(getAuthHeaders());
         const response = await fetch(url.toString(), {
             ...defaultOptions,
             method: 'GET',
-            headers: withRequestId(headers),
+            headers,
         });
         handleAuthError(response);
         const responseData = await response.json();
@@ -84,15 +88,12 @@ export const api = {
     },
     
     post: async (endpoint: string, data: any) => {
-        const headers: Record<string, string> = {
-            ...defaultHeaders,
-            ...getAuthHeaders(),
-        };
+        const headers = withRequestId(getAuthHeaders());
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...defaultOptions,
             method: 'POST',
             body: JSON.stringify(data),
-            headers: withRequestId(headers),
+            headers,
         });
         handleAuthError(response);
         const responseData = await response.json();
@@ -105,15 +106,12 @@ export const api = {
     },
 
     put: async (endpoint: string, data: any) => {
-        const headers: Record<string, string> = {
-            ...defaultHeaders,
-            ...getAuthHeaders(),
-        };
+        const headers = withRequestId(getAuthHeaders());
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...defaultOptions,
             method: 'PUT',
             body: JSON.stringify(data),
-            headers: withRequestId(headers),
+            headers,
         });
         handleAuthError(response);
         const responseData = await response.json();

@@ -35,10 +35,10 @@ def create_app(test_config=None):
     CORS(app, 
          resources={
              r"/*": {
-                 "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+                 "origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                 "allow_headers": ["Content-Type", "Authorization"],
-                 "expose_headers": ["Content-Type", "Authorization"],
+                 "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],
+                 "expose_headers": ["Content-Type", "Authorization", "X-Request-ID"],
                  "supports_credentials": True,
                  "allow_credentials": True,
                  "max_age": 3600
@@ -49,12 +49,14 @@ def create_app(test_config=None):
     @app.after_request
     def after_request(response):
         origin = request.headers.get('Origin')
-        if origin in ["http://localhost:5173", "http://127.0.0.1:5173"]:
+        allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"]
+        if origin in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Request-ID'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Max-Age'] = '3600'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization, X-Request-ID'
         return response
     
     # Configure rate limiting

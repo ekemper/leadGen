@@ -5,6 +5,8 @@ db = SQLAlchemy()
 
 def get_db_url():
     """Get the database URL: use Neon for runtime, sqlite for tests."""
+    if os.getenv('FLASK_ENV') == 'test':
+        return 'sqlite:///:memory:'
     db_url = os.getenv('NEON_CONNECTION_STRING')
     if not db_url:
         raise RuntimeError('NEON_CONNECTION_STRING must be set for application runtime.')

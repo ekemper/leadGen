@@ -9,7 +9,10 @@ DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
 ## NEON_CONNECTION_STRING must be set for application runtime.
 
 # JWT settings
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key')
+# For testing with curl:
+# 1. Generate token: python3 -c "import jwt; print(jwt.encode({'user_id': 1}, os.getenv('JWT_SECRET_KEY'), algorithm='HS256'))"
+# 2. Use token: curl -H "Authorization: Bearer <token>" http://localhost:5001/api/leads
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  # Must be set in .env
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 

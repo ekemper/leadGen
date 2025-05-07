@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../config/api';
+import { toast } from 'react-toastify';
+import { CampaignStatus } from '../types/campaign';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
@@ -23,6 +25,14 @@ interface FormErrors {
   count?: string;
 }
 
+interface CampaignStartParams {
+  count: number;
+  excludeGuessedEmails: boolean;
+  excludeNoEmails: boolean;
+  getEmails: boolean;
+  searchUrl: string;
+}
+
 const CampaignDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -40,9 +50,16 @@ const CampaignDetail: React.FC = () => {
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [startLoading, setStartLoading] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [statusPolling, setStatusPolling] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetchCampaign();
+    return () => {
+      if (statusPolling) {
+        clearInterval(statusPolling);
+      }
+    };
   }, [id]);
 
   const validateForm = (): boolean => {
@@ -65,12 +82,62 @@ const CampaignDetail: React.FC = () => {
     setError(null);
     try {
       const response = await api.get(`/api/campaigns/${id}`);
+      if (response.status === 'error') {
+        toast.error(response.message);
+        return;
+      }
       setCampaign(response.data);
+      
+      // Start polling if campaign is in progress
+      if (response.data.status === CampaignStatus.FETCHING_LEADS || 
+          response.data.status === CampaignStatus.VERIFYING_EMAILS ||
+          response.data.status === CampaignStatus.ENRICHING_LEADS ||
+          response.data.status === CampaignStatus.GENERATING_EMAILS) {
+        startStatusPolling();
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const startStatusPolling = () => {
+    if (statusPolling) {
+      clearInterval(statusPolling);
+    }
+    
+    const interval = setInterval(async () => {
+      try {
+        const response = await api.get(`/api/campaigns/${id}`);
+        if (response.status === 'error') {
+          clearInterval(interval);
+          return;
+        }
+        
+        setCampaign(response.data);
+        
+        // Stop polling if campaign is completed or failed
+        if (response.data.status === CampaignStatus.COMPLETED || 
+            response.data.status === CampaignStatus.FAILED) {
+          clearInterval(interval);
+          setStatusPolling(null);
+          
+          // Show appropriate toast message
+          if (response.data.status === CampaignStatus.COMPLETED) {
+            toast.success('Campaign completed successfully');
+          } else {
+            toast.error(`Campaign failed: ${response.data.status_error || 'Unknown error'}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error polling campaign status:', error);
+        clearInterval(interval);
+        setStatusPolling(null);
+      }
+    }, 5000); // Poll every 5 seconds
+    
+    setStatusPolling(interval);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,28 +152,39 @@ const CampaignDetail: React.FC = () => {
     }
   };
 
-  const handleStart = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-
-    setStartError(null);
-    setStartLoading(true);
+  const handleStart = async (params: CampaignStartParams) => {
     try {
-      await api.post(`/api/campaigns/${id}/start`, formData);
-      await fetchCampaign(); // Refresh campaign data
-      setShowStartForm(false);
-    } catch (err: any) {
-      setStartError(err.message);
+      setStarting(true);
+      const response = await api.post(`/api/campaigns/${id}/start`, params);
+      
+      if (response.status === 'error') {
+        toast.error(response.message);
+        return;
+      }
+      
+      toast.success('Campaign started successfully');
+      setCampaign(response.data);
+      startStatusPolling();
+    } catch (error) {
+      console.error('Campaign start error:', error);
+      toast.error('Failed to start campaign');
     } finally {
-      setStartLoading(false);
+      setStarting(false);
     }
   };
 
   const renderStartForm = () => (
-    <form onSubmit={handleStart} className="space-y-4 mb-8">
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      const formData = new FormData(e.currentTarget);
+      handleStart({
+        count: parseInt(formData.get('count') as string),
+        excludeGuessedEmails: formData.get('excludeGuessedEmails') === 'true',
+        excludeNoEmails: formData.get('excludeNoEmails') === 'true',
+        getEmails: formData.get('getEmails') === 'true',
+        searchUrl: formData.get('searchUrl') as string
+      });
+    }} className="space-y-4 mb-8">
       <div>
         <Label htmlFor="searchUrl">Search URL</Label>
         <Input
@@ -115,7 +193,7 @@ const CampaignDetail: React.FC = () => {
           type="text"
           value={formData.searchUrl}
           onChange={handleChange}
-          disabled={startLoading}
+          disabled={starting}
           error={!!formErrors.searchUrl}
           hint={formErrors.searchUrl}
         />
@@ -129,7 +207,8 @@ const CampaignDetail: React.FC = () => {
           value={formData.count}
           onChange={handleChange}
           min="1"
-          disabled={startLoading}
+          max="100"
+          disabled={starting}
           error={!!formErrors.count}
           hint={formErrors.count}
         />
@@ -141,7 +220,7 @@ const CampaignDetail: React.FC = () => {
           checked={formData.excludeGuessedEmails}
           onChange={handleChange}
           label="Exclude Guessed Emails"
-          disabled={startLoading}
+          disabled={starting}
         />
         <Checkbox
           id="excludeNoEmails"
@@ -149,7 +228,7 @@ const CampaignDetail: React.FC = () => {
           checked={formData.excludeNoEmails}
           onChange={handleChange}
           label="Exclude Leads Without Emails"
-          disabled={startLoading}
+          disabled={starting}
         />
         <Checkbox
           id="getEmails"
@@ -157,15 +236,15 @@ const CampaignDetail: React.FC = () => {
           checked={formData.getEmails}
           onChange={handleChange}
           label="Fetch Emails"
-          disabled={startLoading}
+          disabled={starting}
         />
       </div>
       {startError && <div className="text-red-500">{startError}</div>}
       <Button
         variant="primary"
-        disabled={startLoading || !formData.searchUrl.trim()}
+        disabled={starting || !formData.searchUrl.trim()}
       >
-        {startLoading ? 'Starting...' : 'Start Campaign'}
+        {starting ? 'Starting...' : 'Start Campaign'}
       </Button>
     </form>
   );

@@ -65,18 +65,22 @@ class EventService:
             for log in logs:
                 log_data = {
                     'level': log['level'],
-                    'console_message': log['message'],  # renamed to avoid conflict
+                    'message': log['message'],  # Use message directly
                     'data': log.get('data', []),
-                    'timestamp': log['timestamp']
+                    'timestamp': log['timestamp'],
+                    'source': 'browser'  # Use source instead of component
                 }
                 
+                # Log to browser logger
                 browser_logger.info(
                     "Browser console log received",
                     extra=log_data
                 )
+                
+                # Log to combined logger
                 combined_logger.info(
                     "Browser console log received",
-                    extra={**log_data, 'component': 'browser'}
+                    extra=log_data  # Use same log_data with source field
                 )
 
             # Create event in database
@@ -92,9 +96,9 @@ class EventService:
             return {'status': 'success', 'message': 'Logs processed successfully'}
         except Exception as e:
             db.session.rollback()
-            browser_logger.error("Error handling console logs", extra={'error': str(e)})
+            browser_logger.error("Error handling console logs", extra={'error': str(e), 'source': 'browser'})
             combined_logger.error(
                 "Error handling console logs",
-                extra={'component': 'browser', 'error': str(e)}
+                extra={'error': str(e), 'source': 'browser'}
             )
             raise BadRequest(str(e)) 

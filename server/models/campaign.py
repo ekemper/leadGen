@@ -75,7 +75,7 @@ class Campaign(db.Model):
         """
         try:
             # Lock the row for update to prevent race conditions
-            campaign = db.session.query(Campaign).with_lockmode('update').get(self.id)
+            campaign = db.session.query(Campaign).with_for_update().get(self.id)
             if not campaign:
                 raise ValueError(f"Campaign {self.id} not found")
 
@@ -96,6 +96,7 @@ class Campaign(db.Model):
                 self.status = status
                 self.status_message = message
                 self.status_error = error
+                self.updated_at = datetime.utcnow()
                 db.session.commit()
 
                 server_logger.info(

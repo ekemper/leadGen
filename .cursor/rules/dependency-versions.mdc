@@ -3,4 +3,4 @@ description:
 globs: 
 alwaysApply: true
 ---
-Please, before suggesting code edits or implemetation details, check to see if the suggestion is supported by the current version of the relevant depentencies. 
+Please, before suggesting code edits or implemetation details, check to see if the suggestion is supported by the current version of the relevant depenencies. 
