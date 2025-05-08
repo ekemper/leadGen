@@ -1,0 +1,73 @@
+{
+  "name": "Full-Stack App Quality Rules",
+  "description": "Comprehensive rule set to maintain consistency, safety, and performance across a full-stack Python/React application.",
+  "rules": [
+    {
+      "id": "model-consistency",
+      "description": "Ensure model definitions and their usage are consistent throughout the application.",
+      "severity": "error",
+      "checks": [
+        {
+          "id": "model-property-completeness",
+          "description": "All model properties must be properly defined in both the model class and its constructor.",
+          "rules": [
+            "Every column defined in the model must be initialized in the constructor",
+            "Every property used in to_dict() must be defined as a column or relationship",
+            "Default values in column definitions must match constructor defaults",
+            "All JSON/JSONB columns must be properly typed and nullable status must be consistent"
+          ]
+        },
+        {
+          "id": "model-method-consistency",
+          "description": "Model methods must be consistent and not duplicate functionality.",
+          "rules": [
+            "No duplicate method definitions within the same model",
+            "Class methods must use class-level constants, not redefine them",
+            "Validation methods must use consistent error handling patterns",
+            "Status transition methods must use defined state machines"
+          ]
+        },
+        {
+          "id": "model-relationship-integrity",
+          "description": "Model relationships must be properly defined and consistent.",
+          "rules": [
+            "All foreign keys must have corresponding relationship definitions",
+            "Backref relationships must be consistent on both sides",
+            "Cascade delete rules must be explicitly defined",
+            "Relationship loading strategies (lazy/eager) must be consistent"
+          ]
+        },
+        {
+          "id": "model-validation-consistency",
+          "description": "Model validation must be consistent and comprehensive.",
+          "rules": [
+            "Required fields must be validated in both constructor and update methods",
+            "Enum values must be defined as class constants",
+            "Status transitions must be validated against defined state machines",
+            "JSON schema validation must be consistent across similar fields"
+          ]
+        },
+        {
+          "id": "model-serialization-consistency",
+          "description": "Model serialization must be consistent and complete.",
+          "rules": [
+            "to_dict() method must include all relevant fields",
+            "DateTime fields must be properly formatted in serialization",
+            "JSON fields must be properly handled in serialization",
+            "Relationship data must be consistently included/excluded"
+          ]
+        }
+      ],
+      "examples": {
+        "good": [
+          "class User(db.Model):\n    id = db.Column(db.String(36), primary_key=True)\n    email = db.Column(db.String(255), nullable=False)\n    \n    def __init__(self, email):\n        self.id = str(uuid.uuid4())\n        self.email = email",
+          "class Campaign(db.Model):\n    VALID_STATUSES = ['created', 'running', 'completed']\n    \n    def update_status(self, new_status):\n        if new_status not in self.VALID_STATUSES:\n            raise ValueError('Invalid status')"
+        ],
+        "bad": [
+          "class User(db.Model):\n    id = db.Column(db.String(36), primary_key=True)\n    \n    def __init__(self, email):\n        self.email = email  # Missing id initialization",
+          "class Campaign(db.Model):\n    def update_status(self, new_status):\n        valid_statuses = ['created', 'running']  # Redefined instead of using class constant"
+        ]
+      }
+    }
+  ]
+} 

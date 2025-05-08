@@ -5,7 +5,7 @@ from datetime import datetime
 from rq import Worker, Connection
 from rq.worker import StopRequested
 from server.app import create_app
-from server.utils.logging_config import worker_logger, combined_logger
+from server.utils.logging_config import worker_logger
 from server.config.queue_config import get_redis_connection, QUEUE_CONFIG
 
 # Create Flask app context
@@ -17,7 +17,7 @@ redis_conn = get_redis_connection()
 def handle_sigterm(signum, frame):
     """Handle SIGTERM signal gracefully."""
     worker_logger.info("Received SIGTERM signal, shutting down gracefully...")
-    combined_logger.info(
+    worker_logger.info(
         "Received SIGTERM signal, shutting down gracefully...",
         extra={'component': 'worker', 'signal': 'SIGTERM'}
     )
@@ -26,7 +26,7 @@ def handle_sigterm(signum, frame):
 def handle_sigint(signum, frame):
     """Handle SIGINT signal gracefully."""
     worker_logger.info("Received SIGINT signal, shutting down gracefully...")
-    combined_logger.info(
+    worker_logger.info(
         "Received SIGINT signal, shutting down gracefully...",
         extra={'component': 'worker', 'signal': 'SIGINT'}
     )
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, handle_sigint)
 
     worker_logger.info("Starting RQ worker...")
-    combined_logger.info(
+    worker_logger.info(
         "Starting RQ worker",
         extra={
             'component': 'worker',
@@ -73,17 +73,6 @@ if __name__ == '__main__':
                     'start_time': datetime.utcnow().isoformat()
                 }
             )
-            combined_logger.info(
-                f"Worker {worker.name} started",
-                extra={
-                    'component': 'worker',
-                    'worker_name': worker.name,
-                    'queues': worker.queues,
-                    'queue_config': QUEUE_CONFIG,
-                    'pid': os.getpid(),
-                    'start_time': datetime.utcnow().isoformat()
-                }
-            )
             
             # Start worker with supported configuration
             worker.work(
@@ -93,7 +82,7 @@ if __name__ == '__main__':
             )
     except StopRequested:
         worker_logger.info("Worker stopped gracefully")
-        combined_logger.info(
+        worker_logger.info(
             "Worker stopped gracefully",
             extra={'component': 'worker', 'stop_time': datetime.utcnow().isoformat()}
         )
@@ -107,7 +96,7 @@ if __name__ == '__main__':
                 'traceback': sys.exc_info()
             }
         )
-        combined_logger.error(
+        worker_logger.error(
             "Worker failed to start",
             extra={
                 'component': 'worker',

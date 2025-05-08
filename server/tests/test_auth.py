@@ -4,7 +4,7 @@ Tests are organized by endpoint and then by test case.
 """
 import pytest
 from flask import json
-from models import User
+from server.models import User
 
 # Signup Tests
 def test_signup_success(client, test_user):

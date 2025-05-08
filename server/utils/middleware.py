@@ -2,7 +2,7 @@ import uuid
 import time
 from functools import wraps
 from flask import request, g
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 
 def generate_request_id():
     """Generate a unique request ID."""
@@ -21,10 +21,6 @@ def log_request_info():
         extra['status_code'] = g.status_code
     
     server_logger.info('Request processed', extra=extra)
-    combined_logger.info('Request processed', extra={
-        'component': 'server',
-        **extra
-    })
 
 def request_middleware(app):
     """Configure request middleware for the Flask app."""
@@ -48,10 +44,6 @@ def request_middleware(app):
         if request.path != '/health':
             extra = dict(g.request_context)
             server_logger.info('Request started', extra=extra)
-            combined_logger.info('Request started', extra={
-                'component': 'server',
-                **extra
-            })
     
     @app.after_request
     def after_request(response):
@@ -67,10 +59,6 @@ def request_middleware(app):
             extra = dict(g.request_context)
             extra['error'] = str(exception)
             server_logger.error('Request failed', extra=extra)
-            combined_logger.error('Request failed', extra={
-                'component': 'server',
-                **extra
-            })
         else:
             log_request_info()
 
@@ -89,10 +77,6 @@ def log_function_call(func):
                 'success': True
             })
             server_logger.info(f'Function {func.__name__} completed', extra=extra)
-            combined_logger.info(f'Function {func.__name__} completed', extra={
-                'component': 'server',
-                **extra
-            })
             return result
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
@@ -104,9 +88,5 @@ def log_function_call(func):
                 'success': False
             })
             server_logger.error(f'Function {func.__name__} failed', extra=extra)
-            combined_logger.error(f'Function {func.__name__} failed', extra={
-                'component': 'server',
-                **extra
-            })
             raise
     return wrapper 

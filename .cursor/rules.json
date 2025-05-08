@@ -1,0 +1,11 @@
+{
+  "name": "Full-Stack App Quality Rules",
+  "description": "Comprehensive rule set to maintain consistency, safety, and performance across a full-stack Python/React application.",
+  "rules": [
+    {
+      "id": "python-version-consistency",
+      "description": "Always use 'python3' command instead of 'python' when executing Python-related commands in the terminal.",
+      "severity": "error"
+    }
+  ]
+} 

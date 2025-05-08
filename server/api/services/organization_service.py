@@ -1,6 +1,6 @@
 from server.models import Organization
 from server.config.database import db
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 import re
 from html import escape
 

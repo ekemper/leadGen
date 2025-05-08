@@ -6,13 +6,57 @@ from datetime import datetime, timedelta
 from flask import current_app
 from server.models import User
 from server.config.database import db
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 from server.api.services.validation_service import ValidationService
 from email_validator import validate_email, EmailNotValidError
 from werkzeug.exceptions import BadRequest, Unauthorized, Forbidden
+from typing import Dict, Any, Optional
+from server.api.schemas import UserSchema, LoginSchema, TokenSchema
 
 class AuthService:
     """Service for handling authentication-related operations."""
+
+    def __init__(self):
+        self._ensure_transaction()
+
+    def _ensure_transaction(self):
+        """Ensure we have an active transaction."""
+        if not db.session.is_active:
+            db.session.begin()
+
+    @staticmethod
+    def hash_password(password: str) -> bytes:
+        """
+        Hash a password using bcrypt.
+        
+        Args:
+            password: The plain text password to hash
+            
+        Returns:
+            bytes: The hashed password
+        """
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    @staticmethod
+    def verify_password(password: str, hashed_password: bytes) -> bool:
+        """
+        Verify a password against its hash.
+        
+        Args:
+            password: The plain text password to verify
+            hashed_password: The hashed password to check against
+            
+        Returns:
+            bool: True if password matches, False otherwise
+        """
+        try:
+            return bcrypt.checkpw(
+                password.encode('utf-8'),
+                hashed_password if isinstance(hashed_password, bytes) else hashed_password.encode('utf-8')
+            )
+        except Exception as e:
+            server_logger.error(f"Error verifying password: {str(e)}")
+            return False
 
     @staticmethod
     def validate_password(password: str) -> None:
@@ -140,11 +184,11 @@ class AuthService:
             raise BadRequest("Email already registered")
             
         # Create new user
-        hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        hashed_password = cls.hash_password(password)
         user = User(
             id=str(uuid.uuid4()),
             email=email.lower(),
-            password=hashed
+            password=hashed_password
         )
         
         try:
@@ -158,17 +202,6 @@ class AuthService:
                     'user_id': user.id,
                     'email': email,
                     'action': 'signup_success'
-                }
-            )
-            
-            # Log to combined logger as well
-            combined_logger.info(
-                "New user registration",
-                extra={
-                    'user_id': user.id,
-                    'email': email,
-                    'action': 'signup_success',
-                    'component': 'auth_service'
                 }
             )
             
@@ -186,68 +219,170 @@ class AuthService:
             )
             raise BadRequest(f"Error creating user: {str(e)}")
 
-    @classmethod
-    def login(cls, email: str, password: str) -> dict:
-        """
-        Authenticate a user.
-        
-        Args:
-            email: User's email
-            password: User's password
-            
-        Returns:
-            dict: Authentication result
-            
-        Raises:
-            Unauthorized: For invalid credentials
-            Forbidden: For locked accounts
-        """
-        user = User.query.filter_by(email=email.lower()).first()
-        
-        # Validate email format first
+    def login(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Authenticate a user and return a token."""
         try:
-            cls.validate_email_format(email)
-        except BadRequest as e:
-            raise Unauthorized(str(e))
-        
-        if not user:
-            raise Unauthorized("Invalid email or password")
+            # Validate input data
+            errors = LoginSchema().validate(data)
+            if errors:
+                raise BadRequest(f"Invalid login data: {errors}")
+                
+            email = data['email']
+            password = data['password']
             
-        # Check if account is locked
-        if user.failed_attempts >= 5 and user.last_failed_attempt:
-            lockout_duration = timedelta(minutes=15)
-            if datetime.utcnow() - user.last_failed_attempt < lockout_duration:
-                raise Forbidden("Account is locked due to too many failed attempts")
-            else:
-                # Reset failed attempts after lockout period
-                user.failed_attempts = 0
-                user.last_failed_attempt = None
-                db.session.commit()
-        
-        # Verify password
-        if not bcrypt.checkpw(password.encode('utf-8'), user.password):
-            user.failed_attempts += 1
-            user.last_failed_attempt = datetime.utcnow()
-            db.session.commit()
-            raise Unauthorized("Invalid email or password")
+            user = User.query.filter_by(email=email).first()
+            if not user or not user.check_password(password):
+                raise Unauthorized("Invalid email or password")
             
-        # Reset failed attempts on successful login
-        user.failed_attempts = 0
-        user.last_failed_attempt = None
-        db.session.commit()
-        
-        # Generate token
-        token = jwt.encode(
-            {
+            # Generate token
+            token_data = {
                 'user_id': user.id,
+                'email': user.email,
                 'exp': datetime.utcnow() + timedelta(days=1)
-            },
-            current_app.config['SECRET_KEY'],
-            algorithm='HS256'
-        )
-        
-        return {
-            'success': True,
-            'message': 'Login successful',
-            'token': token
-        } 
+            }
+            token = jwt.encode(
+                token_data,
+                current_app.config['SECRET_KEY'],
+                algorithm='HS256'
+            )
+            
+            # Log token generation
+            server_logger.info(
+                "Token generated",
+                extra={
+                    'user_id': user.id,
+                    'email': user.email,
+                    'action': 'token_generated'
+                }
+            )
+            
+            # Prepare response
+            response_data = {
+                'token': token,
+                'user': user.to_dict()
+            }
+            
+            return response_data
+        except Exception as e:
+            server_logger.error(f'Error during login: {str(e)}', exc_info=True)
+            db.session.rollback()
+            raise
+
+    def register(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Register a new user."""
+        try:
+            # Validate input data
+            errors = UserSchema().validate(data)
+            if errors:
+                raise ValueError(f"Invalid user data: {errors}")
+                
+            # Check if user already exists
+            if User.query.filter_by(email=data['email']).first():
+                raise ValueError("User with this email already exists")
+            
+            # Create new user
+            user = User(
+                email=data['email'],
+                name=data['name']
+            )
+            user.set_password(data['password'])
+            
+            db.session.add(user)
+            db.session.commit()
+            
+            # Generate token
+            token_data = {
+                'user_id': user.id,
+                'email': user.email,
+                'exp': datetime.utcnow() + timedelta(days=1)
+            }
+            token = jwt.encode(
+                token_data,
+                current_app.config['SECRET_KEY'],
+                algorithm='HS256'
+            )
+            
+            # Prepare response
+            response_data = {
+                'token': token,
+                'user': user.to_dict()
+            }
+            
+            # Validate response data
+            errors = TokenSchema().validate(response_data)
+            if errors:
+                raise ValueError(f"Invalid token data: {errors}")
+                
+            return response_data
+        except Exception as e:
+            server_logger.error(f'Error during registration: {str(e)}', exc_info=True)
+            db.session.rollback()
+            raise
+
+    def get_current_user(self, token: str) -> Dict[str, Any]:
+        """Get the current user from a token."""
+        try:
+            # Verify token
+            try:
+                payload = jwt.decode(
+                    token,
+                    current_app.config['SECRET_KEY'],
+                    algorithms=['HS256']
+                )
+            except jwt.ExpiredSignatureError:
+                raise Unauthorized("Token has expired")
+            except jwt.InvalidTokenError:
+                raise Unauthorized("Invalid token")
+            
+            user = User.query.get(payload['user_id'])
+            if not user:
+                raise Unauthorized("User not found")
+            
+            user_dict = user.to_dict()
+            # Validate user data
+            errors = UserSchema().validate(user_dict)
+            if errors:
+                raise ValueError(f"Invalid user data: {errors}")
+            
+            return user_dict
+        except Exception as e:
+            server_logger.error(f'Error getting current user: {str(e)}', exc_info=True)
+            db.session.rollback()
+            raise
+
+    def update_user(self, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update a user's information."""
+        try:
+            server_logger.info(f'Updating user {user_id}')
+            self._ensure_transaction()
+            
+            user = User.query.get(user_id)
+            if not user:
+                server_logger.warning(f'User {user_id} not found')
+                return None
+            
+            # Validate input data
+            errors = UserSchema().validate(data)
+            if errors:
+                raise ValueError(f"Invalid user data: {errors}")
+            
+            # Update user fields
+            for key, value in data.items():
+                if key == 'password':
+                    user.set_password(value)
+                elif hasattr(user, key):
+                    setattr(user, key, value)
+            
+            db.session.commit()
+            
+            user_dict = user.to_dict()
+            # Validate output data
+            errors = UserSchema().validate(user_dict)
+            if errors:
+                raise ValueError(f"Invalid user data: {errors}")
+            
+            return user_dict
+        except Exception as e:
+            server_logger.error(f'Error updating user: {str(e)}', exc_info=True)
+            db.session.rollback()
+            raise 

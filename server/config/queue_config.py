@@ -18,7 +18,9 @@ QUEUE_CONFIG = {
         'timeout': 3600,  # 1 hour queue timeout
         'job_timeout': 1800,  # 30 minutes per job
         'retry_after': 300,  # 5 minutes before retry
-        'max_retries': 3
+        'max_retries': 3,
+        'result_ttl': 3600,  # 1 hour result TTL
+        'failure_ttl': 3600  # 1 hour failure TTL
     }
 }
 

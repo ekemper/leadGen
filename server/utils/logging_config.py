@@ -19,7 +19,7 @@ class LogSanitizer:
     # Patterns for sensitive data
     SENSITIVE_PATTERNS = {
         'email': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-        'phone': r'(?:\+?[1-9]\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',  # More specific phone pattern
+        'phone': r'(?:\+?[1-9]\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',
         'credit_card': r'\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b',
         'api_key': r'(?i)(api[_-]?key|apikey|token|secret)[_-]?[=:]\s*[\w\-\.]+',
         'password': r'(?i)(password|passwd|pwd)[_-]?[=:]\s*[\w\-\.]+',
@@ -177,7 +177,7 @@ def setup_logger(name, log_file, level=logging.INFO):
 
     # Verify file handler is working
     try:
-        logger.info(f"Logger {name} initialized")
+        logger.info(f"Logger {name} initialized", extra={'component': name})
         # Ensure the file exists and is writable
         if not os.path.exists(log_path):
             raise IOError(f"Log file {log_path} was not created")
@@ -185,7 +185,7 @@ def setup_logger(name, log_file, level=logging.INFO):
             raise IOError(f"Log file {log_path} is not writable")
     except Exception as e:
         console_handler.setLevel(logging.ERROR)
-        logger.error(f"Failed to initialize logger: {str(e)}")
+        logger.error(f"Failed to initialize logger: {str(e)}", extra={'component': name})
         raise
 
     return logger
@@ -194,7 +194,6 @@ def setup_logger(name, log_file, level=logging.INFO):
 browser_logger = setup_logger('browser', 'browser.log')
 server_logger = setup_logger('server', 'server.log')
 worker_logger = setup_logger('worker', 'worker.log')
-combined_logger = setup_logger('combined', 'combined.log')
 
 # Configure root logger
 root_logger = logging.getLogger()
@@ -209,10 +208,36 @@ logging.getLogger('sqlalchemy.pool').setLevel(logging.INFO)
 
 def get_logger(component):
     """Get the appropriate logger for a component."""
+    # Map component names to their canonical form
+    component_map = {
+        'auth_service': 'server',  # Map auth_service to server component
+        'browser': 'browser',
+        'server': 'server',
+        'worker': 'worker'
+    }
+    
+    # Get the canonical component name
+    canonical_component = component_map.get(component, 'server')
+    
+    # Get the appropriate logger
     loggers = {
         'browser': browser_logger,
         'server': server_logger,
-        'worker': worker_logger,
-        'combined': combined_logger
+        'worker': worker_logger
     }
-    return loggers.get(component, combined_logger) 
+    logger = loggers.get(canonical_component, server_logger)
+    
+    # Ensure component is set in extra data
+    def log_with_component(level, msg, *args, **kwargs):
+        if 'extra' not in kwargs:
+            kwargs['extra'] = {}
+        kwargs['extra']['component'] = canonical_component
+        return getattr(logger, level)(msg, *args, **kwargs)
+    
+    # Add component-specific logging methods
+    logger.info = lambda msg, *args, **kwargs: log_with_component('info', msg, *args, **kwargs)
+    logger.error = lambda msg, *args, **kwargs: log_with_component('error', msg, *args, **kwargs)
+    logger.warning = lambda msg, *args, **kwargs: log_with_component('warning', msg, *args, **kwargs)
+    logger.debug = lambda msg, *args, **kwargs: log_with_component('debug', msg, *args, **kwargs)
+    
+    return logger 

@@ -8,10 +8,11 @@ function handleAuthError(response: Response) {
         if (contentType && contentType.includes('application/json')) {
             response.clone().json().then(data => {
                 // Only clear tokens if it's an actual auth error
-                if (data.message?.toLowerCase().includes('token') || 
-                    data.message?.toLowerCase().includes('unauthorized') ||
-                    data.message?.toLowerCase().includes('forbidden') ||
-                    data.message?.toLowerCase().includes('user not found')) {
+                const errorMessage = data.error?.message || data.message;
+                if (errorMessage?.toLowerCase().includes('token') || 
+                    errorMessage?.toLowerCase().includes('unauthorized') ||
+                    errorMessage?.toLowerCase().includes('forbidden') ||
+                    errorMessage?.toLowerCase().includes('user not found')) {
                     localStorage.clear();
                     sessionStorage.clear();
                     setTimeout(() => {
@@ -81,7 +82,8 @@ export const api = {
         const responseData = await response.json();
         
         if (!response.ok) {
-            throw new Error(responseData.error || responseData.message || `HTTP error! status: ${response.status}`);
+            const errorMessage = responseData.error?.message || responseData.message || `HTTP error! status: ${response.status}`;
+            throw new Error(errorMessage);
         }
         
         return responseData;
@@ -99,7 +101,8 @@ export const api = {
         const responseData = await response.json();
         
         if (!response.ok) {
-            throw new Error(responseData.error || responseData.message || `HTTP error! status: ${response.status}`);
+            const errorMessage = responseData.error?.message || responseData.message || `HTTP error! status: ${response.status}`;
+            throw new Error(errorMessage);
         }
         
         return responseData;
@@ -117,7 +120,8 @@ export const api = {
         const responseData = await response.json();
         
         if (!response.ok) {
-            throw new Error(responseData.error || responseData.message || `HTTP error! status: ${response.status}`);
+            const errorMessage = responseData.error?.message || responseData.message || `HTTP error! status: ${response.status}`;
+            throw new Error(errorMessage);
         }
         
         return responseData;

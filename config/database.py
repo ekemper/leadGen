@@ -1,52 +1,48 @@
-from flask_sqlalchemy import SQLAlchemy
-import os
-from sqlalchemy.exc import SQLAlchemyError
-from server.utils.logging_config import server_logger, combined_logger
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from server.utils.logging_config import server_logger
 
-# Create the SQLAlchemy instance without initializing it
-db = SQLAlchemy()
-
-def init_db(app, test_config=None):
-    """Initialize the database with the given Flask app
+def get_database_url():
+    """Get the database URL from environment variables."""
+    import os
     
-    Args:
-        app: Flask application instance
-        test_config: Optional dictionary containing test configuration
-    """
+    # Check if we're in test mode
+    if os.environ.get('TESTING') == 'true':
+        # Use in-memory SQLite for testing
+        db_url = 'sqlite:///:memory:'
+        server_logger.info('Using in-memory SQLite database for testing.')
+        return db_url
+    
+    # Get database URL from environment
+    db_url = os.environ.get('DATABASE_URL')
+    if not db_url:
+        error_msg = 'DATABASE_URL environment variable not set'
+        server_logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    # Validate database URL
+    if not db_url.startswith('postgresql://'):
+        error_msg = f'Invalid database URL: {db_url}. Must be a PostgreSQL URL.'
+        server_logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    server_logger.info(f'Using Neon database: {db_url}')
+    return db_url
+
+def init_database():
+    """Initialize the database connection."""
     try:
-        db_url = os.getenv('NEON_CONNECTION_STRING')
+        # Get database URL
+        db_url = get_database_url()
         
-        if os.getenv('FLASK_ENV') == 'testing':
-            server_logger.info('Using in-memory SQLite database for testing.', extra={'component': 'server'})
-            combined_logger.info('Using in-memory SQLite database for testing.', extra={'component': 'server'})
-            db_url = 'sqlite:///:memory:'
-        elif not db_url:
-            error_msg = 'NEON_CONNECTION_STRING must be set for application runtime.'
-            server_logger.error(error_msg, extra={'component': 'server'})
-            combined_logger.error(error_msg, extra={'component': 'server'})
-            raise ValueError(error_msg)
-        elif not db_url.startswith('postgresql://'):
-            error_msg = f'NEON_CONNECTION_STRING does not appear to be a Neon connection string: {db_url}'
-            server_logger.error(error_msg, extra={'component': 'server'})
-            combined_logger.error(error_msg, extra={'component': 'server'})
-            raise ValueError(error_msg)
-        else:
-            server_logger.info(f'Using Neon database: {db_url}', extra={'component': 'server'})
-            combined_logger.info(f'Using Neon database: {db_url}', extra={'component': 'server'})
+        # Create engine and session factory
+        engine = create_engine(db_url)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         
-        app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-        
-        db.init_app(app)
-        
-        with app.app_context():
-            db.create_all()
-            
-        server_logger.info('Database initialized successfully.', extra={'component': 'server'})
-        combined_logger.info('Database initialized successfully.', extra={'component': 'server'})
+        server_logger.info('Database initialized successfully.')
+        return engine, SessionLocal
         
     except Exception as e:
-        error_msg = f"Database initialization failed: {str(e)}"
-        server_logger.error(error_msg, extra={'component': 'server'})
-        combined_logger.error(error_msg, extra={'component': 'server'})
-        raise 
+        error_msg = f'Failed to initialize database: {str(e)}'
+        server_logger.error(error_msg)
+        raise RuntimeError(error_msg) from e 

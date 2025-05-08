@@ -2,7 +2,7 @@ import os
 import requests
 from server.models import Campaign, Lead
 from server.config.database import db
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 from server.models.campaign import CampaignStatus
 from typing import Dict, Any, List
 

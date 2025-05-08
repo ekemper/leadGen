@@ -17,9 +17,9 @@ export interface Campaign {
   updated_at: string;
   job_ids?: {
     fetch_leads?: string;
-    verify_emails?: string;
+    email_verification?: string;
     enrich_leads?: string;
-    generate_emails?: string;
+    email_copy_generation?: string;
   };
 }
 

@@ -6,9 +6,33 @@ from server.app import create_app
 from server.config.database import db, init_db
 from server.api.services.auth_service import AuthService
 from server.utils.logging_config import LOG_DIR
+from unittest.mock import MagicMock
+from rq import Queue
+from server.config.queue_config import QUEUE_CONFIG
+from server.api.schemas import (
+    ErrorResponseSchema, SuccessResponseSchema,
+    CampaignSchema, JobSchema, LeadSchema,
+    TokenSchema, UserSchema
+)
+
+# Set test environment
+os.environ['FLASK_ENV'] = 'test'
 
 # Define test secret key to be used consistently
 TEST_SECRET_KEY = 'test-secret-key'
+
+@pytest.fixture
+def schemas():
+    """Return schema instances for validation."""
+    return {
+        'error': ErrorResponseSchema(),
+        'success': SuccessResponseSchema(),
+        'campaign': CampaignSchema(),
+        'job': JobSchema(),
+        'lead': LeadSchema(),
+        'token': TokenSchema(),
+        'user': UserSchema()
+    }
 
 @pytest.fixture
 def test_secret_key():
@@ -51,11 +75,11 @@ def runner(app):
 
 @pytest.fixture
 def test_user():
-    """A test user for authentication tests."""
+    """Test user data."""
     return {
         'email': 'test@example.com',
-        'password': 'Test123!',
-        'confirm_password': 'Test123!'
+        'password': 'Test1234!',
+        'confirm_password': 'Test1234!'
     }
 
 @pytest.fixture
@@ -70,7 +94,7 @@ def auth_headers(client, test_user):
         'password': test_user['password']
     })
     
-    token = response.json['token']
+    token = response.json['data']['token']
     return {'Authorization': f'Bearer {token}'}
 
 @pytest.fixture
@@ -124,4 +148,16 @@ def setup_logs():
             if os.path.exists(log_path):
                 os.remove(log_path)
         except OSError as e:
-            print(f"Warning: Failed to remove log file {log_file}: {str(e)}") 
+            print(f"Warning: Failed to remove log file {log_file}: {str(e)}")
+
+@pytest.fixture
+def mock_queue(monkeypatch):
+    """Mock RQ queue for testing."""
+    mock_queue = MagicMock(spec=Queue)
+    mock_queue.enqueue.return_value = MagicMock(id='test-job-id')
+    
+    def mock_get_queue():
+        return mock_queue
+    
+    monkeypatch.setattr('server.config.queue_config.get_queue', mock_get_queue)
+    return mock_queue 

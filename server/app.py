@@ -11,7 +11,8 @@ from server.utils.middleware import request_middleware
 from server.config.database import db, init_db
 from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
+from server.api.openapi import create_spec, register_spec
 
 print('sys.path:', sys.path)
 print('CWD:', os.getcwd())
@@ -69,6 +70,10 @@ def create_app(test_config=None):
     # Initialize database
     init_db(app)
     migrate = Migrate(app, db)
+    
+    # Create and register OpenAPI spec
+    spec = create_spec()
+    register_spec(app, spec)
     
     # Register blueprints
     api_blueprint = create_api_blueprint()
@@ -139,17 +144,6 @@ def create_app(test_config=None):
     
     # Log application startup
     server_logger.info("Flask application initialized")
-    combined_logger.info(
-        "Flask application initialized",
-        extra={
-            'component': 'server',
-            'config': {
-                'debug': app.debug,
-                'testing': app.testing,
-                'environment': os.getenv('FLASK_ENV', 'development')
-            }
-        }
-    )
 
     return app
 

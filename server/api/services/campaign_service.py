@@ -1,23 +1,42 @@
-from server.models import Campaign
+from server.models import Campaign, Job
 from server.config.database import db
 from server.background_services.apollo_service import ApolloService
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 from server.models.campaign import CampaignStatus
-from typing import Dict, Any, Optional
+from server.utils.error_messages import CAMPAIGN_ERRORS, JOB_ERRORS
+from sqlalchemy import text
+from typing import Dict, Any, Optional, List
+import threading
+import json
+from datetime import datetime, timedelta
+import logging
+import re
+from server.api.schemas import CampaignSchema, CampaignCreateSchema, CampaignStartSchema, JobSchema
+
+logger = logging.getLogger(__name__)
 
 class CampaignService:
     def __init__(self):
         self.apollo_service = ApolloService()
+        self._campaign_locks = {}
+        self._ensure_transaction()
 
-    def get_campaigns(self):
+    def _get_campaign_lock(self, campaign_id):
+        """Get or create a lock for a campaign."""
+        if campaign_id not in self._campaign_locks:
+            self._campaign_locks[campaign_id] = threading.Lock()
+        return self._campaign_locks[campaign_id]
+
+    def _ensure_transaction(self):
+        """Ensure we have an active transaction."""
+        if not db.session.is_active:
+            db.session.begin()
+
+    def get_campaigns(self) -> List[Dict[str, Any]]:
         """Get all campaigns."""
         try:
             server_logger.info('Fetching all campaigns')
-            
-            # Ensure we have a valid database session
-            if not db.session.is_active:
-                server_logger.warning('Database session was not active, creating new session')
-                db.session.rollback()
+            self._ensure_transaction()
             
             campaigns = Campaign.query.order_by(Campaign.created_at.desc()).all()
             server_logger.info(f'Found {len(campaigns)} campaigns')
@@ -26,6 +45,20 @@ class CampaignService:
             for campaign in campaigns:
                 try:
                     campaign_dict = campaign.to_dict()
+                    # Validate campaign data
+                    errors = CampaignSchema().validate(campaign_dict)
+                    if errors:
+                        raise ValueError(f"Invalid campaign data: {errors}")
+                        
+                    # Get latest job status for each campaign
+                    latest_job = Job.query.filter_by(campaign_id=campaign.id).order_by(Job.created_at.desc()).first()
+                    if latest_job:
+                        job_dict = latest_job.to_dict()
+                        # Validate job data
+                        errors = JobSchema().validate(job_dict)
+                        if errors:
+                            raise ValueError(f"Invalid job data: {errors}")
+                        campaign_dict['latest_job'] = job_dict
                     campaign_list.append(campaign_dict)
                 except Exception as e:
                     server_logger.error(f'Error converting campaign {campaign.id} to dict: {str(e)}', exc_info=True)
@@ -38,161 +71,325 @@ class CampaignService:
             db.session.rollback()
             raise
 
-    def get_campaign(self, campaign_id):
+    def get_campaign(self, campaign_id: str) -> Dict[str, Any]:
         """Get a single campaign by ID."""
         try:
+            server_logger.info(f'Fetching campaign {campaign_id}')
+            self._ensure_transaction()
+            
             campaign = Campaign.query.get(campaign_id)
             if not campaign:
+                server_logger.warning(f'Campaign {campaign_id} not found')
                 return None
-            return campaign.to_dict()
+            
+            campaign_dict = campaign.to_dict()
+            # Validate campaign data
+            errors = CampaignSchema().validate(campaign_dict)
+            if errors:
+                raise ValueError(f"Invalid campaign data: {errors}")
+            
+            # Get all jobs for this campaign
+            jobs = Job.query.filter_by(campaign_id=campaign_id).order_by(Job.created_at.desc()).all()
+            job_list = []
+            for job in jobs:
+                job_dict = job.to_dict()
+                # Validate job data
+                errors = JobSchema().validate(job_dict)
+                if errors:
+                    raise ValueError(f"Invalid job data: {errors}")
+                job_list.append(job_dict)
+            campaign_dict['jobs'] = job_list
+            
+            server_logger.info(f'Successfully fetched campaign {campaign_id} with {len(jobs)} jobs')
+            return campaign_dict
         except Exception as e:
-            server_logger.error(f"Error getting campaign: {str(e)}")
+            server_logger.error(f'Error getting campaign: {str(e)}', exc_info=True)
+            db.session.rollback()
             raise
 
-    def create_campaign(self, name: str):
-        """Create a new campaign with just a name."""
+    def create_campaign(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new campaign."""
         try:
-            if not name:
-                raise ValueError("Name is required")
-
+            # Validate input data
+            errors = CampaignCreateSchema().validate(data)
+            if errors:
+                raise ValueError(f"Invalid campaign data: {errors}")
+                
             campaign = Campaign(
-                name=name,
-                description="",  # Optional field
-                organization_id=None,  # Optional field
+                name=data['name'],
+                description=data.get('description', ''),
                 status=CampaignStatus.CREATED
             )
+            
             db.session.add(campaign)
             db.session.commit()
-
-            server_logger.info({
-                'event': 'campaign_created',
-                'campaign_id': campaign.id
-            })
-
-            return campaign.to_dict()
+            
+            campaign_dict = campaign.to_dict()
+            # Validate output data
+            errors = CampaignSchema().validate(campaign_dict)
+            if errors:
+                raise ValueError(f"Invalid campaign data: {errors}")
+                
+            return campaign_dict
         except Exception as e:
+            server_logger.error(f'Error creating campaign: {str(e)}', exc_info=True)
             db.session.rollback()
-            server_logger.error({
-                'event': 'create_campaign_error',
-                'message': 'Error occurred while creating campaign',
-                'exception': str(e)
-            })
             raise
 
-    def start_campaign(self, campaign_id, params=None):
-        """Start the lead generation process for an existing campaign."""
-        try:
-            # Import RQ enqueue helpers here to avoid circular import
-            from server.tasks import enqueue_fetch_and_save_leads, enqueue_email_verification, enqueue_enriching_leads, enqueue_email_copy_generation
+    def validate_search_url(self, url: str) -> bool:
+        """Validate Apollo search URL."""
+        logger.info(f"Validating search URL: {url}")
+        
+        if not url:
+            logger.error(CAMPAIGN_ERRORS['INVALID_SEARCH_URL'])
+            raise ValueError(CAMPAIGN_ERRORS['INVALID_SEARCH_URL'])
+        
+        if not isinstance(url, str):
+            logger.error(CAMPAIGN_ERRORS['INVALID_SEARCH_URL'])
+            raise ValueError(CAMPAIGN_ERRORS['INVALID_SEARCH_URL'])
+        
+        # Basic URL validation
+        if not url.startswith('https://app.apollo.io/'):
+            logger.error(CAMPAIGN_ERRORS['INVALID_SEARCH_URL'])
+            raise ValueError(CAMPAIGN_ERRORS['INVALID_SEARCH_URL'])
+        
+        # Check for malicious URLs
+        if re.search(r'[<>{}|\^~\[\]`]', url):
+            logger.error(CAMPAIGN_ERRORS['MALICIOUS_URL'])
+            raise ValueError(CAMPAIGN_ERRORS['MALICIOUS_URL'])
+        
+        return True
 
-            # Verify campaign exists
+    def validate_count(self, count: int) -> bool:
+        """Validate the count parameter."""
+        logger.info(f"Validating count parameter: {count}")
+        
+        if not isinstance(count, int):
+            logger.error(CAMPAIGN_ERRORS['INVALID_COUNT'])
+            raise ValueError(CAMPAIGN_ERRORS['INVALID_COUNT'])
+        
+        if count <= 0:
+            logger.error(CAMPAIGN_ERRORS['INVALID_COUNT'])
+            raise ValueError(CAMPAIGN_ERRORS['INVALID_COUNT'])
+        
+        if count > 100:
+            logger.error(CAMPAIGN_ERRORS['INVALID_COUNT'])
+            raise ValueError(CAMPAIGN_ERRORS['INVALID_COUNT'])
+        
+        return True
+
+    def validate_job_result(self, result: Dict[str, Any]) -> bool:
+        """Validate job result format."""
+        if not isinstance(result, dict):
+            raise ValueError("Job result must be a dictionary")
+        return True
+
+    def start_campaign(self, campaign_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Start a campaign with the given parameters."""
+        try:
+            # Validate input data
+            errors = CampaignStartSchema().validate(params)
+            if errors:
+                raise ValueError(f"Invalid campaign parameters: {errors}")
+                
             campaign = Campaign.query.get(campaign_id)
             if not campaign:
-                raise ValueError(f"Campaign with id {campaign_id} not found")
-
-            # Validate campaign status
-            if campaign.status not in [CampaignStatus.CREATED, CampaignStatus.FAILED]:
+                raise ValueError(f"Campaign {campaign_id} not found")
+                
+            if campaign.status != CampaignStatus.CREATED:
                 raise ValueError(f"Cannot start campaign in {campaign.status} status")
-
-            # Update campaign status
-            campaign.update_status(
-                CampaignStatus.FETCHING_LEADS,
-                "Starting lead generation process"
-            )
-
-            # Validate and prepare search parameters
-            if not params:
-                raise ValueError("Search parameters are required")
-
-            search_params = {
-                'count': int(params.get('count', 100)),
-                'excludeGuessedEmails': bool(params.get('excludeGuessedEmails', True)),
-                'excludeNoEmails': bool(params.get('excludeNoEmails', True)),
-                'getEmails': bool(params.get('getEmails', True)),
-                'searchUrl': str(params.get('searchUrl', ''))
-            }
-
-            # Validate required parameters
-            if not search_params['searchUrl']:
-                raise ValueError("Search URL is required")
-
+                
+            search_url = params['searchUrl']
+            count = params['count']
+            
             # Validate search URL
-            if not search_params['searchUrl'].startswith('https://app.apollo.io/'):
+            if not search_url.startswith('https://app.apollo.io/search'):
                 raise ValueError("Invalid Apollo.io search URL")
-
-            # Validate count
-            if search_params['count'] < 1 or search_params['count'] > 100:
-                raise ValueError("Count must be between 1 and 100")
-
-            # Kick off background task chain using RQ job dependencies
-            server_logger.info({
-                'event': 'trigger_rq_chain',
-                'message': 'Starting lead generation process',
-                'params': search_params,
-                'campaign_id': campaign.id
-            })
-
+                
             try:
-                # Enqueue the first job
-                job1 = enqueue_fetch_and_save_leads(search_params, campaign.id)
+                # Update campaign status to FETCHING_LEADS
+                campaign.update_status(CampaignStatus.FETCHING_LEADS)
                 
-                # Chain the next jobs using depends_on
-                job2 = enqueue_email_verification({'campaign_id': campaign.id}, depends_on=job1)
+                logger.info("Creating and enqueueing jobs")
                 
-                job3 = enqueue_enriching_leads({'campaign_id': campaign.id}, depends_on=job2)
-                
-                job4 = enqueue_email_copy_generation({'campaign_id': campaign.id}, depends_on=job3)
-
-                # Update campaign with job IDs
-                campaign.job_ids = {
-                    'fetch_leads': job1.id,
-                    'verify_emails': job2.id,
-                    'enrich_leads': job3.id,
-                    'generate_emails': job4.id
-                }
-                db.session.commit()
-
-                server_logger.info({
-                    'event': 'rq_chain_triggered',
-                    'message': 'Lead generation process started successfully',
-                    'campaign_id': campaign.id,
-                    'job_ids': campaign.job_ids
-                })
-
-                return campaign.to_dict()
-
-            except Exception as e:
-                # If job enqueuing fails, update campaign status
-                campaign.update_status(
-                    CampaignStatus.FAILED,
-                    f"Failed to start lead generation process: {str(e)}"
+                # Create fetch leads job
+                fetch_leads_job = Job.create(
+                    campaign_id=campaign_id,
+                    job_type='FETCH_LEADS',
+                    parameters={
+                        'searchUrl': search_url,
+                        'count': count,
+                        'excludeGuessedEmails': params.get('excludeGuessedEmails', True),
+                        'excludeNoEmails': params.get('excludeNoEmails', False),
+                        'getEmails': params.get('getEmails', True)
+                    }
                 )
+                
+                # Validate job data
+                job_dict = fetch_leads_job.to_dict()
+                errors = JobSchema().validate(job_dict)
+                if errors:
+                    raise ValueError(f"Invalid job data: {errors}")
+                
+                # Commit transaction
+                db.session.commit()
+                
+                # Return campaign data
+                campaign_dict = campaign.to_dict()
+                # Validate campaign data
+                errors = CampaignSchema().validate(campaign_dict)
+                if errors:
+                    raise ValueError(f"Invalid campaign data: {errors}")
+                    
+                return campaign_dict
+                
+            except Exception as e:
+                logger.error(f"Error starting campaign: {str(e)}")
+                db.session.rollback()
+                campaign.update_status(CampaignStatus.FAILED, error_message=str(e))
                 db.session.commit()
                 raise
-
+                
         except Exception as e:
+            logger.error(f"Error starting campaign: {str(e)}")
+            raise
+
+    def handle_job_completion(self, job_id: str, result: Dict[str, Any]) -> None:
+        """Handle job completion and update campaign status."""
+        try:
+            logger.info(f"Handling completion for job {job_id}")
+            
+            # Start a new transaction
+            db.session.begin_nested()
+            
+            # Get job and validate
+            job = Job.query.get(job_id)
+            if not job:
+                error_msg = JOB_ERRORS['JOB_NOT_FOUND'].format(job_id=job_id)
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Get campaign early to ensure it exists
+            campaign = Campaign.query.get(job.campaign_id)
+            if not campaign:
+                error_msg = CAMPAIGN_ERRORS['CAMPAIGN_NOT_FOUND'].format(campaign_id=job.campaign_id)
+                logger.error(error_msg)
+                db.session.rollback()
+                raise ValueError(error_msg)
+
+            # Validate job result
+            try:
+                Job.validate_result(job.job_type, result)
+            except ValueError as e:
+                logger.error(f"Invalid job result format for job {job_id}: {str(e)}")
+                job.status = 'FAILED'
+                job.error = str(e)
+                campaign.update_status(
+                    CampaignStatus.FAILED,
+                    error_message=str(e)
+                )
+                db.session.commit()
+                return
+
+            # Update job with result in a single transaction
+            try:
+                job.status = 'COMPLETED'
+                job.result = result
+                job.ended_at = datetime.utcnow()
+                if job.started_at:
+                    job.execution_time = (job.ended_at - job.started_at).total_seconds()
+                
+                # Update campaign status based on job type
+                campaign.handle_job_status_update(job.job_type, job.status)
+                
+                # Commit the transaction
+                db.session.commit()
+                logger.info(f"Successfully handled completion for job {job_id}")
+                
+            except Exception as e:
+                logger.error(f"Error updating job and campaign status: {str(e)}")
+                db.session.rollback()
+                
+                # Set job and campaign to failed state
+                try:
+                    db.session.begin_nested()
+                    job.status = 'FAILED'
+                    job.error = str(e)
+                    campaign.update_status(
+                        CampaignStatus.FAILED,
+                        error_message=f"Failed to update job status: {str(e)}"
+                    )
+                    db.session.commit()
+                except Exception as inner_e:
+                    logger.error(f"Error setting failure state: {str(inner_e)}")
+                    db.session.rollback()
+                raise
+            
+        except Exception as e:
+            logger.error(f"Error handling job completion: {str(e)}", exc_info=True)
             db.session.rollback()
-            server_logger.error({
-                'event': 'start_campaign_error',
-                'message': 'Error occurred while starting campaign',
-                'campaign_id': campaign_id,
-                'exception': str(e)
-            }, exc_info=True)
             raise
 
     def create_campaign_with_leads(self, params):
         """Create a campaign and immediately start the lead generation process."""
         try:
-            # Create the campaign first
-            campaign_data = self.create_campaign(params.get('name', 'New Campaign'))
+            server_logger.info('Creating and starting new campaign')
+            server_logger.debug(f'Parameters: {params}')
+            self._ensure_transaction()
             
-            # Start the campaign
-            return self.start_campaign(campaign_data['id'])
-        except Exception as e:
-            server_logger.error({
-                'event': 'create_campaign_with_leads_error',
-                'message': 'Error occurred while creating and starting campaign',
-                'params': params,
-                'exception': str(e)
+            # Create the campaign first
+            campaign_data = self.create_campaign({
+                'name': params.get('name'),
+                'description': params.get('description', '')
             })
+            server_logger.info(f'Created campaign {campaign_data["id"]}')
+            
+            # Start the campaign with the search parameters
+            result = self.start_campaign(campaign_data['id'], params)
+            server_logger.info(f'Started campaign {campaign_data["id"]}')
+            
+            return result
+        except Exception as e:
+            server_logger.error(f'Error creating campaign with leads: {str(e)}', exc_info=True)
+            db.session.rollback()
+            raise
+
+    def cleanup_campaign_jobs(self, campaign_id: str, days: int) -> Dict[str, Any]:
+        """Clean up old jobs for a campaign."""
+        try:
+            logger.info(f"Cleaning up jobs for campaign {campaign_id} older than {days} days")
+
+            # Get campaign with lock
+            campaign = Campaign.query.with_for_update().get(campaign_id)
+            if not campaign:
+                error_msg = CAMPAIGN_ERRORS['CAMPAIGN_NOT_FOUND'].format(campaign_id=campaign_id)
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Calculate cutoff date
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+
+            # Get jobs to delete
+            jobs = Job.query.filter(
+                Job.campaign_id == campaign_id,
+                Job.created_at < cutoff_date,
+                Job.status.in_(['completed', 'failed'])
+            ).all()
+
+            # Delete jobs
+            for job in jobs:
+                db.session.delete(job)
+
+            # Commit changes
+            db.session.commit()
+
+            return {
+                'message': f'Successfully cleaned up {len(jobs)} jobs',
+                'jobs_deleted': len(jobs)
+            }
+
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Error cleaning up campaign jobs: {str(e)}"
+            logger.error(error_msg, exc_info=True)
             raise 

@@ -2,7 +2,7 @@ import os
 import requests
 from server.models.lead import Lead
 from server.config.database import db
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 from typing import Dict, Any, List
 
 class PerplexityService:

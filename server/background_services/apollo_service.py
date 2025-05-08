@@ -4,7 +4,7 @@ from server.models.lead import Lead
 from server.config.database import db
 from typing import Dict, Any, List
 from dotenv import load_dotenv
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 from server.models import Campaign
 from server.models.campaign import CampaignStatus
 

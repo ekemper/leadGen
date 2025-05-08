@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 from rq.registry import FinishedJobRegistry, FailedJobRegistry
 from rq.job import Job
 from server.config.queue_config import get_queue
-from server.utils.logging_config import server_logger, combined_logger
+from server.utils.logging_config import server_logger
 
 def store_job_result(job: Job, result: Any) -> None:
     """
@@ -36,27 +36,10 @@ def store_job_result(job: Job, result: Any) -> None:
                 'completed_at': job_result['ended_at']
             }
         )
-        combined_logger.info(
-            f"Stored result for job {job.id}",
-            extra={
-                'component': 'job_storage',
-                'job_id': job.id,
-                'job_type': job.func_name,
-                'completed_at': job_result['ended_at']
-            }
-        )
     except Exception as e:
         server_logger.error(
             f"Error storing job result: {str(e)}",
             extra={
-                'job_id': job.id,
-                'error': str(e)
-            }
-        )
-        combined_logger.error(
-            f"Error storing job result: {str(e)}",
-            extra={
-                'component': 'job_storage',
                 'job_id': job.id,
                 'error': str(e)
             }
@@ -116,14 +99,6 @@ def get_job_results(campaign_id: str) -> Dict[str, List[Dict]]:
                 'error': str(e)
             }
         )
-        combined_logger.error(
-            f"Error getting job results: {str(e)}",
-            extra={
-                'component': 'job_storage',
-                'campaign_id': campaign_id,
-                'error': str(e)
-            }
-        )
         return {'completed': [], 'failed': []}
 
 def cleanup_old_jobs(campaign_id: str, days: int = 7) -> None:
@@ -148,15 +123,6 @@ def cleanup_old_jobs(campaign_id: str, days: int = 7) -> None:
                 if job.ended_at and job.ended_at < cutoff:
                     job.delete()
                     server_logger.info(f"Cleaned up old completed job {job_id} for campaign {campaign_id}")
-                    combined_logger.info(
-                        f"Cleaned up old completed job {job_id} for campaign {campaign_id}",
-                        extra={
-                            'component': 'job_storage',
-                            'job_id': job_id,
-                            'job_type': job.func_name,
-                            'campaign_id': campaign_id
-                        }
-                    )
         
         # Clean up failed jobs
         for job_id in failed_registry.get_job_ids():
@@ -165,22 +131,5 @@ def cleanup_old_jobs(campaign_id: str, days: int = 7) -> None:
                 if job.ended_at and job.ended_at < cutoff:
                     job.delete()
                     server_logger.info(f"Cleaned up old failed job {job_id} for campaign {campaign_id}")
-                    combined_logger.info(
-                        f"Cleaned up old failed job {job_id} for campaign {campaign_id}",
-                        extra={
-                            'component': 'job_storage',
-                            'job_id': job_id,
-                            'job_type': job.func_name,
-                            'campaign_id': campaign_id
-                        }
-                    )
     except Exception as e:
-        server_logger.error(f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}")
-        combined_logger.error(
-            f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}",
-            extra={
-                'component': 'job_storage',
-                'campaign_id': campaign_id,
-                'error': str(e)
-            }
-        ) 
+        server_logger.error(f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}") 

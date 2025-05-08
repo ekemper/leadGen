@@ -16,13 +16,17 @@ def init_db(app, test_config=None):
     """Initialize the database with the Flask app"""
     if test_config is None:
         app.config['SQLALCHEMY_DATABASE_URI'] = get_db_url()
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-            'pool_size': 5,
-            'pool_timeout': 30,
-            'pool_recycle': 60,
-            'max_overflow': 2,
-            'pool_pre_ping': True,
-        }
+        # Only use connection pool settings for non-SQLite databases
+        if not app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite'):
+            app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+                'pool_size': 5,
+                'pool_timeout': 30,
+                'pool_recycle': 60,
+                'max_overflow': 2,
+                'pool_pre_ping': True,
+            }
+        else:
+            app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {}
     else:
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {}

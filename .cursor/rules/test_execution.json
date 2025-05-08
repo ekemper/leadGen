@@ -1,0 +1,40 @@
+{
+  "id": "test-execution-environment",
+  "description": "Ensure proper environment setup and command format for running tests",
+  "rules": [
+    {
+      "id": "test-env-variables",
+      "description": "Set required environment variables before running tests",
+      "severity": "error",
+      "details": {
+        "required_vars": {
+          "FLASK_ENV": "test",
+          "NEON_CONNECTION_STRING": "optional for tests (uses SQLite in-memory DB)"
+        },
+        "command_format": "FLASK_ENV=test python3 -m pytest <test_file_path> -v",
+        "example": "FLASK_ENV=test python3 -m pytest server/tests/test_campaigns.py -v"
+      }
+    },
+    {
+      "id": "test-database-config",
+      "description": "Ensure test database configuration is properly set",
+      "severity": "error",
+      "details": {
+        "config_check": "Verify database.py uses SQLite for tests",
+        "expected_behavior": "Tests should use in-memory SQLite database when FLASK_ENV=test"
+      }
+    },
+    {
+      "id": "test-isolation",
+      "description": "Maintain test isolation and cleanup",
+      "severity": "warning",
+      "details": {
+        "requirements": [
+          "Each test should run in isolation",
+          "Database should be reset between tests",
+          "No test should depend on state from other tests"
+        ]
+      }
+    }
+  ]
+} 
