@@ -31,17 +31,20 @@ export default function SignUpForm() {
         password,
         confirm_password: confirmPassword
       });
-      if (signupResponse && signupResponse.message) {
+      if (signupResponse && signupResponse.status === 'success') {
         // Auto-login after signup
         const loginResponse = await api.post('/api/auth/login', { email, password });
-        if (loginResponse && loginResponse.token) {
-          localStorage.setItem('token', loginResponse.token);
+        if (loginResponse && loginResponse.status === 'success' && loginResponse.data?.token) {
+          localStorage.setItem('token', loginResponse.data.token);
           navigate('/');
         } else {
-          setError('Signup successful, but automatic login failed. Please log in manually.');
+          setError(
+            loginResponse?.error?.message ||
+            (loginResponse?.data?.message ? `Signup successful, but automatic login failed: ${loginResponse.data.message}` : 'Signup successful, but automatic login failed. Please log in manually.')
+          );
         }
       } else {
-        setError(signupResponse.message || 'Invalid signup response from server');
+        setError(signupResponse?.error?.message || signupResponse?.data?.message || 'Invalid signup response from server');
       }
     } catch (err: any) {
       setError(err.message || 'Signup failed');

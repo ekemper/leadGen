@@ -24,7 +24,7 @@ import subprocess
 # Import seeding logic
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + '/../'))
 try:
-    from reset_migrate_seed import seed_database
+    from scripts.reset_migrate_seed import seed_database
     from server.app import create_app
     from server.config.database import db
 except ImportError:

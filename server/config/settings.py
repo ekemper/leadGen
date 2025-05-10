@@ -26,4 +26,4 @@ CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',')
 
 # Rate limiting
 RATELIMIT_DEFAULT = "200 per day;50 per hour"
-RATELIMIT_STORAGE_URL = os.getenv('REDIS_URL', 'memory://') 
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0') 

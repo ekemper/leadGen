@@ -1,6 +1,7 @@
 export {};
 
 import { api } from '../config/api';
+import { getAuthHeaders } from '../config/api';
 
 interface LogEntry {
   level: 'log' | 'info' | 'warn' | 'error';
@@ -46,12 +47,12 @@ class Logger {
   private originalXHR: typeof window.XMLHttpRequest;
   private logQueue: LogEntry[] = [];
   private isProcessing: boolean = false;
-  private readonly BATCH_SIZE = 50;
-  private readonly FLUSH_INTERVAL = 30000;
+  private readonly BATCH_SIZE = 1;
+  private readonly FLUSH_INTERVAL = 0;
   private readonly MAX_RETRIES = 5;
   private retryCount: number = 0;
   private lastFlushTime: number = 0;
-  private readonly MIN_FLUSH_INTERVAL = 10000;
+  private readonly MIN_FLUSH_INTERVAL = 0;
 
   private constructor() {
     // Store original methods
@@ -247,18 +248,19 @@ class Logger {
     // Add to queue
     this.logQueue.push(entry);
 
-    // Flush if queue is full
-    if (this.logQueue.length >= this.BATCH_SIZE) {
-      this.flushLogs();
-    }
+    // Immediately flush after each log
+    this.flushLogs();
   }
 
   private async flushLogs(): Promise<void> {
     if (this.isProcessing || this.logQueue.length === 0) return;
 
-    // Check if enough time has passed since last flush
-    const now = Date.now();
-    if (now - this.lastFlushTime < this.MIN_FLUSH_INTERVAL) {
+    // Prevent sending logs if no valid token is present
+    const authHeaders = getAuthHeaders();
+    if (!authHeaders['Authorization']) {
+      // No token, clear the queue and skip sending
+      this.logQueue = [];
+      this.isProcessing = false;
       return;
     }
 
@@ -274,11 +276,25 @@ class Logger {
         type: 'log'
       });
       this.retryCount = 0; // Reset retry count on success
-      this.lastFlushTime = now;
     } catch (error: any) {
+
+      // console.log('error', {error});
       // If sending fails, put logs back in queue
-      this.logQueue = [...logsToSend, ...this.logQueue];
-      
+      // this.logQueue = [...logsToSend, ...this.logQueue];
+      // --- RETRY LOGIC COMMENTED OUT BELOW ---
+      /*
+      // If already on login page, do not retry
+      const path = window.location.pathname;
+      if (
+        (error.message?.includes('401') ||
+         error.message?.toLowerCase().includes('token is missing') ||
+         error.message?.toLowerCase().includes('unauthorized')) &&
+        path === '/signin'
+      ) {
+        this.originalConsole.warn('Not retrying log send: already on login page.');
+        this.retryCount = 0;
+        return;
+      }
       // Check if it's a rate limit error
       if (error.message?.includes('429') || error.message?.includes('TOO MANY REQUESTS')) {
         // Double the wait time for rate limit errors
@@ -298,6 +314,8 @@ class Logger {
           this.retryCount = 0;
         }
       }
+      */
+      // --- END RETRY LOGIC COMMENTED OUT ---
     } finally {
       this.isProcessing = false;
     }

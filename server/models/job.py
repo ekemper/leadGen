@@ -37,28 +37,30 @@ class Job(db.Model):
                 'leads': list,
                 'total_count': int
             }
-        },
-        'VERIFY_EMAILS': {
-            'required_fields': ['verified_count', 'invalid_count'],
-            'result_schema': {
-                'verified_count': int,
-                'invalid_count': int
-            }
-        },
-        'ENRICH_LEADS': {
-            'required_fields': ['enriched_count', 'failed_count'],
-            'result_schema': {
-                'enriched_count': int,
-                'failed_count': int
-            }
-        },
-        'GENERATE_EMAILS': {
-            'required_fields': ['generated_count', 'failed_count'],
-            'result_schema': {
-                'generated_count': int,
-                'failed_count': int
-            }
         }
+        #TODO: Add back in when we have a way to verify emails
+        
+        # 'VERIFY_EMAILS': {
+        #     'required_fields': ['verified_count', 'invalid_count'],
+        #     'result_schema': {
+        #         'verified_count': int,
+        #         'invalid_count': int
+        #     }
+        # },
+        # 'ENRICH_LEADS': {
+        #     'required_fields': ['enriched_count', 'failed_count'],
+        #     'result_schema': {
+        #         'enriched_count': int,
+        #         'failed_count': int
+        #     }
+        # },
+        # 'GENERATE_EMAILS': {
+        #     'required_fields': ['generated_count', 'failed_count'],
+        #     'result_schema': {
+        #         'generated_count': int,
+        #         'failed_count': int
+        #     }
+        # }
     }
 
     campaign = db.relationship('Campaign', backref=db.backref('jobs', lazy=True))
@@ -98,46 +100,47 @@ class Job(db.Model):
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
+            # TODO: Add validation for each job type
             # Validate required fields based on job type
-            if job_type == 'FETCH_LEADS':
-                if 'leads' not in result:
-                    error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='leads')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
-                if not isinstance(result['leads'], list):
-                    error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='leads', expected='list')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+            # if job_type == 'FETCH_LEADS':
+            #     if 'leads' not in result:
+            #         error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='leads')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
+            #     if not isinstance(result['leads'], list):
+            #         error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='leads', expected='list')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
 
-            elif job_type == 'VERIFY_EMAILS':
-                if 'verified_emails' not in result:
-                    error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='verified_emails')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
-                if not isinstance(result['verified_emails'], list):
-                    error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='verified_emails', expected='list')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+            # elif job_type == 'VERIFY_EMAILS':
+            #     if 'verified_emails' not in result:
+            #         error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='verified_emails')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
+            #     if not isinstance(result['verified_emails'], list):
+            #         error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='verified_emails', expected='list')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
 
-            elif job_type == 'ENRICH_LEADS':
-                if 'enriched_leads' not in result:
-                    error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='enriched_leads')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
-                if not isinstance(result['enriched_leads'], list):
-                    error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='enriched_leads', expected='list')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+            # elif job_type == 'ENRICH_LEADS':
+            #     if 'enriched_leads' not in result:
+            #         error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='enriched_leads')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
+            #     if not isinstance(result['enriched_leads'], list):
+            #         error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='enriched_leads', expected='list')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
 
-            elif job_type == 'GENERATE_EMAILS':
-                if 'generated_emails' not in result:
-                    error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='generated_emails')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
-                if not isinstance(result['generated_emails'], list):
-                    error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='generated_emails', expected='list')
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+            # elif job_type == 'GENERATE_EMAILS':
+            #     if 'generated_emails' not in result:
+            #         error_msg = JOB_ERRORS['MISSING_REQUIRED_FIELD'].format(field='generated_emails')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
+            #     if not isinstance(result['generated_emails'], list):
+            #         error_msg = JOB_ERRORS['INVALID_FIELD_TYPE'].format(field='generated_emails', expected='list')
+            #         logger.error(error_msg)
+            #         raise ValueError(error_msg)
 
         except ValueError:
             raise

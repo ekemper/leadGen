@@ -11,26 +11,26 @@ class User(db.Model):
     id = db.Column(db.String(36), primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
-    password = db.Column(db.String(255), nullable=False)
+    # Store password as bytes for bcrypt compatibility
+    password = db.Column(db.LargeBinary, nullable=False)
     failed_attempts = db.Column(db.Integer, default=0)
     last_failed_attempt = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    def __init__(self, email: str, password: str, id: str = None, failed_attempts: int = 0):
+    def __init__(self, email: str, password: bytes, id: str = None, failed_attempts: int = 0):
         """
         Initialize a new user.
-        
         Args:
             email: User's email address
-            password: Hashed password
+            password: Hashed password (bytes)
             id: User's UUID (generated if not provided)
             failed_attempts: Number of failed login attempts
         """
         self.id = id or str(uuid.uuid4())
         self.email = email.lower()
         self.name = ""  # Assuming name is not provided in the constructor
-        self.password = password
+        self.password = password  # Should be bytes
         self.failed_attempts = failed_attempts
         self.last_failed_attempt = None
 

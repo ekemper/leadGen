@@ -65,9 +65,15 @@ const OrganizationsList: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get('/api/organizations');
-      setOrgs(data.data);
-      setShowCreateForm(data.data.length === 0);
+      const response = await api.get('/api/organizations');
+      if (response && response.status === 'success' && response.data && Array.isArray(response.data.organizations)) {
+        setOrgs(response.data.organizations);
+        setShowCreateForm(response.data.organizations.length === 0);
+      } else {
+        setOrgs([]);
+        setShowCreateForm(true);
+        setError(response?.error?.message || 'Failed to load organizations');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -136,6 +142,9 @@ const OrganizationsList: React.FC = () => {
     </form>
   );
 
+  // Ensure orgs is always an array
+  const safeOrgs = Array.isArray(orgs) ? orgs : [];
+
   return (
     <>
       <PageMeta
@@ -146,7 +155,7 @@ const OrganizationsList: React.FC = () => {
       <div className="space-y-5 sm:space-y-6">
         <ComponentCard title="Organizations">
           <div className="flex justify-between items-center mb-4">
-            {orgs.length > 0 && (
+            {safeOrgs.length > 0 && (
               <Button
                 variant="primary"
                 onClick={() => setShowCreateForm(!showCreateForm)}
@@ -162,7 +171,7 @@ const OrganizationsList: React.FC = () => {
             <div className="text-red-500">{error}</div>
           ) : (
             <>
-              {orgs.length === 0 ? (
+              {safeOrgs.length === 0 ? (
                 <div className="text-center">
                   <h2 className="text-xl text-gray-400 mb-8">There are no organizations yet - please create one!</h2>
                   {renderCreateForm()}
@@ -196,7 +205,7 @@ const OrganizationsList: React.FC = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                          {orgs.map((org) => (
+                          {safeOrgs.map((org) => (
                             <TableRow key={org.id}>
                               <TableCell className="px-5 py-4 sm:px-6 text-start">
                                 <Link to={`/organizations/${org.id}`} className="font-medium text-black dark:text-white hover:text-blue-500 dark:hover:text-blue-400">

@@ -24,13 +24,12 @@ export default function SignInForm() {
     
     try {
       const response = await api.post('/api/auth/login', { email, password });
-      
-      if (response && response.token) {
-        localStorage.setItem('token', response.token);
+      if (response && response.status === 'success' && response.data?.token) {
+        localStorage.setItem('token', response.data.token);
         const from = (location.state as any)?.from?.pathname || '/dashboard';
         navigate(from, { replace: true });
       } else {
-        setError('Invalid login response from server');
+        setError(response?.error?.message || response?.data?.message || 'Invalid login response from server');
       }
     } catch (err: any) {
       setError(err.message || 'Login failed');

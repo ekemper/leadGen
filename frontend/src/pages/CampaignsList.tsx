@@ -99,14 +99,14 @@ const CampaignsList: React.FC = () => {
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    organization_id: '',
+    searchUrl: "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing",
     count: 10,
     excludeGuessedEmails: true,
     excludeNoEmails: false,
-    getEmails: true,
-    searchUrl: "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing",
-    name: '',
-    description: '',
-    organization_id: ''
+    getEmails: true
   });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [createLoading, setCreateLoading] = useState(false);
@@ -123,15 +123,17 @@ const CampaignsList: React.FC = () => {
     try {
       const response = await api.get('/api/organizations');
       console.log('Organizations API response:', response);
-      if (response && response.data) {
-        setOrganizations(response.data);
+      if (response && response.data && Array.isArray(response.data.organizations)) {
+        setOrganizations(response.data.organizations);
       } else {
         console.error('Unexpected API response structure:', response);
+        setOrganizations([]);
         setOrgsError('Failed to load organizations: Unexpected response format');
       }
     } catch (err: any) {
       console.error('Error fetching organizations:', err);
       setOrgsError(err.message || 'Failed to load organizations');
+      setOrganizations([]);
     } finally {
       setOrgsLoading(false);
     }
@@ -139,27 +141,21 @@ const CampaignsList: React.FC = () => {
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
-    
     if (!formData.searchUrl.trim()) {
       errors.searchUrl = 'Search URL is required';
     }
-    
     if (!formData.count || formData.count < 1) {
       errors.count = 'Count must be at least 1';
     }
-
     if (!formData.name.trim()) {
       errors.name = 'Name is required';
     }
-    
     if (!formData.description.trim()) {
       errors.description = 'Description is required';
     }
-
     if (!formData.organization_id) {
       errors.organization_id = 'Organization is required';
     }
-
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -169,9 +165,14 @@ const CampaignsList: React.FC = () => {
     setError(null);
     try {
       const response = await api.get('/api/campaigns');
-      setCampaigns(response.data);
-      // Show create form if no campaigns exist
-      setShowCreateForm(response.data.length === 0);
+      if (response && response.status === 'success' && response.data && Array.isArray(response.data.campaigns)) {
+        setCampaigns(response.data.campaigns);
+        setShowCreateForm(response.data.campaigns.length === 0);
+      } else {
+        setCampaigns([]);
+        setShowCreateForm(true);
+        setError(response?.error?.message || 'Failed to load campaigns');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -194,11 +195,9 @@ const CampaignsList: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!validateForm()) {
       return;
     }
-
     setCreateError(null);
     setCreateLoading(true);
     try {
@@ -275,10 +274,64 @@ const CampaignsList: React.FC = () => {
           <p className="mt-1 text-sm text-red-500">{formErrors.description}</p>
         )}
       </div>
+      <div>
+        <Label htmlFor="searchUrl">Search URL</Label>
+        <Input
+          id="searchUrl"
+          name="searchUrl"
+          type="text"
+          value={formData.searchUrl}
+          onChange={handleChange}
+          disabled={createLoading}
+          error={!!formErrors.searchUrl}
+          hint={formErrors.searchUrl}
+        />
+      </div>
+      <div>
+        <Label htmlFor="count">Number of Leads</Label>
+        <Input
+          id="count"
+          name="count"
+          type="number"
+          value={formData.count}
+          onChange={handleChange}
+          min="1"
+          max="100"
+          disabled={createLoading}
+          error={!!formErrors.count}
+          hint={formErrors.count}
+        />
+      </div>
+      <div className="space-y-2">
+        <Checkbox
+          id="excludeGuessedEmails"
+          name="excludeGuessedEmails"
+          checked={formData.excludeGuessedEmails}
+          onChange={handleChange}
+          label="Exclude Guessed Emails"
+          disabled={createLoading}
+        />
+        <Checkbox
+          id="excludeNoEmails"
+          name="excludeNoEmails"
+          checked={formData.excludeNoEmails}
+          onChange={handleChange}
+          label="Exclude Leads Without Emails"
+          disabled={createLoading}
+        />
+        <Checkbox
+          id="getEmails"
+          name="getEmails"
+          checked={formData.getEmails}
+          onChange={handleChange}
+          label="Fetch Emails"
+          disabled={createLoading}
+        />
+      </div>
       {createError && <div className="text-red-500">{createError}</div>}
       <Button
         variant="primary"
-        disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id}
+        disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id || !formData.searchUrl.trim() || !formData.count}
       >
         {createLoading ? 'Creating...' : 'Create Campaign'}
       </Button>

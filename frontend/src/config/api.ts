@@ -31,7 +31,7 @@ function handleAuthError(response: Response) {
     }
 }
 
-function getAuthHeaders(): Record<string, string> {
+export function getAuthHeaders(): Record<string, string> {
     const token = localStorage.getItem('token');
     if (!token) {
         return {};
@@ -89,22 +89,37 @@ export const api = {
         return responseData;
     },
     
-    post: async (endpoint: string, data: any) => {
-        const headers = withRequestId(getAuthHeaders());
+    post: async (endpoint: string, data?: any) => {
+        // Distinct logging for login requests
+        if (endpoint.includes('/auth/login')) {
+            console.log('[LOGIN REQUEST] endpoint:', endpoint);
+            console.log('[LOGIN REQUEST] headers:', {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders(),
+            });
+            console.log('[LOGIN REQUEST] body:', data);
+        }
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            ...defaultOptions,
             method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders(),
+            } as HeadersInit,
             body: JSON.stringify(data),
-            headers,
         });
         handleAuthError(response);
         const responseData = await response.json();
-        
         if (!response.ok) {
-            const errorMessage = responseData.error?.message || responseData.message || `HTTP error! status: ${response.status}`;
+            let errorMessage = '';
+            if (typeof responseData.error === 'string') {
+                errorMessage = responseData.error;
+            } else if (responseData.error && typeof responseData.error === 'object') {
+                errorMessage = responseData.error.message || JSON.stringify(responseData.error);
+            } else {
+                errorMessage = responseData.message || `HTTP error! status: ${response.status}`;
+            }
             throw new Error(errorMessage);
         }
-        
         return responseData;
     },
 

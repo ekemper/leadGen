@@ -30,18 +30,20 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       password: loginPassword
     });
 
-    console.log('Login response:', loginResponse);
-
-    if (loginResponse && loginResponse.token) {
+    if (loginResponse && loginResponse.status === 'success' && loginResponse.data?.token) {
       // Clear form
       setEmail('');
       setPassword('');
       setConfirmPassword('');
       
       // Update auth state - this will trigger redirection in App.tsx
-      onAuthSuccess(loginResponse.token);
+      onAuthSuccess(loginResponse.data.token);
     } else {
-      throw new Error('Invalid login response from server');
+      throw new Error(
+        loginResponse?.error?.message ||
+        loginResponse?.data?.message ||
+        'Invalid login response from server'
+      );
     }
   };
 
@@ -66,9 +68,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           confirm_password: confirmPassword
         });
 
-        if (signupResponse && signupResponse.message) {
-          setSuccessMessage(signupResponse.message);
-          
+        if (signupResponse && signupResponse.status === 'success') {
+          setSuccessMessage(signupResponse.data?.message);
           // Automatically log in after successful signup
           try {
             await handleLogin(email, password);
@@ -79,7 +80,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             setConfirmPassword('');
           }
         } else {
-          setError('Invalid signup response from server');
+          setError(signupResponse?.error?.message || signupResponse?.data?.message || 'Invalid signup response from server');
         }
       } else {
         // Handle Login

@@ -100,14 +100,24 @@ def seed_database(app):
                 description="A sample campaign targeting SEO professionals",
                 organization_id=default_org.id,
                 status=CampaignStatus.CREATED,
-                status_message="Campaign created and ready to start"
+                status_message="Campaign created and ready to start",
+                searchUrl="https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States",
+                count=10,
+                excludeGuessedEmails=True,
+                excludeNoEmails=True,
+                getEmails=True
             )
             campaign2 = Campaign(
                 name="Sample Marketing Campaign",
                 description="A sample campaign targeting marketing professionals",
                 organization_id=default_org.id,
                 status=CampaignStatus.COMPLETED,
-                status_message="Campaign completed successfully"
+                status_message="Campaign completed successfully",
+                searchUrl="https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States",
+                count=20,
+                excludeGuessedEmails=False,
+                excludeNoEmails=False,
+                getEmails=True
             )
             db.session.add_all([campaign1, campaign2])
             db.session.flush()
@@ -116,40 +126,40 @@ def seed_database(app):
             now = datetime.utcnow()
             jobs = [
                 Job(
+                    id=str(uuid.uuid4()),
                     campaign_id=campaign1.id,
                     job_type="fetch_leads",
                     status="completed",
                     result={"leads_fetched": 100},
                     started_at=now - timedelta(minutes=10),
-                    ended_at=now - timedelta(minutes=9),
-                    execution_time=60.0
+                    completed_at=now - timedelta(minutes=9)
                 ),
                 Job(
+                    id=str(uuid.uuid4()),
                     campaign_id=campaign1.id,
                     job_type="enrich_leads",
                     status="completed",
                     result={"enriched": 100},
                     started_at=now - timedelta(minutes=8),
-                    ended_at=now - timedelta(minutes=7),
-                    execution_time=60.0
+                    completed_at=now - timedelta(minutes=7)
                 ),
                 Job(
+                    id=str(uuid.uuid4()),
                     campaign_id=campaign2.id,
                     job_type="fetch_leads",
                     status="completed",
                     result={"leads_fetched": 200},
                     started_at=now - timedelta(minutes=20),
-                    ended_at=now - timedelta(minutes=19),
-                    execution_time=60.0
+                    completed_at=now - timedelta(minutes=19)
                 ),
                 Job(
+                    id=str(uuid.uuid4()),
                     campaign_id=campaign2.id,
                     job_type="enrich_leads",
                     status="completed",
                     result={"enriched": 200},
                     started_at=now - timedelta(minutes=18),
-                    ended_at=now - timedelta(minutes=17),
-                    execution_time=60.0
+                    completed_at=now - timedelta(minutes=17)
                 ),
             ]
             db.session.add_all(jobs)
@@ -160,15 +170,13 @@ def seed_database(app):
             for i, campaign in enumerate([campaign1, campaign2], start=1):
                 for j in range(1, 4):
                     lead = Lead(
-                        name=f"Lead {i}-{j}",
+                        first_name=f"Lead{i}-{j}",
+                        last_name="Seed",
                         email=f"lead{i}{j}@example.com",
-                        company_name=f"Company {i}-{j}",
+                        company=f"Company {i}-{j}",
                         phone=f"555-000{i}{j}",
-                        status="new",
-                        source="apollo",
-                        notes=f"Seeded lead {i}-{j}",
                         campaign_id=campaign.id,
-                        raw_lead_data={"source": "seed", "index": j}
+                        raw_data={"source": "seed", "index": j}
                     )
                     leads.append(lead)
             db.session.add_all(leads)

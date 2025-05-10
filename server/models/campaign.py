@@ -26,6 +26,11 @@ class Campaign(db.Model):
     status_error = db.Column(db.Text, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     failed_at = db.Column(db.DateTime, nullable=True)
+    searchUrl = db.Column(db.Text, nullable=False)
+    count = db.Column(db.Integer, nullable=False)
+    excludeGuessedEmails = db.Column(db.Boolean, nullable=False, default=True)
+    excludeNoEmails = db.Column(db.Boolean, nullable=False, default=True)
+    getEmails = db.Column(db.Boolean, nullable=False, default=True)
 
     # Define valid status transitions
     VALID_TRANSITIONS = {
@@ -59,7 +64,7 @@ class Campaign(db.Model):
     }
 
     def __init__(self, name=None, description=None, organization_id=None, id=None, created_at=None, status=None, 
-                 status_message=None, status_error=None):
+                 status_message=None, status_error=None, searchUrl=None, count=None, excludeGuessedEmails=True, excludeNoEmails=True, getEmails=True):
         self.id = id or str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -69,6 +74,11 @@ class Campaign(db.Model):
         self.status_message = status_message
         self.status_error = status_error
         self.updated_at = datetime.utcnow()
+        self.searchUrl = searchUrl
+        self.count = count
+        self.excludeGuessedEmails = excludeGuessedEmails
+        self.excludeNoEmails = excludeNoEmails
+        self.getEmails = getEmails
 
     def is_valid_transition(self, new_status: str) -> bool:
         """Check if status transition is valid."""
@@ -100,7 +110,13 @@ class Campaign(db.Model):
             'description': self.description,
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'organization_id': self.organization_id,
+            'searchUrl': self.searchUrl,
+            'count': self.count,
+            'excludeGuessedEmails': self.excludeGuessedEmails,
+            'excludeNoEmails': self.excludeNoEmails,
+            'getEmails': self.getEmails
         }
 
     def __repr__(self):

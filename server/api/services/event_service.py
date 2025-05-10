@@ -52,7 +52,7 @@ class EventService:
             for log in logs:
                 log_data = {
                     'level': log['level'],
-                    'message': log['message'],  # Use message directly
+                    'console_message': log['message'],  # Renamed from 'message'
                     'data': log.get('data', []),
                     'timestamp': log['timestamp'],
                     'source': 'browser'  # Use source instead of component

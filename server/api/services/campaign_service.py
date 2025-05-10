@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import logging
 import re
 from server.api.schemas import CampaignSchema, CampaignCreateSchema, CampaignStartSchema, JobSchema
+from server.tasks import enqueue_fetch_and_save_leads
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,9 @@ class CampaignService:
     def create_campaign(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new campaign."""
         try:
+            # Set default searchUrl if not provided
+            if 'searchUrl' not in data or not data['searchUrl']:
+                data['searchUrl'] = "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing"
             # Validate input data
             errors = CampaignCreateSchema().validate(data)
             if errors:
@@ -118,7 +122,13 @@ class CampaignService:
             campaign = Campaign(
                 name=data['name'],
                 description=data.get('description', ''),
-                status=CampaignStatus.CREATED
+                organization_id=data.get('organization_id'),
+                status=CampaignStatus.CREATED,
+                searchUrl=data['searchUrl'],
+                count=data['count'],
+                excludeGuessedEmails=data['excludeGuessedEmails'],
+                excludeNoEmails=data['excludeNoEmails'],
+                getEmails=data['getEmails']
             )
             
             db.session.add(campaign)
@@ -184,74 +194,87 @@ class CampaignService:
             raise ValueError("Job result must be a dictionary")
         return True
 
-    def start_campaign(self, campaign_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Start a campaign with the given parameters."""
+    def start_campaign(self, campaign_id: str) -> Dict[str, Any]:
+        """Start a campaign."""
         try:
-            # Validate input data
-            errors = CampaignStartSchema().validate(params)
-            if errors:
-                raise ValueError(f"Invalid campaign parameters: {errors}")
-                
+            logger.info(f"Starting campaign process for campaign_id={campaign_id}")
+
             campaign = Campaign.query.get(campaign_id)
             if not campaign:
+                logger.error(f"Campaign {campaign_id} not found during start.")
                 raise ValueError(f"Campaign {campaign_id} not found")
-                
+
             if campaign.status != CampaignStatus.CREATED:
+                logger.error(f"Cannot start campaign {campaign_id} in status {campaign.status}")
                 raise ValueError(f"Cannot start campaign in {campaign.status} status")
-                
-            search_url = params['searchUrl']
-            count = params['count']
-            
+
+            # Use campaign's stored fields
+            search_url = campaign.searchUrl
+            count = campaign.count
+            exclude_guessed_emails = campaign.excludeGuessedEmails
+            exclude_no_emails = campaign.excludeNoEmails
+            get_emails = campaign.getEmails
+
             # Validate search URL
-            if not search_url.startswith('https://app.apollo.io/search'):
+            if not (search_url.startswith('https://app.apollo.io/search') or search_url.startswith('https://app.apollo.io/#/people')):
+                logger.error(f"Invalid Apollo.io search URL: {search_url}")
                 raise ValueError("Invalid Apollo.io search URL")
-                
+
             try:
                 # Update campaign status to FETCHING_LEADS
                 campaign.update_status(CampaignStatus.FETCHING_LEADS)
-                
-                logger.info("Creating and enqueueing jobs")
-                
+                logger.info(f"Campaign {campaign_id} status updated to FETCHING_LEADS")
+
+                job_params = {
+                    'searchUrl': search_url,
+                    'count': count,
+                    'excludeGuessedEmails': exclude_guessed_emails,
+                    'excludeNoEmails': exclude_no_emails,
+                    'getEmails': get_emails
+                }
+                logger.info(f"Creating fetch_leads job for campaign {campaign_id} with params: {job_params}")
+
                 # Create fetch leads job
                 fetch_leads_job = Job.create(
                     campaign_id=campaign_id,
                     job_type='FETCH_LEADS',
-                    parameters={
-                        'searchUrl': search_url,
-                        'count': count,
-                        'excludeGuessedEmails': params.get('excludeGuessedEmails', True),
-                        'excludeNoEmails': params.get('excludeNoEmails', False),
-                        'getEmails': params.get('getEmails', True)
-                    }
+                    parameters=job_params
                 )
-                
+                logger.info(f"Created fetch_leads job with id={fetch_leads_job.id} for campaign {campaign_id}")
+
                 # Validate job data
                 job_dict = fetch_leads_job.to_dict()
                 errors = JobSchema().validate(job_dict)
                 if errors:
+                    logger.error(f"Invalid job data for job {fetch_leads_job.id}: {errors}")
                     raise ValueError(f"Invalid job data: {errors}")
-                
+
                 # Commit transaction
                 db.session.commit()
-                
-                # Return campaign data
+
+                # Enqueue Apollo scraping and lead saving as a background job
+                logger.info(f"Enqueuing fetch_and_save_leads_task for campaign {campaign_id}")
+                enqueue_fetch_and_save_leads(job_params, campaign_id)
+
+                # Return campaign data immediately
                 campaign_dict = campaign.to_dict()
                 # Validate campaign data
                 errors = CampaignSchema().validate(campaign_dict)
                 if errors:
+                    logger.error(f"Invalid campaign data after enqueuing fetch leads for campaign {campaign_id}: {errors}")
                     raise ValueError(f"Invalid campaign data: {errors}")
-                    
+
                 return campaign_dict
-                
+
             except Exception as e:
-                logger.error(f"Error starting campaign: {str(e)}")
+                logger.error(f"Error starting campaign {campaign_id}: {str(e)}", exc_info=True)
                 db.session.rollback()
                 campaign.update_status(CampaignStatus.FAILED, error_message=str(e))
                 db.session.commit()
                 raise
-                
+
         except Exception as e:
-            logger.error(f"Error starting campaign: {str(e)}")
+            logger.error(f"Error starting campaign (outer): {str(e)}", exc_info=True)
             raise
 
     def handle_job_completion(self, job_id: str, result: Dict[str, Any]) -> None:
@@ -330,29 +353,6 @@ class CampaignService:
             db.session.rollback()
             raise
 
-    def create_campaign_with_leads(self, params):
-        """Create a campaign and immediately start the lead generation process."""
-        try:
-            server_logger.info('Creating and starting new campaign')
-            server_logger.debug(f'Parameters: {params}')
-            self._ensure_transaction()
-            
-            # Create the campaign first
-            campaign_data = self.create_campaign({
-                'name': params.get('name'),
-                'description': params.get('description', '')
-            })
-            server_logger.info(f'Created campaign {campaign_data["id"]}')
-            
-            # Start the campaign with the search parameters
-            result = self.start_campaign(campaign_data['id'], params)
-            server_logger.info(f'Started campaign {campaign_data["id"]}')
-            
-            return result
-        except Exception as e:
-            server_logger.error(f'Error creating campaign with leads: {str(e)}', exc_info=True)
-            db.session.rollback()
-            raise
 
     def cleanup_campaign_jobs(self, campaign_id: str, days: int) -> Dict[str, Any]:
         """Clean up old jobs for a campaign."""

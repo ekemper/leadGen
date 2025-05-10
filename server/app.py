@@ -41,7 +41,6 @@ def create_app(test_config=None):
                  "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],
                  "expose_headers": ["Content-Type", "Authorization", "X-Request-ID"],
                  "supports_credentials": True,
-                 "allow_credentials": True,
                  "max_age": 3600
              }
          })
@@ -60,11 +59,13 @@ def create_app(test_config=None):
             response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization, X-Request-ID'
         return response
     
-    # Configure rate limiting
+    # Configure rate limiting (single source of truth)
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"]
+        default_limits=["200 per day", "50 per hour"],
+        storage_uri=app.config.get('REDIS_URL', 'redis://localhost:6379/0'),
+        strategy="moving-window"
     )
     
     # Initialize database
@@ -78,6 +79,13 @@ def create_app(test_config=None):
     # Register blueprints
     api_blueprint = create_api_blueprint()
     app.register_blueprint(api_blueprint, url_prefix='/api')
+    
+    # Decorate /api/events with a higher limit
+    from flask import Blueprint
+    for rule in app.url_map.iter_rules():
+        if rule.rule == '/api/events' and 'POST' in rule.methods:
+            view_func = app.view_functions[rule.endpoint]
+            app.view_functions[rule.endpoint] = limiter.limit("1000 per hour")(view_func)
     
     # Register error handlers
     @app.errorhandler(HTTPException)
@@ -161,4 +169,4 @@ if __name__ == '__main__':
         app.config['SESSION_COOKIE_HTTPONLY'] = True
         app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
     
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5001))) 
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5001)), use_reloader=True) 

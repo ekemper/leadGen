@@ -6,6 +6,7 @@ from server.api.schemas import (
     CampaignSchema, CampaignCreateSchema, CampaignStartSchema,
     JobSchema, LeadSchema, AuthSchema, LoginSchema, TokenSchema, UserSchema
 )
+from apispec.exceptions import DuplicateComponentNameError
 
 def create_spec():
     """Create and configure the OpenAPI specification."""
@@ -30,7 +31,10 @@ def create_spec():
     spec.components.schema("Campaign", schema=CampaignSchema)
     spec.components.schema("CampaignCreate", schema=CampaignCreateSchema)
     spec.components.schema("CampaignStart", schema=CampaignStartSchema)
-    spec.components.schema("Job", schema=JobSchema)
+    try:
+        spec.components.schema("Job", schema=JobSchema)
+    except DuplicateComponentNameError:
+        pass
     spec.components.schema("Lead", schema=LeadSchema)
     spec.components.schema("Auth", schema=AuthSchema)
     spec.components.schema("Login", schema=LoginSchema)
