@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from server.utils.logging_config import server_logger
 from server.models import Campaign
 from server.models.campaign import CampaignStatus
+import random
+import time
 
 class ApolloService:
     """Service for interacting with the Apollo API."""
@@ -19,15 +21,41 @@ class ApolloService:
             raise ValueError("APIFY_API_TOKEN environment variable is not set")
         self.base_url = "https://api.apify.com/v2/acts/supreme_coder~apollo-scraper"
 
+    def _save_leads_to_db(self, leads_data: List[Dict[str, Any]], campaign_id: str) -> int:
+        """
+        Helper to save leads to the database session and commit.
+        Returns the number of leads created.
+        """
+        created_count = 0
+        for result in leads_data:
+            try:
+                server_logger.debug(f"Processing lead result: {result}", extra={'component': 'server'})
+                lead = Lead(
+                    first_name=result.get('first_name', ''),
+                    last_name=result.get('last_name', ''),
+                    email=result.get('email', ''),
+                    phone=result.get('phone', ''),
+                    company=result.get('company', ''),
+                    title=result.get('title', ''),
+                    linkedin_url=result.get('linkedin_url', ''),
+                    source_url=result.get('source_url', ''),
+                    raw_data=result.get('raw_data', {}),
+                    campaign_id=campaign_id
+                )
+                db.session.add(lead)
+                created_count += 1
+            except Exception as e:
+                error_msg = f"Error saving lead: {str(e)}"
+                server_logger.error(error_msg, extra={'component': 'server'})
+        db.session.commit()
+        return created_count
 
     def fetch_leads(self, params: Dict[str, Any], campaign_id: str) -> Dict[str, Any]:
         """
         Fetch leads from Apollo and save them to the database.
-        
         Args:
             params: Parameters for the Apollo API
             campaign_id: ID of the campaign to associate leads with
-            
         Returns:
             Dict containing the count of created leads and any errors
         """
@@ -56,31 +84,17 @@ class ApolloService:
             results = self._wait_for_completion(run_id)
             server_logger.info(f"[AFTER _wait_for_completion] got {len(results)} results", extra={'component': 'server'})
             
-            # Process and save leads
-            created_count = 0
+            # Process and save leads using helper
             errors = []
+            try:
+                created_count = self._save_leads_to_db(results, campaign_id)
+            except Exception as e:
+                error_msg = f"Error saving leads: {str(e)}"
+                server_logger.error(error_msg, extra={'component': 'server'})
+                errors.append(error_msg)
+                created_count = 0
             
-            for result in results:
-                try:
-                    server_logger.debug(f"Processing lead result: {result}", extra={'component': 'server'})
-                    lead = Lead(
-                        name=result.get('name', ''),
-                        email=result.get('email', ''),
-                        company_name=result.get('company', ''),
-                        phone=result.get('phone', ''),
-                        campaign_id=campaign_id,
-                        raw_lead_data=result
-                    )
-                    db.session.add(lead)
-                    created_count += 1
-                except Exception as e:
-                    error_msg = f"Error saving lead: {str(e)}"
-                    server_logger.error(error_msg, extra={'component': 'server'})
-                    errors.append(error_msg)
-            
-            server_logger.info(f"[BEFORE db.session.commit] created_count={created_count}", extra={'component': 'server'})
-            db.session.commit()
-            server_logger.info(f"[AFTER db.session.commit]", extra={'component': 'server'})
+            server_logger.info(f"[AFTER _save_leads_to_db] created_count={created_count}", extra={'component': 'server'})
             
             # Update campaign status
             server_logger.info(f"[BEFORE campaign.update_status]", extra={'component': 'server'})

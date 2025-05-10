@@ -179,7 +179,7 @@ class Campaign(db.Model):
                 logger.info("All jobs completed successfully")
                 self.update_status(
                     CampaignStatus.COMPLETED,
-                    message="All jobs completed successfully"
+                    error_message=None
                 )
                 return
 
@@ -207,7 +207,7 @@ class Campaign(db.Model):
             if self.is_valid_transition(next_status):
                 self.update_status(
                     next_status,
-                    message=f"Successfully completed {job_type}"
+                    error_message=None
                 )
                 logger.info(f"Successfully updated campaign status to {next_status}")
             else:
