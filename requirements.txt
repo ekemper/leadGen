@@ -22,3 +22,4 @@ apispec>=6.3.0
 apispec-webframeworks>=0.5.2
 marshmallow>=3.20.1 
 rq-dashboard
+apify-client>=1.6.0
