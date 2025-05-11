@@ -40,7 +40,7 @@ class EmailVerifierService:
                 'error': str(e)
             }
 
-    def verify_emails_for_campaign(self, campaign_id: str) -> int:
+    # def verify_emails_for_campaign(self, campaign_id: str) -> int:
         """
         Verify all email addresses for leads in a campaign.
         

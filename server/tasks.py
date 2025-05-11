@@ -24,7 +24,7 @@ def handle_task_error(campaign_id, error, job_type):
             server_logger.error(f"Error in {job_type} for campaign {campaign_id}: {str(error)}")
             campaign = Campaign.query.get(campaign_id)
             if campaign:
-                campaign.handle_job_status_update(job_type, 'FAILED', error=str(error))
+                campaign.update_status(CampaignStatus.FAILED, error_message=str(error))
             # Update job status if job exists
             job = Job.query.filter_by(campaign_id=campaign_id, job_type=job_type.upper()).order_by(Job.created_at.desc()).first()
             if job:
@@ -56,11 +56,18 @@ def fetch_and_save_leads_task(params, campaign_id):
             # Mark job as completed
             job.update_status(JobStatus.COMPLETED)
 
-            # Let campaign handle its own status update
-            campaign.handle_job_status_update('FETCH_LEADS', 'COMPLETED')
+            # Update campaign status directly
+            campaign.update_status(CampaignStatus.COMPLETED)
 
             server_logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
-            return result
+
+            # Enqueue email verification job for each lead
+            from server.models.lead import Lead
+            leads = Lead.query.filter_by(campaign_id=campaign_id).all()
+            for lead in leads:
+                enqueue_lead_email_verification(lead.id)
+
+            return campaign_id  # Return campaign_id for chaining
         except Exception as e:
             handle_task_error(campaign_id, e, 'FETCH_LEADS')
             raise
@@ -104,4 +111,36 @@ def enqueue_email_generation(params, depends_on=None):
 
 def email_generation_task(params):
     pass  # Commented out for testing fetch only
+
+def lead_email_verification_task(lead_id):
+    """Verify the email for a single lead and save the result."""
+    from server.app import create_app
+    flask_app = create_app()
+    with flask_app.app_context():
+        from server.models.lead import Lead
+        lead = Lead.query.get(lead_id)
+        if not lead:
+            server_logger.error(f"Lead {lead_id} not found for email verification task.")
+            return
+        try:
+            server_logger.info(f"Starting email verification for lead {lead_id} with email: {lead.email}")
+            result = EmailVerifierService().verify_email(lead.email)
+            server_logger.info(f"Verification result for lead {lead_id}: {result}")
+            lead.email_verification = result
+            db.session.commit()
+            server_logger.info(f"Email verification complete and saved for lead {lead_id}")
+        except Exception as e:
+            server_logger.error(f"Error verifying email for lead {lead_id}: {str(e)}")
+            db.session.rollback()
+
+def enqueue_lead_email_verification(lead_id):
+    """Enqueue the email verification task for a single lead."""
+    queue = get_queue()
+    job = queue.enqueue(
+        lead_email_verification_task,
+        args=(lead_id,),
+        job_timeout=QUEUE_CONFIG['default']['job_timeout'],
+        retry=Retry(max=QUEUE_CONFIG['default']['max_retries'])
+    )
+    return job
 

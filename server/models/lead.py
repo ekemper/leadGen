@@ -20,6 +20,8 @@ class Lead(db.Model):
     linkedin_url = db.Column(db.String(255))
     source_url = db.Column(db.String(255))
     raw_data = db.Column(db.JSON)
+    email_verification = db.Column(db.JSON, nullable=True)
+    enrichment_results = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -37,6 +39,8 @@ class Lead(db.Model):
             'linkedin_url': self.linkedin_url,
             'source_url': self.source_url,
             'raw_data': self.raw_data,
+            'email_verification': self.email_verification,
+            'enrichment_results': self.enrichment_results,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

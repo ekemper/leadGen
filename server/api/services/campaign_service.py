@@ -323,7 +323,10 @@ class CampaignService:
                     job.execution_time = (job.ended_at - job.started_at).total_seconds()
                 
                 # Update campaign status based on job type
-                campaign.handle_job_status_update(job.job_type, job.status)
+                if job.status == 'COMPLETED':
+                    campaign.update_status(CampaignStatus.COMPLETED)
+                elif job.status == 'FAILED':
+                    campaign.update_status(CampaignStatus.FAILED, error_message=job.error)
                 
                 # Commit the transaction
                 db.session.commit()

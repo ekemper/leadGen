@@ -32,35 +32,12 @@ class Campaign(db.Model):
     excludeNoEmails = db.Column(db.Boolean, nullable=False, default=True)
     getEmails = db.Column(db.Boolean, nullable=False, default=True)
 
-    # Define valid status transitions
+    # Define valid status transitions (simplified)
     VALID_TRANSITIONS = {
-        CampaignStatus.CREATED: [CampaignStatus.FETCHING_LEADS],
-        CampaignStatus.FETCHING_LEADS: [CampaignStatus.VERIFYING_EMAILS, CampaignStatus.FAILED],
-        CampaignStatus.VERIFYING_EMAILS: [CampaignStatus.ENRICHING_LEADS, CampaignStatus.FAILED],
-        CampaignStatus.ENRICHING_LEADS: [CampaignStatus.GENERATING_EMAILS, CampaignStatus.FAILED],
-        CampaignStatus.GENERATING_EMAILS: [CampaignStatus.COMPLETED, CampaignStatus.FAILED],
+        CampaignStatus.CREATED: [CampaignStatus.FETCHING_LEADS, CampaignStatus.FAILED],
+        CampaignStatus.FETCHING_LEADS: [CampaignStatus.COMPLETED, CampaignStatus.FAILED],
         CampaignStatus.COMPLETED: [],
         CampaignStatus.FAILED: []
-    }
-
-    # Define job type to status mapping
-    JOB_STATUS_MAP = {
-        'FETCH_LEADS': {
-            'COMPLETED': CampaignStatus.VERIFYING_EMAILS,
-            'FAILED': CampaignStatus.FAILED
-        },
-        'VERIFY_EMAILS': {
-            'COMPLETED': CampaignStatus.ENRICHING_LEADS,
-            'FAILED': CampaignStatus.FAILED
-        },
-        'ENRICH_LEADS': {
-            'COMPLETED': CampaignStatus.GENERATING_EMAILS,
-            'FAILED': CampaignStatus.FAILED
-        },
-        'GENERATE_EMAILS': {
-            'COMPLETED': CampaignStatus.COMPLETED,
-            'FAILED': CampaignStatus.FAILED
-        }
     }
 
     def __init__(self, name=None, description=None, organization_id=None, id=None, created_at=None, status=None, 
@@ -81,26 +58,19 @@ class Campaign(db.Model):
         self.getEmails = getEmails
 
     def is_valid_transition(self, new_status: str) -> bool:
-        """Check if status transition is valid."""
-        logger.info(f"Checking status transition from {self.status} to {new_status}")
-        
-        if self.status not in self.VALID_TRANSITIONS:
-            logger.error(f"Invalid current status: {self.status}")
-            return False
-            
-        if new_status not in self.VALID_TRANSITIONS[self.status]:
-            logger.error(f"Invalid transition from {self.status} to {new_status}")
-            return False
-        
-        return True
+        """Check if status transition is valid (simplified)."""
+        return new_status in self.VALID_TRANSITIONS.get(self.status, [])
 
     def update_status(self, status: CampaignStatus, error_message: str = None) -> None:
-        """Update campaign status."""
-        self.status = status
-        if error_message:
-            self.status_error = error_message
-        self.updated_at = datetime.utcnow()
-        db.session.commit()
+        """Update campaign status (simplified)."""
+        if self.is_valid_transition(status):
+            self.status = status
+            if error_message:
+                self.status_error = error_message
+            self.updated_at = datetime.utcnow()
+            db.session.commit()
+        else:
+            logger.error(f"Invalid status transition from {self.status} to {status}")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert campaign to dictionary."""
@@ -120,110 +90,4 @@ class Campaign(db.Model):
         }
 
     def __repr__(self):
-        return f'<Campaign {self.id} status={self.status}>'
-
-    def handle_job_status_update(self, job_type, job_status, error=None):
-        """Handle job status updates and update campaign status accordingly."""
-        try:
-            logger.info(f"Handling job status update: type={job_type}, status={job_status}")
-            
-            # Convert job type to uppercase for comparison
-            job_type = job_type.upper()
-            job_status = job_status.upper()
-            
-            # Validate job type
-            if job_type not in Job.VALID_JOB_TYPES:
-                error_message = JOB_ERRORS['INVALID_JOB_TYPE'].format(job_type=job_type)
-                logger.error(error_message)
-                self.update_status(
-                    CampaignStatus.FAILED,
-                    error_message=error_message
-                )
-                return
-            
-            # Handle failed jobs immediately
-            if job_status == 'FAILED':
-                error_message = f"Job {job_type} failed: {error}" if error else f"Job {job_type} failed"
-                logger.error(error_message)
-                self.update_status(
-                    CampaignStatus.FAILED,
-                    error_message=error_message
-                )
-                return
-
-            # Validate job status
-            if job_status not in Job.VALID_STATUSES:
-                error_message = JOB_ERRORS['INVALID_STATUS'].format(status=job_status)
-                logger.error(error_message)
-                self.update_status(
-                    CampaignStatus.FAILED,
-                    error_message=error_message
-                )
-                return
-
-            # Get all jobs for this campaign
-            jobs = Job.query.filter_by(campaign_id=self.id).all()
-            
-            # If any job has failed, campaign should be marked as failed
-            if any(job.status == 'FAILED' for job in jobs):
-                error_message = "One or more jobs have failed"
-                logger.error(error_message)
-                self.update_status(
-                    CampaignStatus.FAILED,
-                    error_message=error_message
-                )
-                return
-
-            # Check if all jobs are completed
-            if job_status == 'COMPLETED' and all(job.status == 'COMPLETED' for job in jobs):
-                logger.info("All jobs completed successfully")
-                self.update_status(
-                    CampaignStatus.COMPLETED,
-                    error_message=None
-                )
-                return
-
-            # Get next status from job status map
-            next_status = self.JOB_STATUS_MAP.get(job_type, {}).get(job_status)
-            if not next_status:
-                error_message = f"No next status defined for job type {job_type} with status {job_status}"
-                logger.error(error_message)
-                self.update_status(
-                    CampaignStatus.FAILED,
-                    error_message=error_message
-                )
-                return
-
-            # Check if we're already in a terminal state
-            if self.status in [CampaignStatus.COMPLETED, CampaignStatus.FAILED]:
-                error_message = CAMPAIGN_ERRORS['INVALID_STATUS_TRANSITION'].format(
-                    current_status=self.status,
-                    new_status=next_status
-                )
-                logger.error(error_message)
-                return
-
-            # Validate and perform status transition
-            if self.is_valid_transition(next_status):
-                self.update_status(
-                    next_status,
-                    error_message=None
-                )
-                logger.info(f"Successfully updated campaign status to {next_status}")
-            else:
-                error_message = CAMPAIGN_ERRORS['INVALID_STATUS_TRANSITION'].format(
-                    current_status=self.status,
-                    new_status=next_status
-                )
-                logger.error(error_message)
-                self.update_status(
-                    CampaignStatus.FAILED,
-                    error_message=error_message
-                )
-        except Exception as e:
-            error_message = f"Error handling job status update: {str(e)}"
-            logger.error(error_message, exc_info=True)
-            self.update_status(
-                CampaignStatus.FAILED,
-                error_message=error_message
-            ) 
+        return f'<Campaign {self.id} status={self.status}>' 
