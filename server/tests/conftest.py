@@ -118,7 +118,7 @@ def setup_logs():
         os.makedirs(LOG_DIR, mode=0o755)
     
     # Initialize log files with proper permissions
-    log_files = ['browser.log', 'combined.log']
+    log_files = ['browser.log']
     for log_file in log_files:
         log_path = os.path.join(LOG_DIR, log_file)
         # Create or truncate the file

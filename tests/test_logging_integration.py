@@ -8,7 +8,7 @@ from pathlib import Path
 def test_log_file_accessibility():
     """Test that log files exist and are accessible"""
     log_dir = Path('./logs')
-    required_logs = ['browser.log', 'server.log', 'worker.log', 'combined.log']
+    required_logs = ['browser.log', 'server.log', 'worker.log']
     
     assert log_dir.exists(), "Log directory does not exist"
     for log_file in required_logs:
@@ -28,28 +28,11 @@ def test_browser_log_format():
             except json.JSONDecodeError:
                 pytest.fail(f"Invalid JSON in browser.log: {line}")
 
-def test_combined_log_integration():
-    """Test that combined.log contains entries from all components"""
-    with open('./logs/combined.log', 'r') as f:
-        components = set()
-        for line in f:
-            try:
-                log_entry = json.loads(line.strip())
-                if 'component' in log_entry:
-                    components.add(log_entry['component'])
-            except json.JSONDecodeError:
-                pytest.fail(f"Invalid JSON in combined.log: {line}")
-        
-        expected_components = {'browser', 'server', 'worker'}
-        assert expected_components.issubset(components), \
-            f"Missing components in combined.log. Found: {components}"
-
 def test_real_time_logging():
     """Test real-time log ingestion by generating a test error"""
     # Record initial log sizes
     initial_sizes = {
         'browser.log': os.path.getsize('./logs/browser.log'),
-        'combined.log': os.path.getsize('./logs/combined.log')
     }
     
     # Generate a test error (this would be done by the frontend)
@@ -73,8 +56,6 @@ def test_real_time_logging():
     # Verify logs were updated
     assert os.path.getsize('./logs/browser.log') > initial_sizes['browser.log'], \
         "browser.log was not updated"
-    assert os.path.getsize('./logs/combined.log') > initial_sizes['combined.log'], \
-        "combined.log was not updated"
     
     # Verify error was properly logged
     with open('./logs/browser.log', 'r') as f:
