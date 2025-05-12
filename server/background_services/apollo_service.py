@@ -9,6 +9,7 @@ from server.models import Campaign
 from server.models.campaign import CampaignStatus
 import random
 import time
+from datetime import datetime
 
 class ApolloService:
     """Service for interacting with the Apollo API."""
@@ -56,17 +57,20 @@ class ApolloService:
             server_logger.error(f"Error during db.session.commit: {str(e)}", extra={'component': 'server'})
         return created_count
 
-    def fetch_leads(self, params: Dict[str, Any], campaign_id: str) -> Dict[str, Any]:
+    def fetch_leads(self, params: Dict[str, Any], campaign_id: str, job_id: str) -> Dict[str, Any]:
         """
-        Fetch leads from Apollo and save them to the database.
+        Start Apify actor run for lead fetching, set up webhook, and persist run/dataset IDs on the job.
         Args:
             params: Parameters for the Apollo API
             campaign_id: ID of the campaign to associate leads with
+            job_id: ID of the job to persist Apify run/dataset IDs
         Returns:
-            Dict containing the count of created leads and any errors
+            Dict with Apify run and dataset IDs
         """
+        if not job_id:
+            raise ValueError("job_id must be provided to fetch_leads for webhook payloadTemplate.")
         try:
-            server_logger.info(f"[START fetch_leads] campaign_id={campaign_id}", extra={'component': 'server'})
+            server_logger.info(f"[START fetch_leads] campaign_id={campaign_id} job_id={job_id}", extra={'component': 'server'})
             # Get campaign
             campaign = Campaign.query.get(campaign_id)
             server_logger.info(f"[AFTER Campaign.query.get] campaign={campaign}", extra={'component': 'server'})
@@ -78,67 +82,112 @@ class ApolloService:
             campaign.update_status(CampaignStatus.FETCHING_LEADS, "Fetching leads from Apollo")
             db.session.commit()
 
-            # --- BEGIN: Dummy leads block ---
-            # Commenting out Apify client code
-            # server_logger.info(f"[BEFORE ApifyClient actor call] actor_id={self.actor_id} with params: {params}", extra={'component': 'server'})
-            # run = self.client.actor(self.actor_id).call(run_input=params)
-            # dataset_id = run.get("defaultDatasetId")
-            # if not dataset_id:
-            #     raise Exception("No dataset ID returned from Apify actor run.")
-            # server_logger.info(f"[GOT dataset_id] {dataset_id}", extra={'component': 'server'})
-            # results = list(self.client.dataset(dataset_id).iterate_items())
-            # server_logger.info(f"[AFTER dataset.iterate_items] got {len(results)} results", extra={'component': 'server'})
-
-            # Create 10 dummy leads
-            results = []
-            for i in range(10):
-                results.append({
-                    'first_name': 'Edward',
-                    'last_name': 'Kemper',
-                    'email': 'edwardkemper@gmail.com',
-                    'phone': f'+1-555-000{i:03d}',
-                    'company': f'DummyCompany{i}',
-                    'title': f'DummyTitle{i}',
-                    'linkedin_url': f'https://linkedin.com/in/dummy{i}',
-                    'source_url': f'https://source.example.com/lead/{i}',
-                    'raw_data': {'source': 'dummy', 'index': i}
-                })
-            server_logger.info(f"[DUMMY MODE] Generated {len(results)} dummy leads", extra={'component': 'server'})
-            # --- END: Dummy leads block ---
-
-            # Process and save leads using helper
-            errors = []
-            try:
-                created_count = self._save_leads_to_db(results, campaign_id)
-            except Exception as e:
-                error_msg = f"Error saving leads: {str(e)}"
-                server_logger.error(error_msg, extra={'component': 'server'})
-                errors.append(error_msg)
-                created_count = 0
-            
-            server_logger.info(f"[AFTER _save_leads_to_db] created_count={created_count}", extra={'component': 'server'})
-            
-            # Update campaign status to indicate leads have been fetched
-            server_logger.info(f"[BEFORE campaign.update_status]", extra={'component': 'server'})
-            campaign.update_status(
-                CampaignStatus.FETCHING_LEADS,
-                f"Fetched {created_count} leads" + (f" with {len(errors)} errors" if errors else "")
+            # --- Apify actor run block ---
+            server_logger.info(f"[BEFORE ApifyClient actor call] actor_id={self.actor_id} with params: {params}", extra={'component': 'server'})
+            webhook_url = os.getenv('APIFY_WEBHOOK_URL', 'http://localhost:5001/api/apify-webhook')
+            payload_template = (
+                '{'
+                '"job_id": "' + job_id + '",'  # Inject job_id at webhook creation
+                '"apify_run_id": {{resource.id}},'
+                '"apify_dataset_id": {{resource.defaultDatasetId}},'
+                '"eventType": "{{eventType}}",'
+                '"eventData": {{eventData}},'
+                '"resource": {{resource}}'
+                '}'
             )
-            db.session.commit()
-            server_logger.info(f"[AFTER campaign.update_status]", extra={'component': 'server'})
-            server_logger.info(f"Leads fetch complete: {created_count} leads created, {len(errors)} errors", extra={'component': 'server'})
-            return {
-                'count': created_count,
-                'errors': errors
+            webhook_payload = {
+                "eventTypes": [
+                    "ACTOR.RUN.CREATED",
+                    "ACTOR.RUN.SUCCEEDED",
+                    "ACTOR.RUN.FAILED",
+                    "ACTOR.RUN.ABORTED",
+                    "ACTOR.RUN.TIMED_OUT",
+                    "ACTOR.RUN.RESURRECTED"
+                ],
+                "requestUrl": webhook_url,
+                "payloadTemplate": payload_template,
+                "idempotencyKey": f"{campaign_id}-{int(time.time())}"
             }
-            
+            run = self.client.actor(self.actor_id).call(
+                run_input=params,
+                webhooks=[webhook_payload]
+            )
+            apify_run_id = run.get("id")
+            dataset_id = run.get("defaultDatasetId")
+            if not dataset_id:
+                raise Exception("No dataset ID returned from Apify actor run.")
+            server_logger.info(f"[GOT apify_run_id] {apify_run_id}, [GOT dataset_id] {dataset_id}", extra={'component': 'server'})
+            # Persist Apify run and dataset IDs on the job
+            from server.models.job import Job
+            job = Job.query.get(job_id)
+            if job:
+                job.apify_run_id = apify_run_id
+                job.apify_dataset_id = dataset_id
+                db.session.commit()
+            return {
+                'apify_run_id': apify_run_id,
+                'apify_dataset_id': dataset_id
+            }
         except Exception as e:
             db.session.rollback()
-            error_msg = f"Error fetching leads: {str(e)}"
+            error_msg = f"Error starting Apify actor run: {str(e)}"
             server_logger.error(error_msg, extra={'component': 'server'})
             if 'campaign' in locals() and campaign:
                 campaign.update_status(
                     CampaignStatus.FAILED,
                     error_message=error_msg
                 )
-            raise 
+            raise
+
+    def process_apify_webhook_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process Apify webhook event: fetch dataset, save leads, update job/campaign status.
+        Args:
+            event: The webhook event payload from Apify
+        Returns:
+            Dict with processing results
+        """
+        try:
+            job_id = event.get('job_id')
+            apify_run_id = event.get('apify_run_id')
+            apify_dataset_id = event.get('apify_dataset_id')
+            event_type = event.get('eventType')
+            resource = event.get('resource', {})
+            # Only process on SUCCEEDED event
+            if event_type != 'ACTOR.RUN.SUCCEEDED':
+                server_logger.info(f"[APIFY WEBHOOK] Ignoring event type: {event_type}", extra={'component': 'server'})
+                return {'status': 'ignored', 'reason': f'eventType={event_type}'}
+            # Find job and campaign
+            from server.models.job import Job
+            job = Job.query.get(job_id)
+            if not job:
+                server_logger.error(f"[APIFY WEBHOOK] Job not found: {job_id}", extra={'component': 'server'})
+                return {'status': 'error', 'message': f'Job not found: {job_id}'}
+            campaign_id = job.campaign_id
+            campaign = Campaign.query.get(campaign_id)
+            if not campaign:
+                server_logger.error(f"[APIFY WEBHOOK] Campaign not found: {campaign_id}", extra={'component': 'server'})
+                return {'status': 'error', 'message': f'Campaign not found: {campaign_id}'}
+            # Fetch dataset from Apify
+            dataset_items = []
+            try:
+                dataset_client = self.client.dataset(apify_dataset_id)
+                dataset_items = dataset_client.list_items().items
+                server_logger.info(f"[APIFY WEBHOOK] Retrieved {len(dataset_items)} items from Apify dataset {apify_dataset_id}", extra={'component': 'server'})
+            except Exception as e:
+                server_logger.error(f"[APIFY WEBHOOK] Error fetching dataset: {str(e)}", extra={'component': 'server'})
+                return {'status': 'error', 'message': f'Error fetching dataset: {str(e)}'}
+            # Save leads to DB
+            created_count = self._save_leads_to_db(dataset_items, campaign_id)
+            # Update job and campaign status
+            job.status = 'COMPLETED'
+            job.result = {'leads': [lead.get('email') for lead in dataset_items], 'total_count': created_count}
+            job.completed_at = datetime.utcnow()
+            db.session.commit()
+            campaign.update_status(CampaignStatus.COMPLETED, f"Leads fetched and saved: {created_count}")
+            db.session.commit()
+            return {'status': 'success', 'created_count': created_count}
+        except Exception as e:
+            db.session.rollback()
+            server_logger.error(f"[APIFY WEBHOOK] Exception: {str(e)}", extra={'component': 'server'})
+            return {'status': 'error', 'message': str(e)} 

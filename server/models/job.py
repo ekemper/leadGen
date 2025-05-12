@@ -25,6 +25,8 @@ class Job(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     started_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
+    apify_run_id = db.Column(db.String(64), nullable=True)
+    apify_dataset_id = db.Column(db.String(64), nullable=True)
 
     # Define valid job statuses using the enum
     VALID_STATUSES = [status.value for status in JobStatus]

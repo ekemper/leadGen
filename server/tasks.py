@@ -50,8 +50,8 @@ def fetch_and_save_leads_task(params, campaign_id):
             db.session.commit()
             job.update_status(JobStatus.IN_PROGRESS)
 
-            # Fetch leads
-            result = ApolloService().fetch_leads(params, campaign_id)
+            # Fetch leads (pass job.id)
+            result = ApolloService().fetch_leads(params, campaign_id, job.id)
 
             # Mark job as completed
             job.update_status(JobStatus.COMPLETED)

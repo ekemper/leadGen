@@ -62,7 +62,14 @@ class Campaign(db.Model):
         return new_status in self.VALID_TRANSITIONS.get(self.status, [])
 
     def update_status(self, status: CampaignStatus, error_message: str = None) -> None:
-        """Update campaign status (simplified)."""
+        """Update campaign status (idempotent for same-status updates)."""
+        if self.status == status:
+            # Allow updating message or error even if status is unchanged
+            if error_message:
+                self.status_error = error_message
+            self.updated_at = datetime.utcnow()
+            db.session.commit()
+            return
         if self.is_valid_transition(status):
             self.status = status
             if error_message:

@@ -133,28 +133,21 @@ def register_routes(api):
     """Register all routes with the provided blueprint."""
     
     @api.route('/health', methods=['GET'])
-    @token_required
     def health_check():
-        """Health check endpoint."""
+        """Health check endpoint (public, no auth)."""
         server_logger.debug('Health check endpoint called')
         return jsonify({
-            'status': 'success',
-            'data': {
-                'message': 'API is running',
-                'endpoint': '/api/health'
-            }
+            'status': 'healthy',
+            'message': 'API is running',
+            'endpoint': '/api/health'
         }), 200
 
     @api.route('/')
-    @token_required
     def root():
-        """Root endpoint."""
+        """Root endpoint (public, no auth)."""
         return jsonify({
-            'status': 'success',
-            'data': {
-                'message': 'Welcome to the Auth Template API',
-                'version': '1.0.0'
-            }
+            'message': 'Welcome to the Auth Template API',
+            'version': '1.0.0'
         }), 200
 
     # Public routes (no token required)
@@ -925,4 +918,33 @@ def register_routes(api):
                     'name': 'Internal Server Error',
                     'message': 'Failed to clean up campaign jobs'
                 }
-            }), 500 
+            }), 500
+
+    # --- Apify Webhook endpoint (public, no auth) ---
+    @api.route('/apify-webhook', methods=['POST'])
+    def apify_webhook():
+        """Receive Apify actor webhook events (all event types). Only accept requests from ngrok."""
+        from werkzeug.exceptions import BadRequest
+        try:
+            # Check ngrok: X-Forwarded-For header is set by ngrok, and remote_addr is usually 127.0.0.1
+            ngrok_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+            user_agent = request.headers.get('User-Agent', '')
+            if not ngrok_ip:
+                server_logger.warning(f"[APIFY WEBHOOK] Rejected: missing X-Forwarded-For. UA={user_agent}")
+                return jsonify({'status': 'error', 'message': 'Forbidden: not from ngrok'}), 403
+            try:
+                event = request.get_json(force=True) or {}
+            except BadRequest:
+                server_logger.warning(f"[APIFY WEBHOOK] Malformed JSON from ngrok_ip={ngrok_ip}")
+                return jsonify({'status': 'error', 'message': 'Malformed JSON'}), 400
+            server_logger.info(f"[APIFY WEBHOOK] Accepted from ngrok_ip={ngrok_ip}: {json.dumps(event)}")
+            # Call ApolloService to process the webhook event
+            result = ApolloService().process_apify_webhook_event(event)
+            server_logger.info(f"[APIFY WEBHOOK] Processing result: {result}")
+            if result.get('status') == 'success' or result.get('status') == 'ignored':
+                return jsonify(result), 200
+            else:
+                return jsonify(result), 400
+        except Exception as e:
+            server_logger.error(f"[APIFY WEBHOOK] Error: {str(e)}")
+            return jsonify({'status': 'error', 'message': str(e)}), 400 

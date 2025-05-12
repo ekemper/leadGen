@@ -66,12 +66,14 @@ const CampaignDetail: React.FC = () => {
       setCampaign(response.data);
       
       // Start polling if campaign is in progress
+      /*
       if (response.data.status === CampaignStatus.FETCHING_LEADS || 
           response.data.status === CampaignStatus.VERIFYING_EMAILS ||
           response.data.status === CampaignStatus.ENRICHING_LEADS ||
           response.data.status === CampaignStatus.GENERATING_EMAILS) {
         startStatusPolling();
       }
+      */
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -79,6 +81,7 @@ const CampaignDetail: React.FC = () => {
     }
   };
 
+  /*
   const startStatusPolling = () => {
     if (statusPolling) {
       clearInterval(statusPolling);
@@ -116,6 +119,7 @@ const CampaignDetail: React.FC = () => {
     
     setStatusPolling(interval);
   };
+  */
 
   if (loading) {
     return (
@@ -183,7 +187,7 @@ const CampaignDetail: React.FC = () => {
                     }
                     toast.success('Campaign started successfully');
                     setCampaign(response.data);
-                    startStatusPolling();
+                    // startStatusPolling();
                   } catch (error) {
                     toast.error('Failed to start campaign');
                   } finally {
