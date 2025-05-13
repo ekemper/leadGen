@@ -66,11 +66,17 @@ def create_app(test_config=None):
     
     # Configure rate limiting (single source of truth)
     redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
+    storage_options = {}
+    if redis_url.startswith('rediss://'):
+        cert_reqs = os.environ.get('REDIS_SSL_CERT_REQS', 'required')
+        if cert_reqs == 'none':
+            storage_options['ssl_cert_reqs'] = ssl.CERT_NONE
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per day", "50 per hour"],
         storage_uri=redis_url,
+        storage_options=storage_options,
         strategy="moving-window"
     )
     
