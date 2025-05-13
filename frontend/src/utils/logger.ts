@@ -47,12 +47,7 @@ class Logger {
   private originalXHR: typeof window.XMLHttpRequest;
   private logQueue: LogEntry[] = [];
   private isProcessing: boolean = false;
-  private readonly BATCH_SIZE = 1;
   private readonly FLUSH_INTERVAL = 0;
-  private readonly MAX_RETRIES = 5;
-  private retryCount: number = 0;
-  private lastFlushTime: number = 0;
-  private readonly MIN_FLUSH_INTERVAL = 0;
 
   private constructor() {
     // Store original methods
@@ -179,7 +174,7 @@ class Logger {
       let start = 0;
 
       const open = xhr.open;
-      xhr.open = function(_method: string, _url: string | URL, async?: boolean, username?: string | null, password?: string | null) {
+      xhr.open = function(_method: string, _url: string | URL) {
         method = _method;
         url = typeof _url === 'string' ? _url : _url.toString();
         // @ts-ignore
@@ -187,7 +182,7 @@ class Logger {
       };
 
       const send = xhr.send;
-      xhr.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
+      xhr.send = function() {
         start = performance.now();
         xhr.addEventListener('loadend', () => {
           if (Logger.instance.isEventApiUrl(url)) return;
@@ -275,9 +270,7 @@ class Logger {
         data: logsToSend,
         type: 'log'
       });
-      this.retryCount = 0; // Reset retry count on success
     } catch (error: any) {
-
       // console.log('error', {error});
       // If sending fails, put logs back in queue
       // this.logQueue = [...logsToSend, ...this.logQueue];

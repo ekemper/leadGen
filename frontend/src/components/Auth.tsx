@@ -6,15 +6,6 @@ interface AuthProps {
   onAuthSuccess: (token: string) => void;
 }
 
-interface AuthResponse {
-  token?: string;
-  message?: string;
-}
-
-interface AuthError {
-  error: string;
-}
-
 const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');

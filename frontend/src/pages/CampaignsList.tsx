@@ -7,7 +7,6 @@ import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
 import Input from '../components/form/input/InputField';
 import Label from '../components/form/Label';
-import Checkbox from '../components/form/Checkbox';
 import Table from '../components/tables/Table';
 import TableHeader from '../components/tables/TableHeader';
 import TableBody from '../components/tables/TableBody';

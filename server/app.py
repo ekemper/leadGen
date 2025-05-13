@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -175,6 +175,18 @@ def create_app(test_config=None):
     
     # Log application startup
     server_logger.info("Flask application initialized")
+
+    # Serve React build for all non-API routes
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_react_app(path):
+        if path.startswith('api'):
+            return jsonify({'error': 'Not found'}), 404
+        dist_dir = os.path.join(os.path.dirname(__file__), '../frontend/dist')
+        file_path = os.path.join(dist_dir, path)
+        if path and os.path.exists(file_path):
+            return send_from_directory(dist_dir, path)
+        return send_from_directory(dist_dir, 'index.html')
 
     return app
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { api } from '../config/api';
 import { toast } from 'react-toastify';
 import { CampaignStatus, Campaign } from '../types/campaign';
@@ -7,33 +7,14 @@ import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
-import Input from '../components/form/input/InputField';
-import Label from '../components/form/Label';
-import Checkbox from '../components/form/Checkbox';
-
-interface FormErrors {
-  searchUrl?: string;
-  count?: string;
-}
-
-interface CampaignStartParams {
-  count: number;
-  searchUrl: string;
-}
 
 type EditableCampaignFields = 'name' | 'description' | 'fileName' | 'totalRecords' | 'url';
 
 const CampaignDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showStartForm, setShowStartForm] = useState(false);
-  const [startLoading, setStartLoading] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [statusPolling, setStatusPolling] = useState<NodeJS.Timeout | null>(null);
   const [editMode, setEditMode] = useState<Record<EditableCampaignFields, boolean>>({} as Record<EditableCampaignFields, boolean>);
   const [editedFields, setEditedFields] = useState<Partial<Record<EditableCampaignFields, string | number>>>({});
   const [saveLoading, setSaveLoading] = useState(false);
@@ -41,11 +22,6 @@ const CampaignDetail: React.FC = () => {
 
   useEffect(() => {
     fetchCampaign();
-    return () => {
-      if (statusPolling) {
-        clearInterval(statusPolling);
-      }
-    };
   }, [id]);
 
   const fetchCampaign = async () => {
@@ -117,26 +93,6 @@ const CampaignDetail: React.FC = () => {
     setStatusPolling(interval);
   };
   */
-
-  const handleStartCampaign = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStartLoading(true);
-    setStartError(null);
-    try {
-      const response = await api.post(`/api/campaigns/${id}/start`, {});
-      if (response.status === 'success') {
-        toast.success('Campaign started!');
-        fetchCampaign();
-        setShowStartForm(false);
-      } else {
-        setStartError(response.message || 'Failed to start campaign.');
-      }
-    } catch (err: any) {
-      setStartError(err.message || 'Failed to start campaign.');
-    } finally {
-      setStartLoading(false);
-    }
-  };
 
   // Helper to start editing a field
   const handleEdit = (field: EditableCampaignFields) => {
@@ -301,14 +257,7 @@ const CampaignDetail: React.FC = () => {
             </Button>
             {saveError && <span className="text-red-500 ml-2">{saveError}</span>}
           </div>
-        ) : campaign.status?.toUpperCase() === CampaignStatus.CREATED && (
-          <div className="mt-6">
-            <Button variant="primary" onClick={() => handleStartCampaign({ preventDefault: () => {} } as React.FormEvent)} disabled={startLoading}>
-              {startLoading ? 'Starting...' : 'Start Campaign'}
-            </Button>
-            {startError && <span className="text-red-500 ml-2">{startError}</span>}
-          </div>
-        )}
+        ) : null}
       </ComponentCard>
     </>
   );
