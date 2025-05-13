@@ -66,5 +66,6 @@
       "react": "^16.8.0 || ^17 || ^18 || ^19",
       "react-dom": "^16.8.0 || ^17 || ^18 || ^19"
     }
-  }
+  },
+  "heroku-postbuild": "npm install && npm run build"
 }
