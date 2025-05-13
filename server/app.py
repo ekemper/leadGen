@@ -13,6 +13,8 @@ from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
 from server.utils.logging_config import server_logger
 from server.api.openapi import create_spec, register_spec
+from limits.storage import RedisStorage
+import ssl
 
 print('sys.path:', sys.path)
 print('CWD:', os.getcwd())
@@ -63,11 +65,16 @@ def create_app(test_config=None):
         return response
     
     # Configure rate limiting (single source of truth)
+    redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
+    if redis_url and 'localhost' not in redis_url and '127.0.0.1' not in redis_url:
+        storage = RedisStorage(redis_url, ssl=True, ssl_cert_reqs=ssl.CERT_NONE)
+    else:
+        storage = RedisStorage(redis_url)
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per day", "50 per hour"],
-        storage_uri=app.config.get('REDIS_URL', 'redis://localhost:6379/0'),
+        storage=storage,
         strategy="moving-window"
     )
     
