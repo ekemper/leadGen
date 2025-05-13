@@ -2,7 +2,7 @@ import os
 import sys
 import signal
 from datetime import datetime
-from rq import Worker, Connection
+from rq import Worker
 from rq.worker import StopRequested
 from server.app import create_app
 from server.utils.logging_config import worker_logger
@@ -53,33 +53,28 @@ if __name__ == '__main__':
     )
     
     try:
-        with Connection(redis_conn):
-            # Create worker with default queue
-            worker = Worker(
-                queues=['default'],
-                name=f'worker.{os.getpid()}',
-                connection=redis_conn,
-                default_worker_ttl=QUEUE_CONFIG['default']['timeout'],
-                default_result_ttl=QUEUE_CONFIG['default']['job_timeout']
-            )
-            
-            worker_logger.info(
-                f"Worker {worker.name} started",
-                extra={
-                    'worker_name': worker.name,
-                    'queues': worker.queues,
-                    'queue_config': QUEUE_CONFIG,
-                    'pid': os.getpid(),
-                    'start_time': datetime.utcnow().isoformat()
-                }
-            )
-            
-            # Start worker with supported configuration
-            worker.work(
-                with_scheduler=True,
-                burst=False,
-                logging_level='INFO'
-            )
+        worker = Worker(
+            queues=['default'],
+            name=f'worker.{os.getpid()}',
+            connection=redis_conn,
+            default_worker_ttl=QUEUE_CONFIG['default']['timeout'],
+            default_result_ttl=QUEUE_CONFIG['default']['job_timeout']
+        )
+        worker_logger.info(
+            f"Worker {worker.name} started",
+            extra={
+                'worker_name': worker.name,
+                'queues': worker.queues,
+                'queue_config': QUEUE_CONFIG,
+                'pid': os.getpid(),
+                'start_time': datetime.utcnow().isoformat()
+            }
+        )
+        worker.work(
+            with_scheduler=True,
+            burst=False,
+            logging_level='INFO'
+        )
     except StopRequested:
         worker_logger.info("Worker stopped gracefully")
         worker_logger.info(

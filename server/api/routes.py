@@ -18,7 +18,6 @@ from flask import Blueprint
 from server.background_services.apollo_service import ApolloService
 from server.utils.middleware import log_function_call
 from functools import wraps
-from server.api.services.campaign_service import CampaignService
 from server.api.services.organization_service import OrganizationService
 from server.api.services.event_service import EventService
 from server.api.schemas import (
@@ -41,6 +40,7 @@ def get_lead_service():
     return LeadService()
 
 def get_campaign_service():
+    from server.api.services.campaign_service import CampaignService
     return CampaignService()
 
 def get_organization_service():

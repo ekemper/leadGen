@@ -1,6 +1,5 @@
 from server.background_services.apollo_service import ApolloService
 from server.background_services.email_verifier_service import EmailVerifierService
-from server.app import create_app
 from server.background_services.openai_service import OpenAIService
 from server.models import Campaign
 from server.models.campaign import CampaignStatus

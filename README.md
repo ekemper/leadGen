@@ -82,39 +82,34 @@ leadGen/
   - `flask db upgrade`
 - See `documentation/DATABASE_README.md` for advanced DB setup and management.
 
-## Database Reset & Seeding (Development)
+## Database Management (Unified)
 
-**Unified DB reset and seeding script:**
+Use the unified script for all local database reset, migration, and seeding tasks:
 
-- Use `scripts/full_db_reset.py` to fully reset, migrate, and optionally seed the database with meaningful test data.
-- **WARNING:** This will delete ALL data and schema in your database. Use only for development or CI.
-
-**Usage:**
-```bash
-export NEON_CONNECTION_STRING=...  # or your DB connection string
-python scripts/full_db_reset.py [--force] [--stamp-head] [--seed]
+### Full Reset, Migrate, and Seed
+```sh
+python3 scripts/reset_and_seed.py --force
 ```
 
-**Options:**
-- `--force`       Skip confirmation prompt (for CI or automation)
-- `--stamp-head`  Stamp Alembic to head after reset (recommended)
-- `--seed`        Populate all tables with useful, relational test data
+### Full Reset, Fresh Migrations, and Seed
+```sh
+python3 scripts/reset_and_seed.py --force --fresh-migrations
+```
 
-**What it does:**
-- Drops and recreates the public schema
-- Removes all enum types
-- Drops Alembic migration state
-- Optionally stamps Alembic to head
-- Optionally seeds the DB with:
-  - 2 users
-  - 1 organization
-  - 2 campaigns (linked to org)
-  - 4 jobs (2 per campaign)
-  - 6 leads (3 per campaign)
-  - 2 events (linked to campaigns and users)
+### Seed Only (no reset or migration)
+```sh
+python3 scripts/reset_and_seed.py --seed-only
+```
 
-**Do not run `reset_migrate_seed.py` directly.**
-Its logic is used by the unified script above.
+**WARNING:** The `--force` flag is required for destructive actions. You will be prompted for confirmation.
+
+### Deprecated Scripts
+- `scripts/full_db_reset.py` (use `reset_and_seed.py` instead)
+- `scripts/reset_migrate_seed.py` (seeding logic is now imported only)
+- `scripts/seed_only.py` (use `reset_and_seed.py --seed-only`)
+- `scripts/condense_migrations.py` (use `reset_and_seed.py --force --fresh-migrations`)
+
+Please update any documentation or automation to use `reset_and_seed.py`.
 
 ## Testing
 - **Backend:** Run `pytest` in the project root (ensure venv is active).
