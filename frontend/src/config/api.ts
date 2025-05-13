@@ -140,5 +140,22 @@ export const api = {
         }
         
         return responseData;
+    },
+
+    patch: async (endpoint: string, data: any) => {
+        const headers = withRequestId(getAuthHeaders());
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            ...defaultOptions,
+            method: 'PATCH',
+            body: JSON.stringify(data),
+            headers,
+        });
+        handleAuthError(response);
+        const responseData = await response.json();
+        if (!response.ok) {
+            const errorMessage = responseData.error?.message || responseData.message || `HTTP error! status: ${response.status}`;
+            throw new Error(errorMessage);
+        }
+        return responseData;
     }
 }; 

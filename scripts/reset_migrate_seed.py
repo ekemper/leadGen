@@ -101,11 +101,7 @@ def seed_database(app):
                 organization_id=default_org.id,
                 status=CampaignStatus.CREATED,
                 status_message="Campaign created and ready to start",
-                searchUrl="https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States",
-                count=10,
-                excludeGuessedEmails=True,
-                excludeNoEmails=True,
-                getEmails=True
+                searchUrl="https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States"
             )
             campaign2 = Campaign(
                 name="Sample Marketing Campaign",
@@ -113,11 +109,7 @@ def seed_database(app):
                 organization_id=default_org.id,
                 status=CampaignStatus.COMPLETED,
                 status_message="Campaign completed successfully",
-                searchUrl="https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States",
-                count=20,
-                excludeGuessedEmails=False,
-                excludeNoEmails=False,
-                getEmails=True
+                searchUrl="https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States"
             )
             db.session.add_all([campaign1, campaign2])
             db.session.flush()

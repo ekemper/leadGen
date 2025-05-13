@@ -28,11 +28,9 @@ def campaign_data():
 def campaign_start_params():
     """Test campaign start parameters."""
     return {
-        'count': 10,
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': False,
-        'getEmails': True,
-        'searchUrl': 'https://app.apollo.io/search'
+        'fileName': 'https://app.apollo.io/search',
+        'totalRecords': 1000,
+        'url': 'https://app.apollo.io/search'
     }
 
 @pytest.fixture
@@ -192,11 +190,9 @@ def test_start_campaign_invalid_count(client, auth_headers, campaign_data):
     
     # Try to start with invalid count
     invalid_params = {
-        'count': 0,  # Invalid: must be > 0
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': False,
-        'getEmails': True,
-        'searchUrl': 'https://app.apollo.io/search'
+        'fileName': 'https://app.apollo.io/search',
+        'totalRecords': 1000,
+        'url': 'https://app.apollo.io/search'
     }
     
     response = client.post(f'/api/campaigns/{campaign_id}/start', json=invalid_params, headers=auth_headers)
@@ -213,11 +209,9 @@ def test_start_campaign_invalid_url(client, auth_headers, campaign_data):
     
     # Try to start with invalid URL
     invalid_params = {
-        'count': 10,
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': False,
-        'getEmails': True,
-        'searchUrl': 'https://invalid-url.com/search'  # Invalid: must be Apollo URL
+        'fileName': 'https://invalid-url.com/search',
+        'totalRecords': 1000,
+        'url': 'https://invalid-url.com/search'  # Invalid: must be Apollo URL
     }
     
     response = client.post(f'/api/campaigns/{campaign_id}/start', json=invalid_params, headers=auth_headers)
@@ -321,11 +315,9 @@ def test_start_campaign_with_invalid_count_range(client, auth_headers, campaign_
     
     # Try with too large count
     invalid_params = {
-        'count': 1000000,  # Unreasonably large
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': False,
-        'getEmails': True,
-        'searchUrl': 'https://app.apollo.io/search'
+        'fileName': 'https://app.apollo.io/search',
+        'totalRecords': 1000,
+        'url': 'https://app.apollo.io/search'
     }
     
     response = client.post(f'/api/campaigns/{campaign_id}/start', json=invalid_params, headers=auth_headers)
@@ -342,11 +334,9 @@ def test_start_campaign_with_malicious_url(client, auth_headers, campaign_data):
     
     # Try with malicious URL
     invalid_params = {
-        'count': 10,
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': False,
-        'getEmails': True,
-        'searchUrl': 'https://app.apollo.io.malicious.com/search'  # Malicious domain
+        'fileName': 'https://app.apollo.io.malicious.com/search',
+        'totalRecords': 1000,
+        'url': 'https://app.apollo.io.malicious.com/search'  # Malicious domain
     }
     
     response = client.post(f'/api/campaigns/{campaign_id}/start', json=invalid_params, headers=auth_headers)
@@ -857,11 +847,9 @@ def test_campaign_start(test_app, test_client, test_db, schemas):
     
     # Create test start data
     start_data = {
-        'searchUrl': 'https://example.com',
-        'count': 10,
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': True,
-        'getEmails': True
+        'fileName': 'https://example.com',
+        'totalRecords': 1000,
+        'url': 'https://example.com'
     }
     
     # Make request to start campaign
@@ -895,11 +883,9 @@ def test_campaign_start_with_invalid_data(test_app, test_client, test_db, schema
     
     # Create test start data with invalid count
     start_data = {
-        'searchUrl': 'https://example.com',
-        'count': 0,  # Invalid count
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': True,
-        'getEmails': True
+        'fileName': 'https://example.com',
+        'totalRecords': 1000,
+        'url': 'https://example.com'
     }
     
     # Make request to start campaign

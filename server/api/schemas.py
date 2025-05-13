@@ -34,6 +34,7 @@ class JobSchema(Schema):
     error_message = fields.Str(allow_none=True)
     completed_at = fields.DateTime(allow_none=True)
     updated_at = fields.DateTime(allow_none=True)
+    error_details = fields.Dict(allow_none=True)
 
 class CampaignSchema(Schema):
     """Schema for campaign data."""
@@ -46,22 +47,18 @@ class CampaignSchema(Schema):
     created_at = fields.DateTime(required=True)
     updated_at = fields.DateTime(required=True)
     organization_id = fields.Str(allow_none=True)
-    searchUrl = fields.Str(required=True)
-    count = fields.Int(required=True)
-    excludeGuessedEmails = fields.Bool(required=True)
-    excludeNoEmails = fields.Bool(required=True)
-    getEmails = fields.Bool(required=True)
+    fileName = fields.Str(required=True)
+    totalRecords = fields.Int(required=True)
+    url = fields.Str(required=True)
     jobs = fields.List(fields.Nested(JobSchema), required=False)
 
 class CampaignCreateSchema(Schema):
     """Schema for campaign creation request."""
     name = fields.Str(required=True, validate=validate.Length(min=1))
     description = fields.Str(allow_none=True)
-    searchUrl = fields.Str(required=True)
-    count = fields.Int(required=True, validate=validate.Range(min=1, max=100))
-    excludeGuessedEmails = fields.Bool(required=True)
-    excludeNoEmails = fields.Bool(required=True)
-    getEmails = fields.Bool(required=True)
+    fileName = fields.Str(required=True)
+    totalRecords = fields.Int(required=True)
+    url = fields.Str(required=True)
     organization_id = fields.Str(required=False, allow_none=True)
 
 class CampaignStartSchema(Schema):

@@ -7,10 +7,9 @@ import { useNavigate } from 'react-router-dom';
 const Campaigns: React.FC = () => {
   const [formData, setFormData] = useState({
     count: 10,
-    excludeGuessedEmails: true,
-    excludeNoEmails: false,
-    getEmails: true,
-    searchUrl: "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing"
+    fileName: "",
+    totalRecords: 0,
+    url: ""
   });
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
@@ -64,12 +63,12 @@ const Campaigns: React.FC = () => {
       }}>
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>
-            Search URL
+            File Name
           </label>
           <input
             type="text"
-            name="searchUrl"
-            value={formData.searchUrl}
+            name="fileName"
+            value={formData.fileName}
             onChange={handleChange}
             required
             style={{
@@ -85,12 +84,12 @@ const Campaigns: React.FC = () => {
 
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>
-            Number of Leads
+            Total Records
           </label>
           <input
             type="number"
-            name="count"
-            value={formData.count}
+            name="totalRecords"
+            value={formData.totalRecords}
             onChange={handleChange}
             min="1"
             required
@@ -106,39 +105,24 @@ const Campaigns: React.FC = () => {
         </div>
 
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <input
-              type="checkbox"
-              name="excludeGuessedEmails"
-              checked={formData.excludeGuessedEmails}
-              onChange={handleChange}
-            />
-            Exclude Guessed Emails
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+            URL
           </label>
-        </div>
-
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <input
-              type="checkbox"
-              name="excludeNoEmails"
-              checked={formData.excludeNoEmails}
-              onChange={handleChange}
-            />
-            Exclude Leads Without Emails
-          </label>
-        </div>
-
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <input
-              type="checkbox"
-              name="getEmails"
-              checked={formData.getEmails}
-              onChange={handleChange}
-            />
-            Fetch Emails
-          </label>
+          <input
+            type="text"
+            name="url"
+            value={formData.url}
+            onChange={handleChange}
+            required
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              backgroundColor: '#1e1e1e',
+              border: '1px solid #333',
+              borderRadius: '4px',
+              color: '#d4d4d4'
+            }}
+          />
         </div>
 
         <button

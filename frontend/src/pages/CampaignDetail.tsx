@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../config/api';
 import { toast } from 'react-toastify';
-import { CampaignStatus } from '../types/campaign';
+import { CampaignStatus, Campaign } from '../types/campaign';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
@@ -11,15 +11,6 @@ import Input from '../components/form/input/InputField';
 import Label from '../components/form/Label';
 import Checkbox from '../components/form/Checkbox';
 
-interface Campaign {
-  id: string;
-  name: string;
-  description: string;
-  created_at: string;
-  status: string;
-  organization_id: string | null;
-}
-
 interface FormErrors {
   searchUrl?: string;
   count?: string;
@@ -27,11 +18,10 @@ interface FormErrors {
 
 interface CampaignStartParams {
   count: number;
-  excludeGuessedEmails: boolean;
-  excludeNoEmails: boolean;
-  getEmails: boolean;
   searchUrl: string;
 }
+
+type EditableCampaignFields = 'name' | 'description' | 'fileName' | 'totalRecords' | 'url';
 
 const CampaignDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -44,6 +34,10 @@ const CampaignDetail: React.FC = () => {
   const [startError, setStartError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [statusPolling, setStatusPolling] = useState<NodeJS.Timeout | null>(null);
+  const [editMode, setEditMode] = useState<Record<EditableCampaignFields, boolean>>({} as Record<EditableCampaignFields, boolean>);
+  const [editedFields, setEditedFields] = useState<Partial<Record<EditableCampaignFields, string | number>>>({});
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCampaign();
@@ -64,6 +58,9 @@ const CampaignDetail: React.FC = () => {
         return;
       }
       setCampaign(response.data);
+      // Reset edit mode and edited fields after fetch
+      setEditMode({} as Record<EditableCampaignFields, boolean>);
+      setEditedFields({});
       
       // Start polling if campaign is in progress
       /*
@@ -121,6 +118,65 @@ const CampaignDetail: React.FC = () => {
   };
   */
 
+  const handleStartCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStartLoading(true);
+    setStartError(null);
+    try {
+      const response = await api.post(`/api/campaigns/${id}/start`, {});
+      if (response.status === 'success') {
+        toast.success('Campaign started!');
+        fetchCampaign();
+        setShowStartForm(false);
+      } else {
+        setStartError(response.message || 'Failed to start campaign.');
+      }
+    } catch (err: any) {
+      setStartError(err.message || 'Failed to start campaign.');
+    } finally {
+      setStartLoading(false);
+    }
+  };
+
+  // Helper to start editing a field
+  const handleEdit = (field: EditableCampaignFields) => {
+    setEditMode(prev => ({ ...prev, [field]: true }));
+    setEditedFields(prev => ({ ...prev, [field]: campaign ? (campaign as any)[field] : undefined }));
+  };
+
+  // Helper to change a field value
+  const handleFieldChange = (field: EditableCampaignFields, value: string | number) => {
+    setEditedFields(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Helper to save edits
+  const handleSave = async () => {
+    setSaveLoading(true);
+    setSaveError(null);
+    try {
+      const response = await api.patch(`/api/campaigns/${id}`, editedFields);
+      if (response.status === 'success') {
+        toast.success('Campaign updated!');
+        setEditMode({} as Record<EditableCampaignFields, boolean>);
+        setEditedFields({});
+        fetchCampaign();
+      } else {
+        setSaveError(response.message || 'Failed to update campaign.');
+      }
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to update campaign.');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  // Helper to cancel edits
+  const handleCancelEdit = () => {
+    setEditMode({} as Record<EditableCampaignFields, boolean>);
+    setEditedFields({});
+    setSaveError(null);
+  };
+
   if (loading) {
     return (
       <div className="text-gray-400">Loading campaign...</div>
@@ -146,64 +202,116 @@ const CampaignDetail: React.FC = () => {
           { label: campaign.name || `Campaign ${campaign.id}` }
         ]}
       />
-      <div className="space-y-5 sm:space-y-6">
-        <ComponentCard title="Campaign Details">
-          <div className="space-y-4">
+      <ComponentCard title="Campaign Details">
+        <div className="space-y-4">
+          <div>
+            {/* Editable Name */}
+            <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90">
+              {editMode.name ? (
+                <input
+                  className="border rounded px-2 py-1 text-lg"
+                  value={editedFields.name ?? (campaign as any).name}
+                  onChange={e => handleFieldChange('name', e.target.value)}
+                  autoFocus
+                />
+              ) : (
+                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                  ? <span onClick={() => handleEdit('name')} className="cursor-pointer hover:underline">{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
+                  : <span>{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
+              )}
+            </h2>
+            {/* Editable Description */}
+            <p className="text-gray-400 mt-1">
+              {editMode.description ? (
+                <textarea
+                  className="border rounded px-2 py-1 w-full"
+                  value={editedFields.description ?? (campaign as any).description}
+                  onChange={e => handleFieldChange('description', e.target.value)}
+                  autoFocus
+                />
+              ) : (
+                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                  ? <span onClick={() => handleEdit('description')} className="cursor-pointer hover:underline">{(campaign as any).description}</span>
+                  : <span>{(campaign as any).description}</span>
+              )}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {/* Editable File Name */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90">
-                {campaign.name || `Campaign ${campaign.id}`}
-              </h2>
-              <p className="text-gray-400 mt-1">{campaign.description}</p>
+              <span className="text-gray-400">File Name:</span>
+              {editMode.fileName ? (
+                <input
+                  className="ml-2 border rounded px-2 py-1"
+                  value={editedFields.fileName ?? campaign.fileName}
+                  onChange={e => handleFieldChange('fileName', e.target.value)}
+                  autoFocus
+                />
+              ) : (
+                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                  ? <span className="ml-2 cursor-pointer hover:underline" onClick={() => handleEdit('fileName')}>{campaign.fileName}</span>
+                  : <span className="ml-2">{campaign.fileName}</span>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-gray-400">Created:</span>
-                <span className="ml-2 text-gray-800 dark:text-white/90">
-                  {new Date(campaign.created_at).toLocaleString()}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-400">Status:</span>
-                <span className="ml-2 text-gray-800 dark:text-white/90">
-                  {campaign.status || 'created'}
-                </span>
-              </div>
+            {/* Editable Total Records */}
+            <div>
+              <span className="text-gray-400">Total Records:</span>
+              {editMode.totalRecords ? (
+                <input
+                  className="ml-2 border rounded px-2 py-1 w-24"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={editedFields.totalRecords ?? campaign.totalRecords}
+                  onChange={e => handleFieldChange('totalRecords', Number(e.target.value))}
+                  autoFocus
+                />
+              ) : (
+                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                  ? <span className="ml-2 cursor-pointer hover:underline" onClick={() => handleEdit('totalRecords')}>{campaign.totalRecords}</span>
+                  : <span className="ml-2">{campaign.totalRecords}</span>
+              )}
+            </div>
+            {/* Editable URL */}
+            <div className="col-span-2">
+              <span className="text-gray-400">URL:</span>
+              {editMode.url ? (
+                <input
+                  className="ml-2 border rounded px-2 py-1 w-full"
+                  value={editedFields.url ?? campaign.url}
+                  onChange={e => handleFieldChange('url', e.target.value)}
+                  autoFocus
+                />
+              ) : (
+                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                  ? <span className="ml-2 cursor-pointer hover:underline" onClick={() => handleEdit('url')}>{campaign.url}</span>
+                  : <span className="ml-2">{campaign.url}</span>
+              )}
             </div>
           </div>
-        </ComponentCard>
-
-        {campaign.status === 'created' && (
-          <ComponentCard title="Start Campaign">
-            <div className="text-center">
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  setStarting(true);
-                  try {
-                    const response = await api.post(`/api/campaigns/${campaign.id}/start`, {});
-                    if (response.status === 'error') {
-                      toast.error(response.message);
-                      return;
-                    }
-                    toast.success('Campaign started successfully');
-                    setCampaign(response.data);
-                    // startStatusPolling();
-                  } catch (error) {
-                    toast.error('Failed to start campaign');
-                  } finally {
-                    setStarting(false);
-                  }
-                }}
-                disabled={starting}
-              >
-                {starting ? 'Starting...' : 'Start Campaign'}
-              </Button>
-            </div>
-          </ComponentCard>
+        </div>
+        {/* Save/Cancel or Start Campaign Button */}
+        {Object.keys(editedFields).length > 0 ? (
+          <div className="mt-6 flex gap-2 items-center">
+            <Button variant="primary" onClick={handleSave} disabled={saveLoading}>
+              {saveLoading ? 'Saving...' : 'Save'}
+            </Button>
+            <Button variant="outline" onClick={handleCancelEdit} disabled={saveLoading}>
+              Cancel
+            </Button>
+            {saveError && <span className="text-red-500 ml-2">{saveError}</span>}
+          </div>
+        ) : campaign.status?.toUpperCase() === CampaignStatus.CREATED && (
+          <div className="mt-6">
+            <Button variant="primary" onClick={() => handleStartCampaign({ preventDefault: () => {} } as React.FormEvent)} disabled={startLoading}>
+              {startLoading ? 'Starting...' : 'Start Campaign'}
+            </Button>
+            {startError && <span className="text-red-500 ml-2">{startError}</span>}
+          </div>
         )}
-      </div>
+      </ComponentCard>
     </>
   );
 };
 
-export default CampaignDetail; 
+export default CampaignDetail;

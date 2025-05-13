@@ -28,21 +28,52 @@ class PerplexityService:
             lead: Lead object
         Returns:
             dict: The prompt JSON with lead details filled in.
+        Raises:
+            ValueError: If any required prompt variable is missing.
         """
         if not lead:
             raise ValueError("Lead is required")
 
         # Map properties from the lead record
-        first_name = lead.name.split(' ')[0]
-        last_name = ' '.join(lead.name.split(' ')[1:])
-        company_name = lead.company_name
-        
-        # Try to get headline from raw_lead_data or fallback to status
+        first_name = getattr(lead, 'first_name', '')
+        last_name = getattr(lead, 'last_name', '')
+        # company_name is not a direct field, fallback to company
+        company_name = getattr(lead, 'company_name', None) or getattr(lead, 'company', '')
+
+        # Try to get headline from raw_lead_data or fallback to title
         headline = ''
         if hasattr(lead, 'raw_lead_data') and lead.raw_lead_data:
             headline = lead.raw_lead_data.get('headline')
         if not headline:
-            headline = getattr(lead, 'status', '')
+            headline = getattr(lead, 'title', '')
+
+        # Log the extracted prompt variables
+        server_logger.info(f"Prompt variables for lead {getattr(lead, 'id', None)}: first_name='{first_name}', last_name='{last_name}', headline='{headline}', company_name='{company_name}'", extra={'component': 'perplexity'})
+
+        # Check for missing required properties
+        missing = []
+        if not first_name:
+            missing.append('first_name')
+        if not last_name:
+            missing.append('last_name')
+        if not headline:
+            missing.append('headline')
+        if not company_name:
+            missing.append('company_name')
+        if missing:
+            error_msg = f"Missing required prompt variables: {', '.join(missing)} for lead {getattr(lead, 'id', None)}"
+            server_logger.error(error_msg, extra={'component': 'perplexity'})
+            # Attach error to job if possible
+            enrichment_job_id = getattr(lead, 'enrichment_job_id', None)
+            if enrichment_job_id:
+                from server.models.job import Job
+                from server.models.job_status import JobStatus
+                job = Job.query.get(enrichment_job_id)
+                if job:
+                    job.error_details = {'prompt_error': error_msg, 'missing_fields': missing}
+                    job.update_status(JobStatus.FAILED, error_message=error_msg)
+                    db.session.commit()
+            raise ValueError(error_msg)
 
         prompt = {
             "model": "llama-3.1-sonar-small-128k-online",
@@ -61,6 +92,8 @@ class PerplexityService:
             "presence_penalty": 0,
             "frequency_penalty": 1
         }
+        # Log the built prompt
+        server_logger.info(f"Built Perplexity prompt for lead {getattr(lead, 'id', None)}: {prompt}", extra={'component': 'perplexity'})
         return prompt
 
     def enrich_lead(self, lead: Lead) -> Dict[str, Any]:
@@ -91,63 +124,4 @@ class PerplexityService:
             except Exception as e:
                 error_msg = f"Unexpected error enriching lead {lead.id}: {str(e)}"
                 server_logger.error(error_msg, extra={'component': 'server'})
-                return {'error': error_msg}
-
-    def enrich_leads(self, campaign_id: str) -> Dict[str, Any]:
-        """
-        Enrich leads for a given campaign_id that passed email verification.
-        Args:
-            campaign_id (str): The campaign ID to filter leads.
-        Returns:
-            dict: Results including count of processed leads and any errors.
-        """
-        if not campaign_id:
-            raise ValueError("campaign_id is required")
-
-        try:
-            leads = db.session.query(Lead).filter_by(campaign_id=campaign_id).all()
-            server_logger.info(f"Found {len(leads)} leads for campaign {campaign_id}", extra={'component': 'server'})
-            
-            # Filter leads that passed email verification
-            valid_leads = [lead for lead in leads if lead.email_verification and lead.email_verification.get('result') == 'ok']
-            server_logger.info(f"Found {len(valid_leads)} valid leads for enrichment out of {len(leads)} total", extra={'component': 'server'})
-            
-            processed = 0
-            errors = []
-            
-            for lead in valid_leads:
-                try:
-                    result = self.enrich_lead(lead)
-                    if 'error' in result:
-                        errors.append(f"Lead {lead.id}: {result['error']}")
-                        lead.enrichment_results = {'error': result['error']}
-                    else:
-                        lead.enrichment_results = result
-                        processed += 1
-                except Exception as e:
-                    error_msg = f"Failed to enrich lead {lead.id}: {str(e)}"
-                    server_logger.error(error_msg, extra={'component': 'server'})
-                    errors.append(error_msg)
-                    lead.enrichment_results = {'error': error_msg}
-
-            try:
-                db.session.commit()
-                server_logger.info(f"Successfully enriched {processed} leads for campaign {campaign_id}", extra={'component': 'server'})
-                if errors:
-                    server_logger.warning(f"Completed with {len(errors)} errors: {errors}", extra={'component': 'server'})
-                return {
-                    'processed': processed,
-                    'errors': errors
-                }
-            except Exception as e:
-                db.session.rollback()
-                error_msg = f"Database error while saving enrichment results: {str(e)}"
-                server_logger.error(error_msg, extra={'component': 'server'})
-                raise RuntimeError(error_msg)
-
-        except Exception as e:
-            error_msg = f"Unexpected error in enrich_leads: {str(e)}"
-            server_logger.error(error_msg, extra={'component': 'server'})
-            raise RuntimeError(error_msg)
-        finally:
-            db.session.remove() 
+                return {'error': error_msg} 

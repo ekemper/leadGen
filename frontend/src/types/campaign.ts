@@ -21,12 +21,12 @@ export interface Campaign {
     enrich_leads?: string;
     email_copy_generation?: string;
   };
+  fileName: string;
+  totalRecords: number;
+  url: string;
 }
 
 export interface CampaignStartParams {
-  count: number;
-  excludeGuessedEmails: boolean;
-  excludeNoEmails: boolean;
-  getEmails: boolean;
+  count: number; // 1-1000
   searchUrl: string;
 } 

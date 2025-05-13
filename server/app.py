@@ -37,7 +37,7 @@ def create_app(test_config=None):
          resources={
              r"/*": {
                  "origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
-                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                  "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],
                  "expose_headers": ["Content-Type", "Authorization", "X-Request-ID"],
                  "supports_credentials": True,
@@ -52,7 +52,7 @@ def create_app(test_config=None):
         allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"]
         if origin in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Request-ID'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Max-Age'] = '3600'

@@ -347,6 +347,28 @@ def register_routes(api):
                 server_logger.error(f"Invalid error response format: {errors}")
             return jsonify(error_response), 500
 
+    @api.route('/campaigns/<campaign_id>', methods=['PATCH'])
+    @token_required
+    def update_campaign(campaign_id):
+        """Update campaign properties."""
+        data = request.get_json()
+        if not data:
+            return make_error_response(400, 'Bad Request', 'No data provided')
+        allowed_fields = {'name', 'description', 'fileName', 'totalRecords', 'url'}
+        update_data = {k: v for k, v in data.items() if k in allowed_fields}
+        if not update_data:
+            return make_error_response(400, 'Bad Request', 'No valid fields to update')
+        try:
+            campaign_service = get_campaign_service()
+            updated = campaign_service.update_campaign(campaign_id, update_data)
+            errors = CampaignSchema().validate(updated)
+            if errors:
+                return make_error_response(400, 'Bad Request', f'Invalid campaign data: {errors}')
+            return jsonify({'status': 'success', 'data': updated}), 200
+        except Exception as e:
+            server_logger.error(f"Error updating campaign: {str(e)}")
+            return make_error_response(500, 'Internal Server Error', 'Failed to update campaign')
+
     # --- Error response helper ---
     def make_error_response(code, name, message, status_code=400):
         error_response = {
@@ -372,11 +394,9 @@ def register_routes(api):
           - name (str, required)
           - description (str, required)
           - organization_id (str, required)
-          - searchUrl (str, required)
-          - count (int, required)
-          - excludeGuessedEmails (bool, required)
-          - excludeNoEmails (bool, required)
-          - getEmails (bool, required)
+          - fileName (str, required)
+          - totalRecords (int, required)
+          - url (str, required)
         """
         data = request.get_json()
         server_logger.info(f"Received campaign creation request: {json.dumps(data, default=str)}")
@@ -918,33 +938,4 @@ def register_routes(api):
                     'name': 'Internal Server Error',
                     'message': 'Failed to clean up campaign jobs'
                 }
-            }), 500
-
-    # --- Apify Webhook endpoint (public, no auth) ---
-    @api.route('/apify-webhook', methods=['POST'])
-    def apify_webhook():
-        """Receive Apify actor webhook events (all event types). Only accept requests from ngrok."""
-        from werkzeug.exceptions import BadRequest
-        try:
-            # Check ngrok: X-Forwarded-For header is set by ngrok, and remote_addr is usually 127.0.0.1
-            ngrok_ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-            user_agent = request.headers.get('User-Agent', '')
-            if not ngrok_ip:
-                server_logger.warning(f"[APIFY WEBHOOK] Rejected: missing X-Forwarded-For. UA={user_agent}")
-                return jsonify({'status': 'error', 'message': 'Forbidden: not from ngrok'}), 403
-            try:
-                event = request.get_json(force=True) or {}
-            except BadRequest:
-                server_logger.warning(f"[APIFY WEBHOOK] Malformed JSON from ngrok_ip={ngrok_ip}")
-                return jsonify({'status': 'error', 'message': 'Malformed JSON'}), 400
-            server_logger.info(f"[APIFY WEBHOOK] Accepted from ngrok_ip={ngrok_ip}: {json.dumps(event)}")
-            # Call ApolloService to process the webhook event
-            result = ApolloService().process_apify_webhook_event(event)
-            server_logger.info(f"[APIFY WEBHOOK] Processing result: {result}")
-            if result.get('status') == 'success' or result.get('status') == 'ignored':
-                return jsonify(result), 200
-            else:
-                return jsonify(result), 400
-        except Exception as e:
-            server_logger.error(f"[APIFY WEBHOOK] Error: {str(e)}")
-            return jsonify({'status': 'error', 'message': str(e)}), 400 
+            }), 500 

@@ -8,11 +8,9 @@ from flask import json
 def apollo_params():
     """Test Apollo parameters."""
     return {
-        'count': 2,
-        'excludeGuessedEmails': True,
-        'excludeNoEmails': False,
-        'getEmails': True,
-        'searchUrl': 'https://apollo.io/search'
+        'fileName': 'https://apollo.io/search',
+        'totalRecords': 10,
+        'url': 'https://apollo.io/search'
     }
 
 def test_fetch_apollo_leads_success(client, auth_headers, apollo_params):
@@ -24,8 +22,6 @@ def test_fetch_apollo_leads_success(client, auth_headers, apollo_params):
 def test_fetch_apollo_leads_missing_params(client, auth_headers):
     """Test Apollo leads fetch with missing parameters."""
     params = {
-        'count': 10,
-        'excludeGuessedEmails': True
     }
     response = client.post('/api/fetch_apollo_leads', json=params, headers=auth_headers)
     assert response.status_code == 400
@@ -34,11 +30,9 @@ def test_fetch_apollo_leads_missing_params(client, auth_headers):
 def test_fetch_apollo_leads_invalid_params(client, auth_headers):
     """Test Apollo leads fetch with invalid parameters."""
     params = {
-        'count': 'invalid',
-        'excludeGuessedEmails': 'not-a-boolean',
-        'excludeNoEmails': False,
-        'getEmails': True,
-        'searchUrl': 'not-a-url'
+        'fileName': 'not-a-url',
+        'totalRecords': 10,
+        'url': 'not-a-url'
     }
     response = client.post('/api/fetch_apollo_leads', json=params, headers=auth_headers)
     assert response.status_code == 400
@@ -46,7 +40,6 @@ def test_fetch_apollo_leads_invalid_params(client, auth_headers):
 def test_fetch_apollo_leads_invalid_count(client, auth_headers, apollo_params):
     """Test Apollo leads fetch with invalid count."""
     params = apollo_params.copy()
-    params['count'] = -1
     response = client.post('/api/fetch_apollo_leads', json=params, headers=auth_headers)
     assert response.status_code == 400
     assert 'count' in response.json['message'].lower()
@@ -54,18 +47,10 @@ def test_fetch_apollo_leads_invalid_count(client, auth_headers, apollo_params):
 def test_fetch_apollo_leads_invalid_url(client, auth_headers, apollo_params):
     """Test Apollo leads fetch with invalid search URL."""
     params = apollo_params.copy()
-    params['searchUrl'] = 'not-a-url'
+    params['fileName'] = 'not-a-url'
     response = client.post('/api/fetch_apollo_leads', json=params, headers=auth_headers)
     assert response.status_code == 400
     assert 'url' in response.json['message'].lower()
-
-def test_fetch_apollo_leads_invalid_boolean(client, auth_headers, apollo_params):
-    """Test Apollo leads fetch with invalid boolean parameters."""
-    params = apollo_params.copy()
-    params['excludeGuessedEmails'] = 'not-a-boolean'
-    response = client.post('/api/fetch_apollo_leads', json=params, headers=auth_headers)
-    assert response.status_code == 400
-    assert 'boolean' in response.json['message'].lower()
 
 def test_fetch_apollo_leads_empty_params(client, auth_headers):
     """Test Apollo leads fetch with empty parameters."""

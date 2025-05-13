@@ -111,24 +111,18 @@ class CampaignService:
     def create_campaign(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new campaign."""
         try:
-            # Set default searchUrl if not provided
-            if 'searchUrl' not in data or not data['searchUrl']:
-                data['searchUrl'] = "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing"
             # Validate input data
             errors = CampaignCreateSchema().validate(data)
             if errors:
                 raise ValueError(f"Invalid campaign data: {errors}")
-                
             campaign = Campaign(
                 name=data['name'],
                 description=data.get('description', ''),
                 organization_id=data.get('organization_id'),
                 status=CampaignStatus.CREATED,
-                searchUrl=data['searchUrl'],
-                count=data['count'],
-                excludeGuessedEmails=data['excludeGuessedEmails'],
-                excludeNoEmails=data['excludeNoEmails'],
-                getEmails=data['getEmails']
+                fileName=data['fileName'],
+                totalRecords=data['totalRecords'],
+                url=data['url']
             )
             
             db.session.add(campaign)
@@ -182,7 +176,7 @@ class CampaignService:
             logger.error(CAMPAIGN_ERRORS['INVALID_COUNT'])
             raise ValueError(CAMPAIGN_ERRORS['INVALID_COUNT'])
         
-        if count > 100:
+        if count > 1000:
             logger.error(CAMPAIGN_ERRORS['INVALID_COUNT'])
             raise ValueError(CAMPAIGN_ERRORS['INVALID_COUNT'])
         
@@ -208,29 +202,15 @@ class CampaignService:
                 logger.error(f"Cannot start campaign {campaign_id} in status {campaign.status}")
                 raise ValueError(f"Cannot start campaign in {campaign.status} status")
 
-            # Use campaign's stored fields
-            search_url = campaign.searchUrl
-            count = campaign.count
-            exclude_guessed_emails = campaign.excludeGuessedEmails
-            exclude_no_emails = campaign.excludeNoEmails
-            get_emails = campaign.getEmails
-
-            # Validate search URL
-            if not (search_url.startswith('https://app.apollo.io/search') or search_url.startswith('https://app.apollo.io/#/people')):
-                logger.error(f"Invalid Apollo.io search URL: {search_url}")
-                raise ValueError("Invalid Apollo.io search URL")
-
             try:
                 # Update campaign status to FETCHING_LEADS
                 campaign.update_status(CampaignStatus.FETCHING_LEADS)
                 logger.info(f"Campaign {campaign_id} status updated to FETCHING_LEADS")
 
                 job_params = {
-                    'searchUrl': search_url,
-                    'count': count,
-                    'excludeGuessedEmails': exclude_guessed_emails,
-                    'excludeNoEmails': exclude_no_emails,
-                    'getEmails': get_emails
+                    'fileName': campaign.fileName,
+                    'totalRecords': campaign.totalRecords,
+                    'url': campaign.url
                 }
                 logger.info(f"Creating fetch_leads job for campaign {campaign_id} with params: {job_params}")
 
@@ -395,4 +375,14 @@ class CampaignService:
             db.session.rollback()
             error_msg = f"Error cleaning up campaign jobs: {str(e)}"
             logger.error(error_msg, exc_info=True)
-            raise 
+            raise
+
+    def update_campaign(self, campaign_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update campaign properties and return updated campaign."""
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+        for k, v in update_data.items():
+            setattr(campaign, k, v)
+        db.session.commit()
+        return campaign.to_dict() 

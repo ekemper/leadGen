@@ -7,6 +7,7 @@ import sys
 import re
 import json
 from typing import Any, Dict, Union
+from colorama import Fore, Style, init as colorama_init
 
 # Constants
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs'))
@@ -128,8 +129,66 @@ class SanitizingFilter(logging.Filter):
         LogSanitizer.sanitize_log_record(record)
         return True
 
+class EnhancedColorFormatter(logging.Formatter):
+    LEVEL_COLORS = {
+        'DEBUG': Fore.CYAN,
+        'INFO': Fore.GREEN,
+        'WARNING': Fore.YELLOW,
+        'ERROR': Fore.RED,
+        'CRITICAL': Fore.MAGENTA
+    }
+    CONTEXT_COLOR = Fore.CYAN
+    KEY_COLOR = Fore.YELLOW
+    VALUE_COLOR = Fore.WHITE
+    TIME_COLOR = Fore.LIGHTBLACK_EX
+
+    def format(self, record):
+        color = self.LEVEL_COLORS.get(record.levelname, '')
+        reset = Style.RESET_ALL
+        time_str = datetime.utcnow().isoformat()
+        msg = record.getMessage()
+        context = ''
+        # Extract context from message prefix, e.g., [WEBHOOK]
+        if msg.startswith('['):
+            end = msg.find(']')
+            if end != -1:
+                context = msg[:end+1]
+                msg = msg[end+2:].lstrip()
+        # Pretty-print JSON if possible
+        pretty_json = None
+        try:
+            if isinstance(record.msg, dict):
+                pretty_json = json.dumps(record.msg, indent=2)
+            else:
+                # Try to parse as JSON
+                parsed = json.loads(msg)
+                pretty_json = json.dumps(parsed, indent=2)
+        except Exception:
+            pass  # Not JSON, leave as is
+        # Colorize context
+        context_str = f"{self.CONTEXT_COLOR}{context}{reset}" if context else ""
+        # Colorize level
+        level_str = f"{color}[{record.levelname}]{reset}"
+        # Colorize time
+        time_str_col = f"{self.TIME_COLOR}{time_str}{reset}"
+        # If pretty_json, colorize keys/values
+        if pretty_json:
+            def colorize_json(json_str):
+                lines = json_str.splitlines()
+                colored = []
+                for line in lines:
+                    # Colorize keys and values
+                    if ':' in line:
+                        key, val = line.split(':', 1)
+                        colored.append(f"{self.KEY_COLOR}{key}:{reset}{self.VALUE_COLOR}{val}{reset}")
+                    else:
+                        colored.append(f"{self.VALUE_COLOR}{line}{reset}")
+                return '\n'.join(colored)
+            msg = '\n' + colorize_json(pretty_json)
+        return f"{level_str} {time_str_col} {context_str} {msg}"
+
 def setup_logger(name, log_file, level=logging.INFO):
-    """Set up a logger with JSON formatting and file output."""
+    """Set up a logger with JSON formatting and file output. Optionally colorize console and file output for human readability in local dev."""
     # Create logs directory if it doesn't exist
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
@@ -141,6 +200,14 @@ def setup_logger(name, log_file, level=logging.INFO):
         reserved_attrs=[]  # Allow all attributes to be processed
     )
 
+    # Check if file logs should be colorized (local dev only)
+    use_color_file = os.getenv('LOG_COLOR_FILE', '0') == '1'
+    if use_color_file:
+        colorama_init(autoreset=True)
+        file_formatter = EnhancedColorFormatter()
+    else:
+        file_formatter = formatter
+
     # Create rotating file handler with explicit mode
     log_path = os.path.join(LOG_DIR, log_file)
     file_handler = RotatingFileHandler(
@@ -150,12 +217,20 @@ def setup_logger(name, log_file, level=logging.INFO):
         encoding='utf-8',
         mode='a'  # Append mode
     )
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(file_formatter)
     file_handler.setLevel(level)
+
+    # Optionally use colorized console output
+    use_color = os.getenv('LOG_COLOR', '0') == '1'
+    if use_color:
+        colorama_init(autoreset=True)
+        console_formatter = EnhancedColorFormatter()
+    else:
+        console_formatter = formatter
 
     # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(console_formatter)
     console_handler.setLevel(level)
 
     # Create logger

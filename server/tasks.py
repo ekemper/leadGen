@@ -51,7 +51,7 @@ def fetch_and_save_leads_task(params, campaign_id):
             job.update_status(JobStatus.IN_PROGRESS)
 
             # Fetch leads (pass job.id)
-            result = ApolloService().fetch_leads(params, campaign_id, job.id)
+            result = ApolloService().fetch_leads(params, campaign_id)
 
             # Mark job as completed
             job.update_status(JobStatus.COMPLETED)
@@ -61,21 +61,16 @@ def fetch_and_save_leads_task(params, campaign_id):
 
             server_logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
 
-            # Enqueue email verification job for each lead
+            # Enqueue enrichment job for each lead
             from server.models.lead import Lead
             leads = Lead.query.filter_by(campaign_id=campaign_id).all()
             for lead in leads:
-                enqueue_lead_email_verification(lead.id)
+                enqueue_enrich_lead(lead.id)
 
             return campaign_id  # Return campaign_id for chaining
         except Exception as e:
             handle_task_error(campaign_id, e, 'FETCH_LEADS')
             raise
-
-# Commenting out all other task and enqueue functions
-def enriching_leads_task(result):
-    """Enrich leads with additional data."""
-    pass  # Commented out for testing fetch only
 
 def email_verification_task(result):
     """Verify email addresses for leads."""
@@ -100,17 +95,126 @@ def enqueue_fetch_and_save_leads(params, campaign_id):
 def enqueue_email_verification(result, depends_on=None):
     pass  # Commented out for testing fetch only
 
-def enqueue_enriching_leads(result, depends_on=None):
-    pass  # Commented out for testing fetch only
-
-def enqueue_email_copy_generation(result, depends_on=None):
-    pass  # Commented out for testing fetch only
-
-def enqueue_email_generation(params, depends_on=None):
-    pass  # Commented out for testing fetch only
+def enqueue_enrich_lead(lead_id, depends_on=None):
+    queue = get_queue()
+    job = queue.enqueue(
+        enrich_lead_task,
+        args=(lead_id,),
+        depends_on=depends_on,
+        job_timeout=QUEUE_CONFIG['default']['job_timeout'],
+        retry=Retry(max=QUEUE_CONFIG['default']['max_retries'])
+    )
+    return job
 
 def email_generation_task(params):
     pass  # Commented out for testing fetch only
+
+def verify_lead_email(lead):
+    """Helper to verify a lead's email and save the result."""
+    from server.background_services.email_verifier_service import EmailVerifierService
+    if not lead.email:
+        result = {'status': 'skipped', 'reason': 'no email'}
+        lead.email_verification = result
+        db.session.commit()
+        return result
+    result = EmailVerifierService().verify_email(lead.email)
+    lead.email_verification = result
+    db.session.commit()
+    return result
+
+def enrich_lead_with_perplexity(lead):
+    """Helper to enrich a lead with Perplexity and save the result."""
+    from server.background_services.perplexity_service import PerplexityService
+    result = PerplexityService().enrich_lead(lead)
+    lead.enrichment_results = result
+    db.session.commit()
+    return result
+
+def generate_lead_email_copy(lead, enrichment_result):
+    """Helper to generate email copy for a lead and save the result."""
+    from server.background_services.openai_service import OpenAIService
+    response = OpenAIService().generate_email_copy(lead, enrichment_result)
+    # Only store the generated content string
+    lead.email_copy_gen_results = response.choices[0].message.content
+    db.session.commit()
+    return response.choices[0].message.content
+
+def enrich_lead_task(lead_id):
+    """Verify email, enrich with Perplexity, and generate email copy for a single lead."""
+    from server.app import create_app
+    flask_app = create_app()
+    with flask_app.app_context():
+        from server.models.lead import Lead
+        lead = Lead.query.get(lead_id)
+        job = None
+        if not lead:
+            server_logger.error(f"Lead {lead_id} not found for enrichment task.")
+            return
+        try:
+            from server.models.job import Job
+            from server.models.job_status import JobStatus
+            job = Job.create(campaign_id=lead.campaign_id, job_type='ENRICH_LEAD', parameters={'lead_id': lead_id})
+            db.session.commit()
+            lead.enrichment_job_id = job.id
+            db.session.commit()
+            job.update_status(JobStatus.IN_PROGRESS)
+
+            # 1. Email verification
+            email_result = verify_lead_email(lead)
+            email_success = email_result and email_result.get('result') == 'ok'
+            error_details = {}
+            if not email_success:
+                error_details['email_verification'] = email_result
+                job.result = {
+                    'email_verification_success': False,
+                    'enrichment_success': False,
+                    'email_copy_success': False
+                }
+                job.error_details = error_details
+                job.update_status(JobStatus.COMPLETED)
+                return
+
+            # 2. Enrichment
+            enrichment_result = enrich_lead_with_perplexity(lead)
+            enrichment_success = 'error' not in enrichment_result
+            if not enrichment_success:
+                error_details['enrichment'] = enrichment_result
+                job.result = {
+                    'email_verification_success': True,
+                    'enrichment_success': False,
+                    'email_copy_success': False
+                }
+                job.error_details = error_details
+                job.update_status(JobStatus.COMPLETED)
+                return
+
+            # 3. Email copy generation
+            try:
+                email_copy_result = generate_lead_email_copy(lead, enrichment_result)
+                email_copy_success = True
+            except Exception as e:
+                email_copy_success = False
+                lead.email_copy_gen_results = None
+                db.session.commit()
+                error_details['email_copy'] = str(e)
+
+            # Save overall job result
+            job.result = {
+                'email_verification_success': True,
+                'enrichment_success': True,
+                'email_copy_success': email_copy_success
+            }
+            if error_details:
+                job.error_details = error_details
+            job.update_status(JobStatus.COMPLETED)
+            server_logger.info(f"Lead {lead_id} enrichment and email copy complete.")
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Error in enrich_lead_task for lead {lead_id}: {str(e)}"
+            server_logger.error(error_msg)
+            if job:
+                job.update_status(JobStatus.FAILED, error_message=error_msg)
+            raise
 
 def lead_email_verification_task(lead_id):
     """Verify the email for a single lead and save the result."""

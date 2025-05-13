@@ -37,7 +37,7 @@ interface Organization {
 }
 
 interface FormErrors {
-  searchUrl?: string;
+  fileName?: string;
   count?: string;
   name?: string;
   description?: string;
@@ -102,11 +102,9 @@ const CampaignsList: React.FC = () => {
     name: '',
     description: '',
     organization_id: '',
-    searchUrl: "https://app.apollo.io/#/people?page=1&personLocations%5B%5D=United%20States&contactEmailStatusV2%5B%5D=verified&personSeniorities%5B%5D=owner&personSeniorities%5B%5D=founder&personSeniorities%5B%5D=c_suite&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personDepartmentOrSubdepartments%5B%5D=master_operations&personDepartmentOrSubdepartments%5B%5D=master_sales&sortAscending=false&sortByField=recommendations_score&contactEmailExcludeCatchAll=true&qOrganizationKeywordTags%5B%5D=SEO&qOrganizationKeywordTags%5B%5D=Digital%20Marketing&qOrganizationKeywordTags%5B%5D=Marketing",
-    count: 10,
-    excludeGuessedEmails: true,
-    excludeNoEmails: false,
-    getEmails: true
+    fileName: 'motorcycle_dealers',
+    totalRecords: 500,
+    url: 'https://app.apollo.io/#/people?contactEmailStatusV2%5B%5D=verified&contactEmailExcludeCatchAll=true&personTitles%5B%5D=CEO&personTitles%5B%5D=Founder&personTitles%5B%5D=sales%20manager&personTitles%5B%5D=chief%20sales%20officer&personLocations%5B%5D=United%20States&sortAscending=false&sortByField=recommendations_score&page=1&qOrganizationKeywordTags%5B%5D=motorcycle%20dealership&qOrganizationKeywordTags%5B%5D=harley%20davidson&qOrganizationKeywordTags%5B%5D=motorcycle&qOrganizationKeywordTags%5B%5D=carsports&includedOrganizationKeywordFields%5B%5D=tags&includedOrganizationKeywordFields%5B%5D=name&personNotTitles%5B%5D=assistant%20sales%20manager',
   });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [createLoading, setCreateLoading] = useState(false);
@@ -141,11 +139,14 @@ const CampaignsList: React.FC = () => {
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
-    if (!formData.searchUrl.trim()) {
-      errors.searchUrl = 'Search URL is required';
+    if (!formData.fileName.trim()) {
+      errors.fileName = 'File Name is required';
     }
-    if (!formData.count || formData.count < 1) {
-      errors.count = 'Count must be at least 1';
+    if (!formData.totalRecords || formData.totalRecords < 1) {
+      errors.count = 'Total Records must be at least 1';
+    }
+    if (formData.totalRecords > 1000) {
+      errors.count = 'Total Records cannot exceed 1000';
     }
     if (!formData.name.trim()) {
       errors.name = 'Name is required';
@@ -275,63 +276,37 @@ const CampaignsList: React.FC = () => {
         )}
       </div>
       <div>
-        <Label htmlFor="searchUrl">Search URL</Label>
+        <Label htmlFor="fileName">File Name</Label>
         <Input
-          id="searchUrl"
-          name="searchUrl"
+          id="fileName"
+          name="fileName"
           type="text"
-          value={formData.searchUrl}
+          value={formData.fileName}
           onChange={handleChange}
           disabled={createLoading}
-          error={!!formErrors.searchUrl}
-          hint={formErrors.searchUrl}
+          error={!!formErrors.fileName}
+          hint={formErrors.fileName}
         />
       </div>
       <div>
-        <Label htmlFor="count">Number of Leads</Label>
+        <Label htmlFor="totalRecords">Number of Leads</Label>
         <Input
-          id="count"
-          name="count"
+          id="totalRecords"
+          name="totalRecords"
           type="number"
-          value={formData.count}
+          value={formData.totalRecords}
           onChange={handleChange}
           min="1"
-          max="100"
+          max="1000"
           disabled={createLoading}
           error={!!formErrors.count}
           hint={formErrors.count}
         />
       </div>
-      <div className="space-y-2">
-        <Checkbox
-          id="excludeGuessedEmails"
-          name="excludeGuessedEmails"
-          checked={formData.excludeGuessedEmails}
-          onChange={handleChange}
-          label="Exclude Guessed Emails"
-          disabled={createLoading}
-        />
-        <Checkbox
-          id="excludeNoEmails"
-          name="excludeNoEmails"
-          checked={formData.excludeNoEmails}
-          onChange={handleChange}
-          label="Exclude Leads Without Emails"
-          disabled={createLoading}
-        />
-        <Checkbox
-          id="getEmails"
-          name="getEmails"
-          checked={formData.getEmails}
-          onChange={handleChange}
-          label="Fetch Emails"
-          disabled={createLoading}
-        />
-      </div>
       {createError && <div className="text-red-500">{createError}</div>}
       <Button
         variant="primary"
-        disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id || !formData.searchUrl.trim() || !formData.count}
+        disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id || !formData.fileName.trim() || !formData.totalRecords}
       >
         {createLoading ? 'Creating...' : 'Create Campaign'}
       </Button>

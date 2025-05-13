@@ -25,43 +25,42 @@ class OpenAIService:
         # openai.api_key = self.api_key  # Deprecated in openai>=1.0.0
         self.client = openai.OpenAI(api_key=self.api_key)  # New client instance
 
-    def generate_email_copy(self, lead: Lead, enrichment_data: Dict[str, Any]) -> str:
+    def generate_email_copy(self, lead: Lead, enrichment_data: Dict[str, Any]) -> dict:
         """
         Generate personalized email copy for a lead.
-        
         Args:
             lead: The lead to generate email copy for
             enrichment_data: Additional data about the lead
-            
         Returns:
-            Generated email copy
+            The full OpenAI API response (dict)
         """
         try:
-            # Construct prompt
-            prompt = f"""Write a personalized email to {lead.name} at {lead.company_name}.
+            # Extract and log prompt variables
+            first_name = getattr(lead, 'first_name', '')
+            last_name = getattr(lead, 'last_name', '')
+            company_name = getattr(lead, 'company_name', None) or getattr(lead, 'company', '')
+            full_name = f"{first_name} {last_name}".strip()
+            server_logger.info(f"Email copy prompt vars for lead {getattr(lead, 'id', None)}: first_name='{first_name}', last_name='{last_name}', company_name='{company_name}'", extra={'component': 'OpenAIService'})
 
-Company Information:
-{enrichment_data.get('company_description', 'No company description available')}
+            # Validate required fields
+            missing = []
+            if not first_name:
+                missing.append('first_name')
+            if not last_name:
+                missing.append('last_name')
+            if not company_name:
+                missing.append('company_name')
+            if missing:
+                error_msg = f"Missing required prompt variables for email copy: {', '.join(missing)} for lead {getattr(lead, 'id', None)}"
+                server_logger.error(error_msg, extra={'component': 'OpenAIService'})
+                raise ValueError(error_msg)
 
-Lead Information:
-- Name: {lead.name}
-- Company: {lead.company_name}
-- Role: {enrichment_data.get('role', 'Unknown')}
-- Industry: {enrichment_data.get('industry', 'Unknown')}
+            prompt = f"""Write a personalized email to {full_name} at {company_name}.
+\nCompany Information:\n{enrichment_data.get('company_description', 'No company description available')}\n\nLead Information:\n- Name: {full_name}\n- Company: {company_name}\n- Role: {enrichment_data.get('role', 'Unknown')}\n- Industry: {enrichment_data.get('industry', 'Unknown')}\n\nAdditional Context:\n{enrichment_data.get('additional_context', 'No additional context available')}\n\nWrite a professional, personalized email that:\n1. Shows understanding of their business\n2. Offers specific value\n3. Has a clear call to action\n4. Is concise and engaging\n\nEmail:"""
 
-Additional Context:
-{enrichment_data.get('additional_context', 'No additional context available')}
-
-Write a professional, personalized email that:
-1. Shows understanding of their business
-2. Offers specific value
-3. Has a clear call to action
-4. Is concise and engaging
-
-Email:"""
+            server_logger.info(f"Built email copy prompt for lead {getattr(lead, 'id', None)}: {prompt}", extra={'component': 'OpenAIService'})
 
             # Call OpenAI API (openai>=1.0.0 interface)
-            # See: https://github.com/openai/openai-python/discussions/742
             response = self.client.chat.completions.create(
                 model="gpt-4",
                 messages=[
@@ -72,77 +71,8 @@ Email:"""
                 max_tokens=500
             )
 
-            return response.choices[0].message.content.strip()
-
+            return response
         except Exception as e:
             error_msg = f"Error generating email copy for lead {lead.id}: {str(e)}"
             server_logger.error(error_msg, extra={'component': 'OpenAIService'})
-            raise
-
-    def generate_email_copies_for_campaign(self, campaign_id: str) -> int:
-        """
-        Generate email copies for all leads in a campaign.
-        
-        Args:
-            campaign_id: ID of the campaign to generate emails for
-            
-        Returns:
-            Number of emails generated
-        """
-        try:
-            # Get campaign
-            campaign = Campaign.query.get(campaign_id)
-            if not campaign:
-                raise ValueError(f"Campaign {campaign_id} not found")
-
-            # Update campaign status
-            campaign.update_status(
-                CampaignStatus.GENERATING_EMAILS,
-                "Generating personalized email copy"
-            )
-
-            # Get all leads for the campaign
-            leads = Lead.query.filter_by(campaign_id=campaign_id).all()
-            server_logger.info(f"Found {len(leads)} leads to generate emails for campaign {campaign_id}", extra={'component': 'OpenAIService'})
-
-            generated_count = 0
-            errors = []
-
-            for lead in leads:
-                try:
-                    if not lead.enrichment_results:
-                        continue
-
-                    email_copy = self.generate_email_copy(lead, lead.enrichment_results)
-                    lead.email_copy = email_copy
-                    generated_count += 1
-
-                    # Log progress periodically
-                    if generated_count % 10 == 0:
-                        server_logger.info(f"Generated {generated_count}/{len(leads)} emails for campaign {campaign_id}", extra={'component': 'OpenAIService'})
-
-                except Exception as e:
-                    error_msg = f"Error generating email for lead {lead.id}: {str(e)}"
-                    server_logger.error(error_msg, extra={'component': 'OpenAIService'})
-                    errors.append(error_msg)
-
-            db.session.commit()
-
-            # Update campaign status
-            campaign.update_status(
-                CampaignStatus.COMPLETED,
-                f"Generated {generated_count} emails" + (f" with {len(errors)} errors" if errors else "")
-            )
-
-            return generated_count
-
-        except Exception as e:
-            db.session.rollback()
-            error_msg = f"Error generating emails for campaign {campaign_id}: {str(e)}"
-            server_logger.error(error_msg, extra={'component': 'OpenAIService'})
-            if campaign:
-                campaign.update_status(
-                    CampaignStatus.FAILED,
-                    error=error_msg
-                )
             raise 
