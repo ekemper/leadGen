@@ -32,6 +32,9 @@ def create_app(test_config=None):
     else:
         app.config.update(test_config)
     
+    # Ensure REDIS_URL is set in app.config from environment
+    app.config['REDIS_URL'] = os.environ.get('REDIS_URL')
+    
     # Initialize extensions with CORS config
     CORS(app, 
          resources={
@@ -86,6 +89,17 @@ def create_app(test_config=None):
         if rule.rule == '/api/events' and 'POST' in rule.methods:
             view_func = app.view_functions[rule.endpoint]
             app.view_functions[rule.endpoint] = limiter.limit("1000 per hour")(view_func)
+    
+    # Exempt /api/health from rate limiting
+    @limiter.exempt
+    @app.route('/api/health', methods=['GET'])
+    def health_check():
+        server_logger.debug('Health check endpoint called')
+        return jsonify({
+            'status': 'healthy',
+            'message': 'API is running',
+            'endpoint': '/api/health'
+        }), 200
     
     # Register error handlers
     @app.errorhandler(HTTPException)
