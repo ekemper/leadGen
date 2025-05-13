@@ -204,7 +204,7 @@ def setup_logger(name, log_file, level=logging.INFO):
     """Set up a logger with JSON formatting and file output. Optionally colorize console and file output for human readability in local dev."""
     # Create logs directory if it doesn't exist
     if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
+        os.makedirs(LOG_DIR, exist_ok=True)
 
     # Create formatter with explicit format string
     formatter = CustomJsonFormatter(
