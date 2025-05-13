@@ -155,10 +155,10 @@ def create_app(test_config=None):
 
     return app
 
+app = create_app()
+
 # Only create the app if running directly
 if __name__ == '__main__':
-    app = create_app()
-    
     server_logger.info('Starting application', extra={
         'environment': os.getenv('FLASK_ENV', 'development'),
         'debug_mode': os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
