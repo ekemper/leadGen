@@ -24,6 +24,7 @@ class Lead(db.Model):
     enrichment_results = db.Column(db.JSON, nullable=True)
     enrichment_job_id = db.Column(db.String(36), nullable=True)
     email_copy_gen_results = db.Column(db.JSON, nullable=True)
+    instantly_lead_record = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -45,6 +46,7 @@ class Lead(db.Model):
             'enrichment_results': self.enrichment_results,
             'enrichment_job_id': self.enrichment_job_id,
             'email_copy_gen_results': self.email_copy_gen_results,
+            'instantly_lead_record': self.instantly_lead_record,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

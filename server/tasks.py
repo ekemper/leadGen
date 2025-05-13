@@ -12,6 +12,7 @@ from server.config.queue_config import get_queue, QUEUE_CONFIG
 from server.models.job import Job
 import traceback
 from datetime import datetime
+from server.background_services.instantly_service import InstantlyService
 
 print("server.tasks module loaded")
 
@@ -140,7 +141,7 @@ def generate_lead_email_copy(lead, enrichment_result):
     return response.choices[0].message.content
 
 def enrich_lead_task(lead_id):
-    """Verify email, enrich with Perplexity, and generate email copy for a single lead."""
+    """Verify email, enrich with Perplexity, generate email copy, and create Instantly lead for a single lead."""
     from server.app import create_app
     flask_app = create_app()
     with flask_app.app_context():
@@ -168,7 +169,8 @@ def enrich_lead_task(lead_id):
                 job.result = {
                     'email_verification_success': False,
                     'enrichment_success': False,
-                    'email_copy_success': False
+                    'email_copy_success': False,
+                    'instantly_success': False
                 }
                 job.error_details = error_details
                 job.update_status(JobStatus.COMPLETED)
@@ -182,7 +184,8 @@ def enrich_lead_task(lead_id):
                 job.result = {
                     'email_verification_success': True,
                     'enrichment_success': False,
-                    'email_copy_success': False
+                    'email_copy_success': False,
+                    'instantly_success': False
                 }
                 job.error_details = error_details
                 job.update_status(JobStatus.COMPLETED)
@@ -198,16 +201,55 @@ def enrich_lead_task(lead_id):
                 db.session.commit()
                 error_details['email_copy'] = str(e)
 
+            # 4. Instantly lead creation
+            instantly_success = False
+            instantly_result = None
+            # Data checks for Instantly
+            missing_fields = []
+            if not lead.campaign_id:
+                missing_fields.append('campaign_id')
+            if not lead.email:
+                missing_fields.append('email')
+            if not lead.first_name:
+                missing_fields.append('first_name')
+            if not lead.email_copy_gen_results:
+                missing_fields.append('email_copy_gen_results')
+            if missing_fields:
+                msg = f"Skipping Instantly lead creation for lead {lead.id} due to missing fields: {', '.join(missing_fields)}"
+                server_logger.warning(msg)
+                error_details['instantly'] = msg
+            elif email_copy_success:
+                try:
+                    from server.background_services.instantly_service import InstantlyService
+                    instantly_service = InstantlyService()
+                    instantly_result = instantly_service.create_lead(
+                        campaign_id=lead.campaign_id,
+                        email=lead.email,
+                        first_name=lead.first_name,
+                        personalization=lead.email_copy_gen_results
+                    )
+                    instantly_success = not ('error' in instantly_result)
+                    lead.instantly_lead_record = instantly_result
+                    db.session.commit()
+                except Exception as e:
+                    error_details['instantly'] = str(e)
+                    lead.instantly_lead_record = {'error': str(e)}
+                    db.session.commit()
+                    server_logger.error(f"Instantly lead creation failed for lead {lead.id}: {str(e)}")
+
             # Save overall job result
             job.result = {
                 'email_verification_success': True,
                 'enrichment_success': True,
-                'email_copy_success': email_copy_success
+                'email_copy_success': email_copy_success,
+                'instantly_success': instantly_success
             }
             if error_details:
                 job.error_details = error_details
+            if instantly_result:
+                job.result['instantly_result'] = instantly_result
             job.update_status(JobStatus.COMPLETED)
-            server_logger.info(f"Lead {lead_id} enrichment and email copy complete.")
+            server_logger.info(f"Lead {lead_id} enrichment, email copy, and Instantly lead creation complete.")
         except Exception as e:
             db.session.rollback()
             error_msg = f"Error in enrich_lead_task for lead {lead_id}: {str(e)}"
