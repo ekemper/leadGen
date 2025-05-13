@@ -7,7 +7,20 @@ import sys
 import re
 import json
 from typing import Any, Dict, Union
-from colorama import Fore, Style, init as colorama_init
+try:
+    from colorama import Fore, Style, init as colorama_init
+    colorama_init()
+except ImportError:
+    class Fore:
+        RED = ''
+        GREEN = ''
+        YELLOW = ''
+        CYAN = ''
+        MAGENTA = ''
+        WHITE = ''
+        LIGHTBLACK_EX = ''
+    class Style:
+        RESET_ALL = ''
 
 # Constants
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs'))
