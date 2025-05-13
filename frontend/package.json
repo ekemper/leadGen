@@ -67,5 +67,5 @@
       "react-dom": "^16.8.0 || ^17 || ^18 || ^19"
     }
   },
-  "heroku-postbuild": "npm install && npm run build && rm -rf ../server/static/* && cp -r dist/* ../server/static/"
+  "heroku-postbuild": "npm install && npm run build && mkdir -p ../server/static && rm -rf ../server/static/* && cp -r dist/* ../server/static/"
 }
