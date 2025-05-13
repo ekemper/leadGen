@@ -5,6 +5,7 @@ from server.utils.logging_config import server_logger
 class InstantlyService:
     """Service for integrating with Instantly API to create leads."""
     API_URL = "https://api.instantly.ai/api/v2/leads"
+    API_CAMPAIGN_URL = "https://api.instantly.ai/api/v2/campaigns"
 
     def __init__(self):
         self.api_key = os.getenv("INSTANTLY_API_KEY")
@@ -19,7 +20,7 @@ class InstantlyService:
         payload = {
             "campaign": campaign_id,
             "email": email,
-            "first_name": first_name,
+            "firstName": first_name,
             "personalization": personalization
         }
         try:
@@ -29,4 +30,32 @@ class InstantlyService:
             return response.json()
         except requests.RequestException as e:
             server_logger.error(f"Error creating Instantly lead for {email}: {str(e)}")
+            return {"error": str(e), "payload": payload}
+
+    def create_campaign(self, name, schedule_name="My Schedule", timing_from="09:00", timing_to="17:00", days=None, timezone="Etc/GMT+12"):
+        # Always use only Monday for the days property
+        payload = {
+            "name": name,
+            "campaign_schedule": {
+                "schedules": [
+                    {
+                        "name": schedule_name,
+                        "timing": {
+                            "from": timing_from,
+                            "to": timing_to
+                        },
+                        "days": {"monday": True},
+                        "timezone": timezone
+                    }
+                ]
+            }
+        }
+        try:
+            response = requests.post(self.API_CAMPAIGN_URL, json=payload, headers=self.headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            server_logger.info(f"Successfully created Instantly campaign '{name}' with response: {data}")
+            return data
+        except requests.RequestException as e:
+            server_logger.error(f"Error creating Instantly campaign '{name}': {str(e)}")
             return {"error": str(e), "payload": payload} 

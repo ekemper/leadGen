@@ -50,6 +50,7 @@ class CampaignSchema(Schema):
     fileName = fields.Str(required=True)
     totalRecords = fields.Int(required=True)
     url = fields.Str(required=True)
+    instantly_campaign_id = fields.Str(allow_none=True)
     jobs = fields.List(fields.Nested(JobSchema), required=False)
 
 class CampaignCreateSchema(Schema):

@@ -220,9 +220,12 @@ def enrich_lead_task(lead_id):
             elif email_copy_success:
                 try:
                     from server.background_services.instantly_service import InstantlyService
+                    from server.models.campaign import Campaign
                     instantly_service = InstantlyService()
+                    campaign = Campaign.query.get(lead.campaign_id)
+                    instantly_campaign_id = campaign.instantly_campaign_id if campaign else None
                     instantly_result = instantly_service.create_lead(
-                        campaign_id=lead.campaign_id,
+                        campaign_id=instantly_campaign_id,
                         email=lead.email,
                         first_name=lead.first_name,
                         personalization=lead.email_copy_gen_results

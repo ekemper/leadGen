@@ -32,7 +32,10 @@ if __name__ == "__main__":
             "from": "09:00",
             "to": "17:00"
             },
-            "days": {},
+            "days": {
+                "monday": True,
+                "tuesday": True
+            },
             "timezone": "Etc/GMT+12"
         }
         ]

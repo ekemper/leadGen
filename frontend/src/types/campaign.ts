@@ -24,6 +24,7 @@ export interface Campaign {
   fileName: string;
   totalRecords: number;
   url: string;
+  status_message?: string;
 }
 
 export interface CampaignStartParams {

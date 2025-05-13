@@ -13,6 +13,7 @@ import logging
 import re
 from server.api.schemas import CampaignSchema, CampaignCreateSchema, CampaignStartSchema, JobSchema
 from server.tasks import enqueue_fetch_and_save_leads
+from server.background_services.instantly_service import InstantlyService
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,20 @@ class CampaignService:
             
             db.session.add(campaign)
             db.session.commit()
-            
+
+            # Create Instantly campaign
+            try:
+                instantly_service = InstantlyService()
+                instantly_response = instantly_service.create_campaign(name=campaign.name)
+                instantly_campaign_id = instantly_response.get('id')
+                if instantly_campaign_id:
+                    campaign.instantly_campaign_id = instantly_campaign_id
+                    db.session.commit()
+                else:
+                    server_logger.error(f"Instantly campaign creation failed: {instantly_response}")
+            except Exception as e:
+                server_logger.error(f"Error calling InstantlyService.create_campaign: {str(e)}")
+
             campaign_dict = campaign.to_dict()
             # Validate output data
             errors = CampaignSchema().validate(campaign_dict)

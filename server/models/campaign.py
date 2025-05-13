@@ -29,6 +29,7 @@ class Campaign(db.Model):
     fileName = db.Column(db.String(255), nullable=False)
     totalRecords = db.Column(db.Integer, nullable=False)
     url = db.Column(db.Text, nullable=False)
+    instantly_campaign_id = db.Column(db.String(64), nullable=True)
 
     # Define valid status transitions (simplified)
     VALID_TRANSITIONS = {
@@ -39,7 +40,7 @@ class Campaign(db.Model):
     }
 
     def __init__(self, name=None, description=None, organization_id=None, id=None, created_at=None, status=None, 
-                 status_message=None, status_error=None, fileName=None, totalRecords=None, url=None):
+                 status_message=None, status_error=None, fileName=None, totalRecords=None, url=None, instantly_campaign_id=None):
         self.id = id or str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -52,6 +53,7 @@ class Campaign(db.Model):
         self.fileName = fileName
         self.totalRecords = totalRecords
         self.url = url
+        self.instantly_campaign_id = instantly_campaign_id
 
     def is_valid_transition(self, new_status: str) -> bool:
         """Check if status transition is valid (simplified)."""
@@ -87,7 +89,10 @@ class Campaign(db.Model):
             'organization_id': self.organization_id,
             'fileName': self.fileName,
             'totalRecords': self.totalRecords,
-            'url': self.url
+            'url': self.url,
+            'status_message': self.status_message if self.status_message is not None else '',
+            'status_error': self.status_error if self.status_error is not None else '',
+            'instantly_campaign_id': self.instantly_campaign_id
         }
 
     def __repr__(self):
