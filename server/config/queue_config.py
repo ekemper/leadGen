@@ -1,12 +1,13 @@
 import os
 from redis import Redis
 from rq import Queue
+import ssl
 
 def get_redis_connection():
     """Get Redis connection with configuration from environment variables."""
     redis_url = os.getenv('REDIS_URL')
     if redis_url:
-        return Redis.from_url(redis_url, ssl=True, ssl_cert_reqs='none')
+        return Redis.from_url(redis_url, ssl=True, ssl_cert_reqs=ssl.CERT_NONE)
     # Fallback for local development only
     return Redis.from_url('redis://localhost:6379/0')
 
