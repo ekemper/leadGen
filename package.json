@@ -3,5 +3,8 @@
     "react-router-dom": "^6.22.3",
     "react-toastify": "^9.1.3",
     "swiper": "^9.4.1"
+  },
+  "scripts": {
+    "heroku-postbuild": "cd frontend && npm install && npm run build && mkdir -p ../server/static && rm -rf ../server/static/* && cp -r dist/* ../server/static/"
   }
 }
