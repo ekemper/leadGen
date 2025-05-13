@@ -7,12 +7,8 @@ def get_redis_connection():
     redis_url = os.getenv('REDIS_URL')
     if redis_url:
         return Redis.from_url(redis_url)
-    return Redis(
-        host=os.getenv('REDIS_HOST'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
-        password=os.getenv('REDIS_PASSWORD'),
-        db=int(os.getenv('REDIS_DB', 0))
-    )
+    # Fallback for local development only
+    return Redis.from_url('redis://localhost:6379/0')
 
 # Queue configuration
 QUEUE_CONFIG = {
