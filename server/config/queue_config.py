@@ -7,6 +7,10 @@ def get_redis_connection():
     """Get Redis connection with configuration from environment variables."""
     redis_url = os.getenv('REDIS_URL')
     if redis_url:
+        if redis_url.startswith('rediss://'):
+            cert_reqs = os.environ.get('REDIS_SSL_CERT_REQS', 'required')
+            ssl_cert_reqs = ssl.CERT_NONE if cert_reqs == 'none' else ssl.CERT_REQUIRED
+            return Redis.from_url(redis_url, ssl_cert_reqs=ssl_cert_reqs)
         return Redis.from_url(redis_url)
     # Fallback for local development only
     return Redis.from_url('redis://localhost:6379/0')

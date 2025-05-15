@@ -135,6 +135,7 @@ def main():
     force = '--force' in sys.argv
     fresh_migrations = '--fresh-migrations' in sys.argv
     seed_only = '--seed-only' in sys.argv
+    no_prompt = '--no-prompt' in sys.argv
 
     if seed_only:
         seed_db()
@@ -143,7 +144,8 @@ def main():
     if not force:
         print("\n*** This script will NOT run unless you pass --force ***")
         sys.exit(1)
-    confirm_or_exit()
+    if not no_prompt:
+        confirm_or_exit()
 
     # Step 1: Reset DB
     reset_database()
