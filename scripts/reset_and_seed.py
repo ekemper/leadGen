@@ -5,14 +5,13 @@ reset_and_seed.py
 Unified script for local database management: reset, migrate, and seed.
 
 Usage:
-    python scripts/reset_and_seed.py --force [--fresh-migrations] [--seed-only]
+    python scripts/reset_and_seed.py [--fresh-migrations] [--seed-only]
 
 Options:
-    --force             Actually perform destructive actions (required for reset)
     --fresh-migrations   Delete all migration files and generate a new initial migration
     --seed-only          Only seed the database (no reset or migration)
 
-WARNING: This will irreversibly delete all data in your database if --force is used!
+WARNING: This will irreversibly delete all data in your database!
 """
 import os
 import sys
@@ -132,7 +131,6 @@ def seed_db():
         sys.exit(1)
 
 def main():
-    force = '--force' in sys.argv
     fresh_migrations = '--fresh-migrations' in sys.argv
     seed_only = '--seed-only' in sys.argv
     no_prompt = '--no-prompt' in sys.argv
@@ -141,9 +139,6 @@ def main():
         seed_db()
         return
 
-    if not force:
-        print("\n*** This script will NOT run unless you pass --force ***")
-        sys.exit(1)
     if not no_prompt:
         confirm_or_exit()
 

@@ -5,7 +5,7 @@ from flask import current_app
 
 from alembic import context
 
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -109,9 +109,9 @@ def run_migrations_online():
             with context.begin_transaction():
                 context.run_migrations()
                 
-        server_logger.info('No changes in schema detected.', extra={'component': 'server'})
+        app_logger.info('No changes in schema detected.', extra={'component': 'server'})
     except Exception as e:
-        server_logger.error(f'Error running migrations: {str(e)}', extra={'component': 'server'})
+        app_logger.error(f'Error running migrations: {str(e)}', extra={'component': 'server'})
         raise
 
 
