@@ -11,7 +11,7 @@ from server.utils.middleware import request_middleware
 from server.config.database import db, init_db
 from server.api import create_api_blueprint
 from werkzeug.exceptions import HTTPException, BadRequest
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from server.api.openapi import create_spec, register_spec
 from limits.storage import RedisStorage
 import ssl
@@ -103,7 +103,7 @@ def create_app(test_config=None):
     @limiter.exempt
     @app.route('/api/health', methods=['GET'])
     def health_check():
-        server_logger.debug('Health check endpoint called')
+        app_logger.debug('Health check endpoint called')
         return jsonify({
             'status': 'healthy',
             'message': 'API is running',
@@ -122,7 +122,7 @@ def create_app(test_config=None):
                 'message': error.description
             }
         }
-        server_logger.error(
+        app_logger.error(
             f"HTTP error: {error.name}",
             extra={
                 'error_code': error.code,
@@ -143,7 +143,7 @@ def create_app(test_config=None):
                 'message': str(error.description)
             }
         }
-        server_logger.error(
+        app_logger.error(
             "Bad request error",
             extra={
                 'error_code': 400,
@@ -163,7 +163,7 @@ def create_app(test_config=None):
                 'message': str(error)
             }
         }
-        server_logger.error(
+        app_logger.error(
             "Unhandled exception",
             extra={
                 'error_code': 500,
@@ -174,7 +174,7 @@ def create_app(test_config=None):
         return jsonify(response), 500
     
     # Log application startup
-    server_logger.info("Flask application initialized")
+    app_logger.info("Flask application initialized")
 
     # Serve React build for all non-API routes
     @app.route('/', defaults={'path': ''})
@@ -193,7 +193,7 @@ app = create_app()
 
 # Only create the app if running directly
 if __name__ == '__main__':
-    server_logger.info('Starting application', extra={
+    app_logger.info('Starting application', extra={
         'environment': os.getenv('FLASK_ENV', 'development'),
         'debug_mode': os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     })

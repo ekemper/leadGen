@@ -1,6 +1,6 @@
 from server.models import Event
 from server.config.database import db
-from server.utils.logging_config import browser_logger
+from server.utils.logging_config import app_logger
 from werkzeug.exceptions import NotFound, BadRequest
 import os
 import json
@@ -20,7 +20,7 @@ class EventService:
             
             # Log to browser logger if source is browser
             if data['source'] == 'browser':
-                browser_logger.info(
+                app_logger.info(
                     f"Browser event: {data['tag']}",
                     extra={
                         'tag': data['tag'],
@@ -32,7 +32,7 @@ class EventService:
             return event.to_dict()
         except Exception as e:
             db.session.rollback()
-            browser_logger.error(f"Error creating event: {str(e)}")
+            app_logger.error(f"Error creating event: {str(e)}")
             raise BadRequest(str(e))
 
     def get_event(self, event_id):
@@ -59,7 +59,7 @@ class EventService:
                 }
                 
                 # Log to browser logger
-                browser_logger.info(
+                app_logger.info(
                     "Browser console log received",
                     extra=log_data
                 )
@@ -77,7 +77,7 @@ class EventService:
             return {'status': 'success', 'message': 'Logs processed successfully'}
         except Exception as e:
             db.session.rollback()
-            browser_logger.error("Error handling console logs", extra={'error': str(e), 'source': 'browser'})
+            app_logger.error("Error handling console logs", extra={'error': str(e), 'source': 'browser'})
             raise BadRequest(str(e))
 
     @staticmethod
@@ -95,7 +95,7 @@ class EventService:
                 'data': data or {}
             }
             
-            browser_logger.info(
+            app_logger.info(
                 f"Browser event: {event_type}",
                 extra={
                     'event': event_data,
@@ -106,7 +106,7 @@ class EventService:
             return True
             
         except Exception as e:
-            browser_logger.error(
+            app_logger.error(
                 f"Failed to log browser event: {str(e)}",
                 extra={
                     'event_type': event_type,
@@ -129,7 +129,7 @@ class EventService:
             'user_id': user_id
         }
         
-        browser_logger.info(
+        app_logger.info(
             f"Page view: {page_name}",
             extra={
                 'event': {
@@ -156,7 +156,7 @@ class EventService:
             'stack_trace': stack_trace
         }
         
-        browser_logger.error(
+        app_logger.error(
             f"Browser error: {error_type}",
             extra={
                 'event': {

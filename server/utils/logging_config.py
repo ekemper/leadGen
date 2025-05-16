@@ -200,20 +200,17 @@ class EnhancedColorFormatter(logging.Formatter):
             msg = '\n' + colorize_json(pretty_json)
         return f"{level_str} {time_str_col} {context_str} {msg}"
 
-def setup_logger(name, log_file, level=logging.INFO):
-    """Set up a logger with JSON formatting and file output. Optionally colorize console and file output for human readability in local dev."""
-    # Create logs directory if it doesn't exist
+def setup_central_logger(log_file='app.log', level=logging.INFO):
+    """Set up a centralized logger with JSON formatting and file output."""
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR, exist_ok=True)
 
-    # Create formatter with explicit format string
     formatter = CustomJsonFormatter(
         fmt='%(timestamp)s %(level)s %(name)s %(message)s %(source)s',
         json_ensure_ascii=False,
-        reserved_attrs=[]  # Allow all attributes to be processed
+        reserved_attrs=[]
     )
 
-    # Check if file logs should be colorized (local dev only)
     use_color_file = os.getenv('LOG_COLOR_FILE', '0') == '1'
     if use_color_file:
         colorama_init(autoreset=True)
@@ -221,19 +218,17 @@ def setup_logger(name, log_file, level=logging.INFO):
     else:
         file_formatter = formatter
 
-    # Create rotating file handler with explicit mode
     log_path = os.path.join(LOG_DIR, log_file)
     file_handler = RotatingFileHandler(
         log_path,
         maxBytes=MAX_BYTES,
         backupCount=BACKUP_COUNT,
         encoding='utf-8',
-        mode='a'  # Append mode
+        mode='a'
     )
     file_handler.setFormatter(file_formatter)
     file_handler.setLevel(level)
 
-    # Optionally use colorized console output
     use_color = os.getenv('LOG_COLOR', '0') == '1'
     if use_color:
         colorama_init(autoreset=True)
@@ -241,91 +236,43 @@ def setup_logger(name, log_file, level=logging.INFO):
     else:
         console_formatter = formatter
 
-    # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(console_formatter)
     console_handler.setLevel(level)
 
-    # Create logger
-    logger = logging.getLogger(name)
+    logger = logging.getLogger('app')
     logger.setLevel(level)
-    
-    # Remove existing handlers to avoid duplicates
     logger.handlers = []
-    
-    # Add sanitizing filter
     logger.addFilter(SanitizingFilter())
-    
-    # Add handlers
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
-
-    # Prevent propagation to root logger
     logger.propagate = False
 
-    # Verify file handler is working
+    # Set root logger to use the same handler
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    root_logger.handlers = []
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    root_logger.addFilter(SanitizingFilter())
+
+    # Configure third-party loggers
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    logging.getLogger('flask_limiter').setLevel(logging.ERROR)
+    logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+    logging.getLogger('sqlalchemy.pool').setLevel(logging.INFO)
+
     try:
-        logger.info(f"Logger {name} initialized", extra={'component': name})
-        # Ensure the file exists and is writable
+        logger.info(f"Centralized logger initialized", extra={'component': 'app'})
         if not os.path.exists(log_path):
             raise IOError(f"Log file {log_path} was not created")
         if not os.access(log_path, os.W_OK):
             raise IOError(f"Log file {log_path} is not writable")
     except Exception as e:
         console_handler.setLevel(logging.ERROR)
-        logger.error(f"Failed to initialize logger: {str(e)}", extra={'component': name})
+        logger.error(f"Failed to initialize centralized logger: {str(e)}", extra={'component': 'app'})
         raise
 
     return logger
 
-# Create loggers for different components
-browser_logger = setup_logger('browser', 'browser.log')
-server_logger = setup_logger('server', 'server.log')
-worker_logger = setup_logger('worker', 'worker.log')
-
-# Configure root logger
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.WARNING)
-root_logger.addFilter(SanitizingFilter())
-
-# Configure third-party loggers
-logging.getLogger('werkzeug').setLevel(logging.ERROR)
-logging.getLogger('flask_limiter').setLevel(logging.ERROR)
-logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
-logging.getLogger('sqlalchemy.pool').setLevel(logging.INFO)
-
-def get_logger(component):
-    """Get the appropriate logger for a component."""
-    # Map component names to their canonical form
-    component_map = {
-        'auth_service': 'server',  # Map auth_service to server component
-        'browser': 'browser',
-        'server': 'server',
-        'worker': 'worker'
-    }
-    
-    # Get the canonical component name
-    canonical_component = component_map.get(component, 'server')
-    
-    # Get the appropriate logger
-    loggers = {
-        'browser': browser_logger,
-        'server': server_logger,
-        'worker': worker_logger
-    }
-    logger = loggers.get(canonical_component, server_logger)
-    
-    # Ensure component is set in extra data
-    def log_with_component(level, msg, *args, **kwargs):
-        if 'extra' not in kwargs:
-            kwargs['extra'] = {}
-        kwargs['extra']['component'] = canonical_component
-        return getattr(logger, level)(msg, *args, **kwargs)
-    
-    # Add component-specific logging methods
-    logger.info = lambda msg, *args, **kwargs: log_with_component('info', msg, *args, **kwargs)
-    logger.error = lambda msg, *args, **kwargs: log_with_component('error', msg, *args, **kwargs)
-    logger.warning = lambda msg, *args, **kwargs: log_with_component('warning', msg, *args, **kwargs)
-    logger.debug = lambda msg, *args, **kwargs: log_with_component('debug', msg, *args, **kwargs)
-    
-    return logger 
+app_logger = setup_central_logger() 

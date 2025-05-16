@@ -4,7 +4,7 @@ import json
 import logging
 from server.config.database import db
 from sqlalchemy.dialects.postgresql import JSON
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from server.utils.error_messages import JOB_ERRORS
 from typing import Optional, Dict, Any
 from server.models.job_status import JobStatus

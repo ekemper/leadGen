@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 from rq.registry import FinishedJobRegistry, FailedJobRegistry
 from rq.job import Job
 from server.config.queue_config import get_queue
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 
 def store_job_result(job: Job, result: Any) -> None:
     """
@@ -28,7 +28,7 @@ def store_job_result(job: Job, result: Any) -> None:
         }
         job.result = job_result
         
-        server_logger.info(
+        app_logger.info(
             f"Stored result for job {job.id}",
             extra={
                 'job_id': job.id,
@@ -37,7 +37,7 @@ def store_job_result(job: Job, result: Any) -> None:
             }
         )
     except Exception as e:
-        server_logger.error(
+        app_logger.error(
             f"Error storing job result: {str(e)}",
             extra={
                 'job_id': job.id,
@@ -92,7 +92,7 @@ def get_job_results(campaign_id: str) -> Dict[str, List[Dict]]:
         
         return results
     except Exception as e:
-        server_logger.error(
+        app_logger.error(
             f"Error getting job results: {str(e)}",
             extra={
                 'campaign_id': campaign_id,
@@ -122,7 +122,7 @@ def cleanup_old_jobs(campaign_id: str, days: int = 7) -> None:
             if job and job.args and len(job.args) > 0 and job.args[0].get('campaign_id') == campaign_id:
                 if job.ended_at and job.ended_at < cutoff:
                     job.delete()
-                    server_logger.info(f"Cleaned up old completed job {job_id} for campaign {campaign_id}")
+                    app_logger.info(f"Cleaned up old completed job {job_id} for campaign {campaign_id}")
         
         # Clean up failed jobs
         for job_id in failed_registry.get_job_ids():
@@ -130,6 +130,6 @@ def cleanup_old_jobs(campaign_id: str, days: int = 7) -> None:
             if job and job.args and len(job.args) > 0 and job.args[0].get('campaign_id') == campaign_id:
                 if job.ended_at and job.ended_at < cutoff:
                     job.delete()
-                    server_logger.info(f"Cleaned up old failed job {job_id} for campaign {campaign_id}")
+                    app_logger.info(f"Cleaned up old failed job {job_id} for campaign {campaign_id}")
     except Exception as e:
-        server_logger.error(f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}") 
+        app_logger.error(f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}") 

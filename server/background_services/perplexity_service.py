@@ -2,7 +2,7 @@ import os
 import requests
 from server.models.lead import Lead
 from server.config.database import db
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from typing import Dict, Any, List
 
 class PerplexityService:
@@ -48,7 +48,7 @@ class PerplexityService:
             headline = getattr(lead, 'title', '')
 
         # Log the extracted prompt variables
-        server_logger.info(f"Prompt variables for lead {getattr(lead, 'id', None)}: first_name='{first_name}', last_name='{last_name}', headline='{headline}', company_name='{company_name}'", extra={'component': 'perplexity'})
+        app_logger.info(f"Prompt variables for lead {getattr(lead, 'id', None)}: first_name='{first_name}', last_name='{last_name}', headline='{headline}', company_name='{company_name}'", extra={'component': 'perplexity'})
 
         # Check for missing required properties
         missing = []
@@ -62,7 +62,7 @@ class PerplexityService:
             missing.append('company_name')
         if missing:
             error_msg = f"Missing required prompt variables: {', '.join(missing)} for lead {getattr(lead, 'id', None)}"
-            server_logger.error(error_msg, extra={'component': 'perplexity'})
+            app_logger.error(error_msg, extra={'component': 'perplexity'})
             # Attach error to job if possible
             enrichment_job_id = getattr(lead, 'enrichment_job_id', None)
             if enrichment_job_id:
@@ -93,7 +93,7 @@ class PerplexityService:
             "frequency_penalty": 1
         }
         # Log the built prompt
-        server_logger.info(f"Built Perplexity prompt for lead {getattr(lead, 'id', None)}: {prompt}", extra={'component': 'perplexity'})
+        app_logger.info(f"Built Perplexity prompt for lead {getattr(lead, 'id', None)}: {prompt}", extra={'component': 'perplexity'})
         return prompt
 
     def enrich_lead(self, lead: Lead) -> Dict[str, Any]:
@@ -111,17 +111,17 @@ class PerplexityService:
         
         for attempt in range(self.MAX_RETRIES):
             try:
-                server_logger.info(f"Enriching lead {lead.id} (attempt {attempt + 1}/{self.MAX_RETRIES})", extra={'component': 'server'})
+                app_logger.info(f"Enriching lead {lead.id} (attempt {attempt + 1}/{self.MAX_RETRIES})", extra={'component': 'server'})
                 response = requests.post(self.API_URL, json=prompt, headers=self.headers, timeout=30)
                 response.raise_for_status()
                 return response.json()
             except requests.RequestException as e:
                 error_msg = f"Perplexity API request failed for lead {lead.id}: {str(e)}"
-                server_logger.error(error_msg, extra={'component': 'server'})
+                app_logger.error(error_msg, extra={'component': 'server'})
                 if attempt < self.MAX_RETRIES - 1:
                     continue
                 return {'error': error_msg}
             except Exception as e:
                 error_msg = f"Unexpected error enriching lead {lead.id}: {str(e)}"
-                server_logger.error(error_msg, extra={'component': 'server'})
+                app_logger.error(error_msg, extra={'component': 'server'})
                 return {'error': error_msg} 

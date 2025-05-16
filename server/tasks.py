@@ -5,7 +5,7 @@ from server.models import Campaign
 from server.models.campaign import CampaignStatus
 from server.models.job_status import JobStatus
 from server.config.database import db
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from rq import get_current_job, Queue, Retry
 from server.config.queue_config import get_queue, QUEUE_CONFIG
 from server.models.job import Job
@@ -21,7 +21,7 @@ def handle_task_error(campaign_id, error, job_type):
     flask_app = create_app()
     with flask_app.app_context():
         try:
-            server_logger.error(f"Error in {job_type} for campaign {campaign_id}: {str(error)}")
+            app_logger.error(f"Error in {job_type} for campaign {campaign_id}: {str(error)}")
             campaign = Campaign.query.get(campaign_id)
             if campaign:
                 campaign.update_status(CampaignStatus.FAILED, error_message=str(error))
@@ -30,7 +30,7 @@ def handle_task_error(campaign_id, error, job_type):
             if job:
                 job.update_status(JobStatus.FAILED, error_message=str(error))
         except Exception as e:
-            server_logger.error(f"Error handling task error: {str(e)}", exc_info=True)
+            app_logger.error(f"Error handling task error: {str(e)}", exc_info=True)
 
 def fetch_and_save_leads_task(params, campaign_id):
     """Fetch and save leads from Apollo."""
@@ -40,7 +40,7 @@ def fetch_and_save_leads_task(params, campaign_id):
         job = None
         campaign = None
         try:
-            server_logger.info(f"Starting fetch_and_save_leads_task for campaign {campaign_id}")
+            app_logger.info(f"Starting fetch_and_save_leads_task for campaign {campaign_id}")
             campaign = Campaign.query.get(campaign_id)
             if not campaign:
                 raise Exception(f"Campaign {campaign_id} not found")
@@ -59,7 +59,7 @@ def fetch_and_save_leads_task(params, campaign_id):
             # Update campaign status directly
             campaign.update_status(CampaignStatus.COMPLETED)
 
-            server_logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
+            app_logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
 
             # Enqueue enrichment job for each lead
             from server.models.lead import Lead
@@ -148,7 +148,7 @@ def enrich_lead_task(lead_id):
         lead = Lead.query.get(lead_id)
         job = None
         if not lead:
-            server_logger.error(f"Lead {lead_id} not found for enrichment task.")
+            app_logger.error(f"Lead {lead_id} not found for enrichment task.")
             return
         try:
             from server.models.job import Job
@@ -215,7 +215,7 @@ def enrich_lead_task(lead_id):
                 missing_fields.append('email_copy_gen_results')
             if missing_fields:
                 msg = f"Skipping Instantly lead creation for lead {lead.id} due to missing fields: {', '.join(missing_fields)}"
-                server_logger.warning(msg)
+                app_logger.warning(msg)
                 error_details['instantly'] = msg
             elif email_copy_success:
                 try:
@@ -237,7 +237,7 @@ def enrich_lead_task(lead_id):
                     error_details['instantly'] = str(e)
                     lead.instantly_lead_record = {'error': str(e)}
                     db.session.commit()
-                    server_logger.error(f"Instantly lead creation failed for lead {lead.id}: {str(e)}")
+                    app_logger.error(f"Instantly lead creation failed for lead {lead.id}: {str(e)}")
 
             # Save overall job result
             job.result = {
@@ -251,11 +251,11 @@ def enrich_lead_task(lead_id):
             if instantly_result:
                 job.result['instantly_result'] = instantly_result
             job.update_status(JobStatus.COMPLETED)
-            server_logger.info(f"Lead {lead_id} enrichment, email copy, and Instantly lead creation complete.")
+            app_logger.info(f"Lead {lead_id} enrichment, email copy, and Instantly lead creation complete.")
         except Exception as e:
             db.session.rollback()
             error_msg = f"Error in enrich_lead_task for lead {lead_id}: {str(e)}"
-            server_logger.error(error_msg)
+            app_logger.error(error_msg)
             if job:
                 job.update_status(JobStatus.FAILED, error_message=error_msg)
             raise
@@ -268,17 +268,17 @@ def lead_email_verification_task(lead_id):
         from server.models.lead import Lead
         lead = Lead.query.get(lead_id)
         if not lead:
-            server_logger.error(f"Lead {lead_id} not found for email verification task.")
+            app_logger.error(f"Lead {lead_id} not found for email verification task.")
             return
         try:
-            server_logger.info(f"Starting email verification for lead {lead_id} with email: {lead.email}")
+            app_logger.info(f"Starting email verification for lead {lead_id} with email: {lead.email}")
             result = EmailVerifierService().verify_email(lead.email)
-            server_logger.info(f"Verification result for lead {lead_id}: {result}")
+            app_logger.info(f"Verification result for lead {lead_id}: {result}")
             lead.email_verification = result
             db.session.commit()
-            server_logger.info(f"Email verification complete and saved for lead {lead_id}")
+            app_logger.info(f"Email verification complete and saved for lead {lead_id}")
         except Exception as e:
-            server_logger.error(f"Error verifying email for lead {lead_id}: {str(e)}")
+            app_logger.error(f"Error verifying email for lead {lead_id}: {str(e)}")
             db.session.rollback()
 
 def enqueue_lead_email_verification(lead_id):

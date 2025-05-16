@@ -2,7 +2,7 @@ from datetime import datetime
 import uuid
 import logging
 from server.config.database import db
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from sqlalchemy.dialects.postgresql import JSON
 from enum import Enum
 from typing import Dict, Any, Optional

@@ -4,7 +4,7 @@ from server.models.lead import Lead
 from server.config.database import db
 from typing import Dict, Any, List
 from dotenv import load_dotenv
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from server.models import Campaign
 from server.models.campaign import CampaignStatus
 import random
@@ -49,13 +49,13 @@ class ApolloService:
         created_count = 0
         for idx, result in enumerate(leads_data):
             try:
-                server_logger.debug(f"[LEAD] Lead {idx}: Creating lead with email '{result.get('email', '[no email]')}' for campaign {campaign_id}")
-                server_logger.debug(f"[LEAD] raw_data: {result}")
+                app_logger.debug(f"[LEAD] Lead {idx}: Creating lead with email '{result.get('email', '[no email]')}' for campaign {campaign_id}")
+                app_logger.debug(f"[LEAD] raw_data: {result}")
 
                 # Ensure result is a dict and not None
                 if not isinstance(result, dict) or not result:
                     error_msg = f"[LEAD] Lead {idx}: Apify result is not a valid non-empty dict: {result}"
-                    server_logger.error(error_msg, extra={'component': 'server'})
+                    app_logger.error(error_msg, extra={'component': 'server'})
                     raise ValueError(error_msg)
 
                 # Map company: prefer organization.name, then organization_name, else ''
@@ -79,15 +79,15 @@ class ApolloService:
                 )
                 db.session.add(lead)
                 created_count += 1
-                server_logger.info(f"[LEAD] Lead {idx}: Added to session (email: {lead.email})")
+                app_logger.info(f"[LEAD] Lead {idx}: Added to session (email: {lead.email})")
             except Exception as e:
                 error_msg = f"[LEAD] Lead {idx}: Error saving lead (email: {result.get('email', '[no email]')}): {str(e)}"
-                server_logger.error(error_msg, extra={'component': 'server'})
+                app_logger.error(error_msg, extra={'component': 'server'})
         try:
             db.session.commit()
-            server_logger.info(f"[LEAD] Committed {created_count} leads to the database for campaign {campaign_id}")
+            app_logger.info(f"[LEAD] Committed {created_count} leads to the database for campaign {campaign_id}")
         except Exception as e:
-            server_logger.error(f"[LEAD] Database commit failed while saving leads for campaign {campaign_id}: {str(e)}", extra={'component': 'server'})
+            app_logger.error(f"[LEAD] Database commit failed while saving leads for campaign {campaign_id}: {str(e)}", extra={'component': 'server'})
         return created_count
 
     def fetch_leads(self, params: Dict[str, Any], campaign_id: str) -> Dict[str, Any]:
@@ -104,14 +104,14 @@ class ApolloService:
         for key in required_keys:
             if key not in params:
                 raise ValueError(f"Missing required parameter: {key} (expected keys: {required_keys})")
-        server_logger.info(f"[APIFY] fetch_leads input params: {params}")
+        app_logger.info(f"[APIFY] fetch_leads input params: {params}")
         try:
-            server_logger.info(f"[START fetch_leads] campaign_id={campaign_id}", extra={'component': 'server'})
+            app_logger.info(f"[START fetch_leads] campaign_id={campaign_id}", extra={'component': 'server'})
             # Get campaign
             campaign = Campaign.query.get(campaign_id)
-            server_logger.info(f"[AFTER Campaign.query.get] campaign={campaign}", extra={'component': 'server'})
+            app_logger.info(f"[AFTER Campaign.query.get] campaign={campaign}", extra={'component': 'server'})
             if not campaign:
-                server_logger.error(f"Campaign {campaign_id} not found", extra={'component': 'server'})
+                app_logger.error(f"Campaign {campaign_id} not found", extra={'component': 'server'})
                 raise ValueError(f"Campaign {campaign_id} not found")
 
             # Update campaign status to FETCHING_LEADS before fetching
@@ -119,14 +119,14 @@ class ApolloService:
             db.session.commit()
 
             # --- Apify actor run block ---
-            server_logger.info(f"[BEFORE ApifyClient actor call] actor_id={self.actor_id} with params: {params}", extra={'component': 'server'})
+            app_logger.info(f"[BEFORE ApifyClient actor call] actor_id={self.actor_id} with params: {params}", extra={'component': 'server'})
             run = self.client.actor(self.actor_id).call(run_input=params)
             dataset_id = run.get("defaultDatasetId")
             if not dataset_id:
                 raise Exception("No dataset ID returned from Apify actor run.")
-            server_logger.info(f"[GOT dataset_id] {dataset_id}", extra={'component': 'server'})
+            app_logger.info(f"[GOT dataset_id] {dataset_id}", extra={'component': 'server'})
             results = list(self.client.dataset(dataset_id).iterate_items())
-            server_logger.info(f"[AFTER dataset.iterate_items] got {len(results)} results", extra={'component': 'server'})
+            app_logger.info(f"[AFTER dataset.iterate_items] got {len(results)} results", extra={'component': 'server'})
 
             # Process and save leads using helper
             errors = []
@@ -134,21 +134,21 @@ class ApolloService:
                 created_count = self._save_leads_to_db(results, campaign_id)
             except Exception as e:
                 error_msg = f"Error saving leads: {str(e)}"
-                server_logger.error(error_msg, extra={'component': 'server'})
+                app_logger.error(error_msg, extra={'component': 'server'})
                 errors.append(error_msg)
                 created_count = 0
             
-            server_logger.info(f"[AFTER _save_leads_to_db] created_count={created_count}", extra={'component': 'server'})
+            app_logger.info(f"[AFTER _save_leads_to_db] created_count={created_count}", extra={'component': 'server'})
             
             # Update campaign status to indicate leads have been fetched
-            server_logger.info(f"[BEFORE campaign.update_status]", extra={'component': 'server'})
+            app_logger.info(f"[BEFORE campaign.update_status]", extra={'component': 'server'})
             campaign.update_status(
                 CampaignStatus.FETCHING_LEADS,
                 f"Fetched {created_count} leads" + (f" with {len(errors)} errors" if errors else "")
             )
             db.session.commit()
-            server_logger.info(f"[AFTER campaign.update_status]", extra={'component': 'server'})
-            server_logger.info(f"Leads fetch complete: {created_count} leads created, {len(errors)} errors", extra={'component': 'server'})
+            app_logger.info(f"[AFTER campaign.update_status]", extra={'component': 'server'})
+            app_logger.info(f"Leads fetch complete: {created_count} leads created, {len(errors)} errors", extra={'component': 'server'})
             return {
                 'count': created_count,
                 'errors': errors
@@ -157,7 +157,7 @@ class ApolloService:
         except Exception as e:
             db.session.rollback()
             error_msg = f"Error fetching leads: {str(e)}"
-            server_logger.error(error_msg, extra={'component': 'server'})
+            app_logger.error(error_msg, extra={'component': 'server'})
             if 'campaign' in locals() and campaign:
                 campaign.update_status(
                     CampaignStatus.FAILED,

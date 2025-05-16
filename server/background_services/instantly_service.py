@@ -1,6 +1,6 @@
 import os
 import requests
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 
 class InstantlyService:
     """Service for integrating with Instantly API to create leads."""
@@ -26,10 +26,10 @@ class InstantlyService:
         try:
             response = requests.post(self.API_URL, json=payload, headers=self.headers, timeout=10)
             response.raise_for_status()
-            server_logger.info(f"Successfully created Instantly lead for {email} in campaign {campaign_id}")
+            app_logger.info(f"Successfully created Instantly lead for {email} in campaign {campaign_id}")
             return response.json()
         except requests.RequestException as e:
-            server_logger.error(f"Error creating Instantly lead for {email}: {str(e)}")
+            app_logger.error(f"Error creating Instantly lead for {email}: {str(e)}")
             return {"error": str(e), "payload": payload}
 
     def create_campaign(self, name, schedule_name="My Schedule", timing_from="09:00", timing_to="17:00", days=None, timezone="Etc/GMT+12"):
@@ -54,8 +54,8 @@ class InstantlyService:
             response = requests.post(self.API_CAMPAIGN_URL, json=payload, headers=self.headers, timeout=10)
             response.raise_for_status()
             data = response.json()
-            server_logger.info(f"Successfully created Instantly campaign '{name}' with response: {data}")
+            app_logger.info(f"Successfully created Instantly campaign '{name}' with response: {data}")
             return data
         except requests.RequestException as e:
-            server_logger.error(f"Error creating Instantly campaign '{name}': {str(e)}")
+            app_logger.error(f"Error creating Instantly campaign '{name}': {str(e)}")
             return {"error": str(e), "payload": payload} 

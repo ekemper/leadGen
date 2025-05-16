@@ -2,7 +2,7 @@ import uuid
 import time
 from functools import wraps
 from flask import request, g
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 
 def generate_request_id():
     """Generate a unique request ID."""
@@ -20,7 +20,7 @@ def log_request_info():
     if hasattr(g, 'status_code'):
         extra['status_code'] = g.status_code
     
-    server_logger.info('Request processed', extra=extra)
+    app_logger.info('Request processed', extra=extra)
 
 def request_middleware(app):
     """Configure request middleware for the Flask app."""
@@ -43,7 +43,7 @@ def request_middleware(app):
         # Log incoming request
         if request.path != '/health':
             extra = dict(g.request_context)
-            server_logger.info('Request started', extra=extra)
+            app_logger.info('Request started', extra=extra)
     
     @app.after_request
     def after_request(response):
@@ -58,7 +58,7 @@ def request_middleware(app):
         if exception:
             extra = dict(g.request_context)
             extra['error'] = str(exception)
-            server_logger.error('Request failed', extra=extra)
+            app_logger.error('Request failed', extra=extra)
         else:
             log_request_info()
 
@@ -76,7 +76,7 @@ def log_function_call(func):
                 'duration_ms': duration_ms,
                 'success': True
             })
-            server_logger.info(f'Function {func.__name__} completed', extra=extra)
+            app_logger.info(f'Function {func.__name__} completed', extra=extra)
             return result
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
@@ -87,6 +87,6 @@ def log_function_call(func):
                 'error': str(e),
                 'success': False
             })
-            server_logger.error(f'Function {func.__name__} failed', extra=extra)
+            app_logger.error(f'Function {func.__name__} failed', extra=extra)
             raise
     return wrapper 

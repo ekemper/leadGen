@@ -4,7 +4,7 @@ import uuid
 from server.models import Lead
 from server.config.database import db
 from werkzeug.exceptions import BadRequest, NotFound
-from server.utils.logging_config import server_logger as logger
+from server.utils.logging_config import app_logger as logger
 from server.api.schemas import LeadSchema, LeadCreateSchema
 from marshmallow import ValidationError
 

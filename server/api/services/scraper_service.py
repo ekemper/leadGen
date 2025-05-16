@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import trafilatura
 import re
 from urllib.parse import urlparse
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from werkzeug.exceptions import BadRequest, InternalServerError
 from server.utils.scraper import WebScraper
 

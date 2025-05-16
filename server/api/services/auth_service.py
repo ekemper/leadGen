@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from flask import current_app
 from server.models import User
 from server.config.database import db
-from server.utils.logging_config import server_logger
+from server.utils.logging_config import app_logger
 from server.api.services.validation_service import ValidationService
 from email_validator import validate_email, EmailNotValidError
 from werkzeug.exceptions import BadRequest, Unauthorized, Forbidden
@@ -55,7 +55,7 @@ class AuthService:
                 hashed_password if isinstance(hashed_password, bytes) else hashed_password.encode('utf-8')
             )
         except Exception as e:
-            server_logger.error(f"Error verifying password: {str(e)}")
+            app_logger.error(f"Error verifying password: {str(e)}")
             return False
 
     @staticmethod
@@ -121,7 +121,7 @@ class AuthService:
             BadRequest: For validation errors
         """
         # Log signup attempt
-        server_logger.info(
+        app_logger.info(
             "Signup attempt",
             extra={
                 'email': email,
@@ -131,7 +131,7 @@ class AuthService:
         
         # Validate passwords match
         if password != confirm_password:
-            server_logger.warning(
+            app_logger.warning(
                 "Signup failed: passwords do not match",
                 extra={
                     'email': email,
@@ -145,7 +145,7 @@ class AuthService:
         try:
             cls.validate_password(password)
         except BadRequest as e:
-            server_logger.warning(
+            app_logger.warning(
                 "Signup failed: invalid password",
                 extra={
                     'email': email,
@@ -160,7 +160,7 @@ class AuthService:
         try:
             cls.validate_email_format(email)
         except BadRequest as e:
-            server_logger.warning(
+            app_logger.warning(
                 "Signup failed: invalid email",
                 extra={
                     'email': email,
@@ -173,7 +173,7 @@ class AuthService:
         
         # Check if user already exists
         if User.query.filter_by(email=email.lower()).first():
-            server_logger.warning(
+            app_logger.warning(
                 "Signup failed: email already registered",
                 extra={
                     'email': email,
@@ -196,7 +196,7 @@ class AuthService:
             db.session.commit()
             
             # Log successful registration
-            server_logger.info(
+            app_logger.info(
                 "User registered successfully",
                 extra={
                     'user_id': user.id,
@@ -208,7 +208,7 @@ class AuthService:
             return {'success': True, 'message': 'User registered successfully'}
         except Exception as e:
             db.session.rollback()
-            server_logger.error(
+            app_logger.error(
                 "Error creating user",
                 extra={
                     'email': email,
@@ -247,7 +247,7 @@ class AuthService:
             )
             
             # Log token generation
-            server_logger.info(
+            app_logger.info(
                 "Token generated",
                 extra={
                     'user_id': user.id,
@@ -264,7 +264,7 @@ class AuthService:
             
             return response_data
         except Exception as e:
-            server_logger.error(f'Error during login: {str(e)}', exc_info=True)
+            app_logger.error(f'Error during login: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
@@ -315,7 +315,7 @@ class AuthService:
                 
             return response_data
         except Exception as e:
-            server_logger.error(f'Error during registration: {str(e)}', exc_info=True)
+            app_logger.error(f'Error during registration: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
@@ -346,19 +346,19 @@ class AuthService:
             
             return user_dict
         except Exception as e:
-            server_logger.error(f'Error getting current user: {str(e)}', exc_info=True)
+            app_logger.error(f'Error getting current user: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
     def update_user(self, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Update a user's information."""
         try:
-            server_logger.info(f'Updating user {user_id}')
+            app_logger.info(f'Updating user {user_id}')
             self._ensure_transaction()
             
             user = User.query.get(user_id)
             if not user:
-                server_logger.warning(f'User {user_id} not found')
+                app_logger.warning(f'User {user_id} not found')
                 return None
             
             # Validate input data
@@ -383,6 +383,6 @@ class AuthService:
             
             return user_dict
         except Exception as e:
-            server_logger.error(f'Error updating user: {str(e)}', exc_info=True)
+            app_logger.error(f'Error updating user: {str(e)}', exc_info=True)
             db.session.rollback()
             raise 
