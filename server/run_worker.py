@@ -143,4 +143,7 @@ if __name__ == '__main__':
                 'traceback': traceback.format_exc()
             }
         )
-        sys.exit(1) 
+        sys.exit(1)
+
+# The worker process uses the centralized app_logger, which writes to /app/logs/combined.log as configured in logging_config.py
+# No further changes needed here for logging destination. 

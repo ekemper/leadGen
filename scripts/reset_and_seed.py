@@ -52,9 +52,9 @@ def run_cmd(cmd, env=None):
 
 def reset_database():
     load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
-    conn_str = os.environ.get('NEON_CONNECTION_STRING')
+    conn_str = os.environ.get('DATABASE_URL')
     if not conn_str:
-        print('ERROR: NEON_CONNECTION_STRING environment variable not set')
+        print('ERROR: DATABASE_URL environment variable not set')
         sys.exit(1)
     try:
         conn = psycopg2.connect(conn_str)

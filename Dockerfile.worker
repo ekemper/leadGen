@@ -1,14 +1,17 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-
+ENV PYTHONPATH=/app
 # Install system dependencies if needed (uncomment if required)
 # RUN apt-get update && apt-get install -y build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
 
+# Copy requirements and install dependencies using BuildKit cache for pip
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install --upgrade pip && pip install -r requirements.txt
 
+# Copy application code
 COPY server/ ./server/
+COPY config/ ./config/
 
 # Copy example.env as a template, but expect .env to be mounted or passed at runtime
 COPY example.env .env.example

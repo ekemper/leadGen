@@ -1,9 +1,9 @@
 import os
 from sqlalchemy import create_engine, text
 
-conn_str = os.environ.get('NEON_CONNECTION_STRING')
+conn_str = os.environ.get('DATABASE_URL')
 if not conn_str:
-    raise RuntimeError('NEON_CONNECTION_STRING environment variable not set')
+    raise RuntimeError('DATABASE_URL environment variable not set')
 
 engine = create_engine(conn_str)
 

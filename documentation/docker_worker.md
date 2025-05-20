@@ -88,4 +88,21 @@ You can still build and run the worker manually, but you must ensure Redis is ru
 - **This approach ensures Redis is always available and environment variables are managed cleanly.**
 - **For local services, use the service name (e.g., `redis`) as the hostname in your `.env`.**
 
+If you encounter issues not covered here, check the logs and ensure all environment variables and services are correctly configured.
+
+## Logging
+
+All worker logs are now written to **stdout only**. This means:
+- Logs are available via Docker's logging system.
+- There are no separate log files created by the worker inside the container.
+- You can view worker logs using:
+  ```sh
+  docker-compose logs -f worker
+  ```
+- You can collect all logs (including worker logs) into a single file on the host with:
+  ```sh
+  docker-compose logs --no-color -t > ./logs/combined.log
+  ```
+- This approach unifies application and container logs, making it easier to monitor and aggregate logs from all services.
+
 If you encounter issues not covered here, check the logs and ensure all environment variables and services are correctly configured. 

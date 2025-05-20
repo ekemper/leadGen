@@ -5,8 +5,7 @@ from datetime import timedelta
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
 DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
 
-## Database settings are handled in the database config module.
-## NEON_CONNECTION_STRING must be set for application runtime.
+## DATABASE_URL must be set for application runtime.
 
 # JWT settings
 # For testing with curl:
@@ -26,4 +25,5 @@ CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',')
 
 # Rate limiting
 RATELIMIT_DEFAULT = "200 per day;50 per hour"
+RATELIMIT_ENABLED = os.getenv('RATELIMIT_ENABLED', 'True').lower() == 'true'
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0') 

@@ -18,21 +18,23 @@ class EventService:
             db.session.add(event)
             db.session.commit()
             
-            # Log to browser logger if source is browser
-            if data['source'] == 'browser':
-                app_logger.info(
-                    f"Browser event: {data['tag']}",
-                    extra={
-                        'tag': data['tag'],
-                        'type': data['type'],
-                        'data': data['data']
-                    }
-                )
+            # Log all events to combined log
+            app_logger.info(
+                f"Event created: {data['tag']}",
+                extra={
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'level': 'INFO',
+                    'log_message': f"Event created: {data['tag']}",
+                    'source': data.get('source', 'api'),
+                    'component': 'event_service',
+                    'event_data': data
+                }
+            )
             
             return event.to_dict()
         except Exception as e:
             db.session.rollback()
-            app_logger.error(f"Error creating event: {str(e)}")
+            app_logger.error(f"Error creating event: {str(e)}", extra={'component': 'event_service', 'source': data.get('source', 'api')})
             raise BadRequest(str(e))
 
     def get_event(self, event_id):
@@ -48,20 +50,18 @@ class EventService:
     def handle_console_logs(self, logs):
         """Handle console logs from the browser."""
         try:
-            # Log each console log entry
+            # Log each console log entry to combined log
             for log in logs:
-                log_data = {
-                    'level': log['level'],
-                    'console_message': log['message'],  # Renamed from 'message'
-                    'data': log.get('data', []),
-                    'timestamp': log['timestamp'],
-                    'source': 'browser'  # Use source instead of component
-                }
-                
-                # Log to browser logger
                 app_logger.info(
                     "Browser console log received",
-                    extra=log_data
+                    extra={
+                        'timestamp': log.get('timestamp', datetime.utcnow().isoformat()),
+                        'level': log.get('level', 'INFO').upper(),
+                        'log_message': log.get('message', ''),
+                        'source': 'browser',
+                        'component': 'frontend',
+                        'data': log.get('data', [])
+                    }
                 )
 
             # Create event in database
@@ -77,7 +77,7 @@ class EventService:
             return {'status': 'success', 'message': 'Logs processed successfully'}
         except Exception as e:
             db.session.rollback()
-            app_logger.error("Error handling console logs", extra={'error': str(e), 'source': 'browser'})
+            app_logger.error("Error handling console logs", extra={'error': str(e), 'source': 'browser', 'component': 'frontend'})
             raise BadRequest(str(e))
 
     @staticmethod

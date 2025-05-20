@@ -5,16 +5,21 @@ WORKDIR /app
 # Install curl for healthcheck
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
+# Copy requirements and install dependencies using BuildKit cache for pip
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install --upgrade pip && pip install -r requirements.txt
 
+# Copy application code
 COPY server/ ./server/
+COPY config/ ./config/
+COPY scripts/ ./scripts/
+COPY migrations/ ./migrations/
 
 COPY example.env .env.example
 
 EXPOSE 5001
 
-ENV PYTHONPATH=/app/server
+ENV PYTHONPATH=/app
 ENV FLASK_DEBUG=0
 
 CMD ["flask", "--app", "server.app:create_app", "run", "--host=0.0.0.0", "--port=5001", "--no-reload"] 

@@ -26,7 +26,7 @@ def get_database_url():
         server_logger.error(error_msg)
         raise ValueError(error_msg)
     
-    server_logger.info(f'Using Neon database: {db_url}')
+    server_logger.info(f'Using database: {db_url}')
     return db_url
 
 def init_database():

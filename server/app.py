@@ -41,7 +41,10 @@ def create_app(test_config=None):
     CORS(app, 
          resources={
              r"/*": {
-                 "origins": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
+                 "origins": [
+                     "http://localhost", "http://127.0.0.1"#,
+                    #  "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"
+                 ],
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                  "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],
                  "expose_headers": ["Content-Type", "Authorization", "X-Request-ID"],
@@ -54,7 +57,7 @@ def create_app(test_config=None):
     @app.after_request
     def after_request(response):
         origin = request.headers.get('Origin')
-        allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"]
+        allowed_origins = ["http://localhost", "http://127.0.0.1"]#, "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"]
         if origin in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
@@ -65,20 +68,46 @@ def create_app(test_config=None):
         return response
     
     # Configure rate limiting (single source of truth)
-    redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
-    storage_options = {}
-    if redis_url.startswith('rediss://'):
-        cert_reqs = os.environ.get('REDIS_SSL_CERT_REQS', 'required')
-        if cert_reqs == 'none':
-            storage_options['ssl_cert_reqs'] = ssl.CERT_NONE
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri=redis_url,
-        storage_options=storage_options,
-        strategy="moving-window"
-    )
+    if app.config.get('RATELIMIT_ENABLED', True):
+        redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
+        storage_options = {}
+        if redis_url.startswith('rediss://'):
+            cert_reqs = os.environ.get('REDIS_SSL_CERT_REQS', 'required')
+            if cert_reqs == 'none':
+                storage_options['ssl_cert_reqs'] = ssl.CERT_NONE
+        limiter = Limiter(
+            app=app,
+            key_func=get_remote_address,
+            default_limits=["200 per day", "50 per hour"],
+            storage_uri=redis_url,
+            storage_options=storage_options,
+            strategy="moving-window"
+        )
+        # Decorate /api/events with a higher limit
+        from flask import Blueprint
+        for rule in app.url_map.iter_rules():
+            if rule.rule == '/api/events' and 'POST' in rule.methods:
+                view_func = app.view_functions[rule.endpoint]
+                app.view_functions[rule.endpoint] = limiter.limit("1000 per hour")(view_func)
+        # Exempt /api/health from rate limiting
+        @limiter.exempt
+        @app.route('/api/health', methods=['GET'])
+        def health_check():
+            app_logger.debug('Health check endpoint called')
+            return jsonify({
+                'status': 'healthy',
+                'message': 'API is running',
+                'endpoint': '/api/health'
+            }), 200
+    else:
+        @app.route('/api/health', methods=['GET'])
+        def health_check():
+            app_logger.debug('Health check endpoint called (no rate limit)')
+            return jsonify({
+                'status': 'healthy',
+                'message': 'API is running',
+                'endpoint': '/api/health'
+            }), 200
     
     # Initialize database
     init_db(app)
@@ -91,24 +120,6 @@ def create_app(test_config=None):
     # Register blueprints
     api_blueprint = create_api_blueprint()
     app.register_blueprint(api_blueprint, url_prefix='/api')
-    
-    # Decorate /api/events with a higher limit
-    from flask import Blueprint
-    for rule in app.url_map.iter_rules():
-        if rule.rule == '/api/events' and 'POST' in rule.methods:
-            view_func = app.view_functions[rule.endpoint]
-            app.view_functions[rule.endpoint] = limiter.limit("1000 per hour")(view_func)
-    
-    # Exempt /api/health from rate limiting
-    @limiter.exempt
-    @app.route('/api/health', methods=['GET'])
-    def health_check():
-        app_logger.debug('Health check endpoint called')
-        return jsonify({
-            'status': 'healthy',
-            'message': 'API is running',
-            'endpoint': '/api/health'
-        }), 200
     
     # Register error handlers
     @app.errorhandler(HTTPException)

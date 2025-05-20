@@ -200,51 +200,22 @@ class EnhancedColorFormatter(logging.Formatter):
             msg = '\n' + colorize_json(pretty_json)
         return f"{level_str} {time_str_col} {context_str} {msg}"
 
-def setup_central_logger(log_file='app.log', level=logging.INFO):
-    """Set up a centralized logger with JSON formatting and file output."""
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR, exist_ok=True)
-
+def setup_central_logger(level=logging.INFO):
+    """Set up a centralized logger with JSON formatting and stdout output only."""
     formatter = CustomJsonFormatter(
-        fmt='%(timestamp)s %(level)s %(name)s %(message)s %(source)s',
+        fmt='%(timestamp)s %(level)s %(name)s %(message)s %(source)s %(component)s',
         json_ensure_ascii=False,
         reserved_attrs=[]
     )
 
-    use_color_file = os.getenv('LOG_COLOR_FILE', '0') == '1'
-    if use_color_file:
-        colorama_init(autoreset=True)
-        file_formatter = EnhancedColorFormatter()
-    else:
-        file_formatter = formatter
-
-    log_path = os.path.join(LOG_DIR, log_file)
-    file_handler = RotatingFileHandler(
-        log_path,
-        maxBytes=MAX_BYTES,
-        backupCount=BACKUP_COUNT,
-        encoding='utf-8',
-        mode='a'
-    )
-    file_handler.setFormatter(file_formatter)
-    file_handler.setLevel(level)
-
-    use_color = os.getenv('LOG_COLOR', '0') == '1'
-    if use_color:
-        colorama_init(autoreset=True)
-        console_formatter = EnhancedColorFormatter()
-    else:
-        console_formatter = formatter
-
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(console_formatter)
+    console_handler.setFormatter(formatter)
     console_handler.setLevel(level)
 
     logger = logging.getLogger('app')
     logger.setLevel(level)
     logger.handlers = []
     logger.addFilter(SanitizingFilter())
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     logger.propagate = False
 
@@ -252,7 +223,6 @@ def setup_central_logger(log_file='app.log', level=logging.INFO):
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     root_logger.handlers = []
-    root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
     root_logger.addFilter(SanitizingFilter())
 
@@ -264,10 +234,6 @@ def setup_central_logger(log_file='app.log', level=logging.INFO):
 
     try:
         logger.info(f"Centralized logger initialized", extra={'component': 'app'})
-        if not os.path.exists(log_path):
-            raise IOError(f"Log file {log_path} was not created")
-        if not os.access(log_path, os.W_OK):
-            raise IOError(f"Log file {log_path} is not writable")
     except Exception as e:
         console_handler.setLevel(logging.ERROR)
         logger.error(f"Failed to initialize centralized logger: {str(e)}", extra={'component': 'app'})

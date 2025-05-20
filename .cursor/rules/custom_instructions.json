@@ -335,36 +335,6 @@
       "severity": "error"
     },
     {
-      "id": "logging-structure",
-      "description": "Maintain consistent logging structure with logs stored in the root /logs directory. Required log files: server.log (main application logs), error.log (error-specific logs), combined.log (all logs), browser.log (browser-side logs), worker.log (background worker logs), and test.log (test execution logs). Each log file should be properly rotated and maintain appropriate log levels. When referencing log files in commands or code, use the path relative to the project root (e.g., './logs/server.log'). Log files should be in JSON format with standardized fields: timestamp, level, message, source, and component. The logs directory should be created if it doesn't exist, and log files should be writable by the application.",
-      "severity": "warning",
-      "log_structure": {
-        "directory": "/logs",
-        "required_files": {
-          "server.log": "Main application logs with INFO level and above",
-          "error.log": "Error-specific logs with ERROR level only",
-          "combined.log": "All logs from all components",
-          "browser.log": "Browser-side application logs",
-          "worker.log": "Background worker logs",
-          "test.log": "Test execution logs"
-        },
-        "format": {
-          "type": "JSON",
-          "required_fields": [
-            "timestamp",
-            "level",
-            "message",
-            "source",
-            "component"
-          ]
-        },
-        "rotation": {
-          "max_size": "10MB",
-          "backup_count": 5
-        }
-      }
-    },
-    {
       "id": "constant-naming-convention",
       "description": "Ensure all constants follow proper naming convention with uppercase letters and underscores separating words.",
       "severity": "error",
@@ -393,6 +363,11 @@
           "error_message": "Constant name must be in UPPERCASE with words separated by underscores"
         }
       }
+    },
+    {
+      "id": "logging-structure",
+      "description": "All application logs (backend, worker, frontend events) must be written to stdout only, in JSON format, and be available via Docker's logging system. No file-based logs should be created by the application. Logs must include: timestamp, level, message, source, and component. Logs should be viewed and collected using Docker-native commands (e.g., docker-compose logs). This is the unified, required approach for observability and must be followed by all agents and contributors.",
+      "severity": "error"
     }
   ]
 } 

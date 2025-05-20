@@ -111,6 +111,29 @@ python3 scripts/reset_and_seed.py --seed-only
 
 Please update any documentation or automation to use `reset_and_seed.py`.
 
+## Database Management with Docker Compose (Local Development)
+
+If you are running the application using Docker Compose, you should run the reset and seed script inside the backend container to ensure it connects to the database service correctly.
+
+### Full Reset, Migrate, and Seed (Docker Compose)
+```sh
+docker compose run --rm backend python scripts/reset_and_seed.py
+```
+
+- This command will:
+  - Reset the database (all data will be lost)
+  - Apply all migrations
+  - Seed the database with initial data
+- You will be prompted for confirmation before destructive actions.
+- Make sure your Docker Compose services are up (especially `db` and `backend`).
+
+### Notes
+- The script uses the `DATABASE_URL` from your `.env` file, which should point to the `db` service (e.g., `postgresql://myuser:mypassword@db:5432/mydb`).
+- If you want to run the script from your host machine, you must update the `DATABASE_URL` to use `localhost` instead of `db`, or use an override as described in the script.
+- For advanced options (fresh migrations, seed only), you can append flags as described above.
+
+**WARNING:** This process is destructive and will delete all data in your database!
+
 ## Testing
 - **Backend:** Run `pytest` in the project root (ensure venv is active).
 - **Frontend:** Run `npm test` in the `frontend` directory.
@@ -150,3 +173,51 @@ Please update any documentation or automation to use `reset_and_seed.py`.
 ## Contributing
 
 [Your Contributing Guidelines]
+
+## Logging and Observability
+
+### Unified Logging via Docker
+
+All application logs (backend, worker, and frontend event logs sent to the backend) are now written to **stdout only**. This means:
+
+- All logs are available via Docker's logging system.
+- There are no separate log files created by the application inside the containers.
+- You can view all logs for all services using:
+  ```sh
+  docker-compose logs
+  ```
+- You can collect all logs into a single file on the host with:
+  ```sh
+  docker-compose logs --no-color -t > ./logs/combined.log
+  ```
+- This includes:
+  - Backend (Flask server) logs
+  - Worker process logs
+  - Frontend browser event logs (sent to the backend via `/api/events`)
+  - Container lifecycle and healthcheck logs
+
+#### Log Format
+- All application logs are in JSON format, with fields: `timestamp`, `level`, `message`, `source`, and `component`.
+- Docker logs (from Redis, Postgres, Nginx, etc.) are in their default format.
+
+#### Why This Approach?
+- **Unified view:** All logs (application and container) are available in one place.
+- **Easy aggregation:** You can forward or process logs using Docker-native tools or external log shippers.
+- **No need to manage log files or rotation inside containers.**
+
+#### Example: Viewing Logs
+To view logs for all services in real time:
+```sh
+docker-compose logs -f
+```
+To view logs for a specific service (e.g., backend):
+```sh
+docker-compose logs -f backend
+```
+
+#### Example: Collecting All Logs to a File
+```sh
+docker-compose logs --no-color -t > ./logs/combined.log
+```
+
+---

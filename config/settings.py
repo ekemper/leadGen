@@ -27,7 +27,6 @@ JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
-## Database settings are handled in the database config module.
-## NEON_CONNECTION_STRING must be set for application runtime.
+## DATABASE_URL must be set for application runtime.
 
 SQLALCHEMY_TRACK_MODIFICATIONS = False 
