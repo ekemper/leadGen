@@ -1,6 +1,6 @@
 import sys
 import json
-from server.tasks import fetch_and_save_leads_task, lead_email_verification_task
+from server.tasks import fetch_and_save_leads_task
 from server.app import create_app
 from server.config.database import db
 from server.api.services.campaign_service import CampaignService

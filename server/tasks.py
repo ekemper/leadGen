@@ -260,35 +260,5 @@ def enrich_lead_task(lead_id):
                 job.update_status(JobStatus.FAILED, error_message=error_msg)
             raise
 
-def lead_email_verification_task(lead_id):
-    """Verify the email for a single lead and save the result."""
-    from server.app import create_app
-    flask_app = create_app()
-    with flask_app.app_context():
-        from server.models.lead import Lead
-        lead = Lead.query.get(lead_id)
-        if not lead:
-            app_logger.error(f"Lead {lead_id} not found for email verification task.")
-            return
-        try:
-            app_logger.info(f"Starting email verification for lead {lead_id} with email: {lead.email}")
-            result = EmailVerifierService().verify_email(lead.email)
-            app_logger.info(f"Verification result for lead {lead_id}: {result}")
-            lead.email_verification = result
-            db.session.commit()
-            app_logger.info(f"Email verification complete and saved for lead {lead_id}")
-        except Exception as e:
-            app_logger.error(f"Error verifying email for lead {lead_id}: {str(e)}")
-            db.session.rollback()
 
-def enqueue_lead_email_verification(lead_id):
-    """Enqueue the email verification task for a single lead."""
-    queue = get_queue()
-    job = queue.enqueue(
-        lead_email_verification_task,
-        args=(lead_id,),
-        job_timeout=QUEUE_CONFIG['default']['job_timeout'],
-        retry=Retry(max=QUEUE_CONFIG['default']['max_retries'])
-    )
-    return job
 

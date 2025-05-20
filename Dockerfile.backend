@@ -20,6 +20,6 @@ COPY example.env .env.example
 EXPOSE 5001
 
 ENV PYTHONPATH=/app
-ENV FLASK_DEBUG=0
+ENV FLASK_DEBUG=1
 
-CMD ["flask", "--app", "server.app:create_app", "run", "--host=0.0.0.0", "--port=5001", "--no-reload"] 
+CMD ["flask", "--app", "server.app:create_app", "run", "--host=0.0.0.0", "--port=5001", "--reload"] 

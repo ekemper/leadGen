@@ -5,48 +5,8 @@ This application uses PostgreSQL as the primary database, with SQLAlchemy as the
 
 ## Local Database Setup
 
-### Prerequisites
-- PostgreSQL 13+
-- Python 3.9+
-- psycopg2-binary
+// TODO--------------------
 
-### Installation
-
-1. Install PostgreSQL:
-```bash
-# macOS (using Homebrew)
-brew install postgresql@13
-
-# Start PostgreSQL service
-brew services start postgresql@13
-```
-
-2. Create Database:
-```bash
-createdb leadgen
-createuser -P leadgen_user  # You'll be prompted for a password
-```
-
-3. Grant Privileges:
-```sql
-psql leadgen
-GRANT ALL PRIVILEGES ON DATABASE leadgen TO leadgen_user;
-```
-
-## Database Configuration
-
-### Environment Variables
-```bash
-# .env file
-DATABASE_URL=postgresql://leadgen_user:password@localhost:5432/leadgen
-```
-
-### SQLAlchemy Configuration
-```python
-# server/config.py
-SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
-SQLALCHEMY_TRACK_MODIFICATIONS = False
-```
 
 ## Data Models
 

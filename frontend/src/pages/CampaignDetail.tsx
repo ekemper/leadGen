@@ -328,6 +328,23 @@ const CampaignDetail: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Fetching and Enrichment Details Section */}
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-2">Fetching and Enrichment Details</h3>
+            <div className="rounded border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.02] p-4">
+              {campaign.job_ids ? (
+                <ul className="space-y-1 text-gray-700 dark:text-gray-300 text-sm">
+                  <li><span className="font-medium">Fetch Leads Job ID:</span> {campaign.job_ids.fetch_leads || <span className="text-gray-400">N/A</span>}</li>
+                  <li><span className="font-medium">Enrich Leads Job ID:</span> {campaign.job_ids.enrich_leads || <span className="text-gray-400">N/A</span>}</li>
+                  <li><span className="font-medium">Email Verification Job ID:</span> {campaign.job_ids.email_verification || <span className="text-gray-400">N/A</span>}</li>
+                  <li><span className="font-medium">Email Copy Generation Job ID:</span> {campaign.job_ids.email_copy_generation || <span className="text-gray-400">N/A</span>}</li>
+                </ul>
+              ) : (
+                <div className="text-gray-400">No fetching or enrichment job details available for this campaign.</div>
+              )}
+            </div>
+          </div>
         </div>
         {/* Save/Cancel or Start Campaign Button */}
         {Object.keys(editedFields).length > 0 ? (

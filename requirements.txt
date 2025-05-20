@@ -26,7 +26,7 @@ rq-dashboard
 apify-client>=1.6.0
 playwright
 gunicorn==21.2.0
-celery==5.3.6
+watchdog==6.0.0
 
 # --- Testing dependencies ---
 pytest==8.0.2

@@ -5,6 +5,9 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     env_file: .env
+    environment:
+      - FLASK_DEBUG=1
+      - FLASK_ENV=development
     depends_on:
       redis:
         condition: service_healthy
@@ -20,7 +23,12 @@ services:
       retries: 5
       start_period: 30s
     volumes:
+      - ./server:/app/server
+      - ./config:/app/config
+      - ./scripts:/app/scripts
+      - ./migrations:/app/migrations
       - ./logs:/app/logs
+    command: flask --app server.app:create_app run --host=0.0.0.0 --port=5001 --reload
 
   worker:
     build:
@@ -50,17 +58,24 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: development
     ports:
-      - "80:80"
+      - "5173:5173"
     depends_on:
       - backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: ["npm", "run", "dev", "--", "--host", "--port", "5173"]
 
   redis:
     image: redis:7
