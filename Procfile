@@ -1,3 +1,3 @@
 release: flask db upgrade
-worker: python3 server/run_worker.py
-web: gunicorn server.app:app 
+worker: python server/run_worker.py
+web: gunicorn -b 0.0.0.0:$PORT server.app:app 
