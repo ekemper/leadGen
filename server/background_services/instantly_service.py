@@ -24,7 +24,7 @@ class InstantlyService:
             "personalization": personalization
         }
         try:
-            response = requests.post(self.API_URL, json=payload, headers=self.headers, timeout=10)
+            response = requests.post(self.API_URL, json=payload, headers=self.headers, timeout=30)
             response.raise_for_status()
             app_logger.info(f"Successfully created Instantly lead for {email} in campaign {campaign_id}")
             return response.json()
@@ -51,7 +51,7 @@ class InstantlyService:
             }
         }
         try:
-            response = requests.post(self.API_CAMPAIGN_URL, json=payload, headers=self.headers, timeout=10)
+            response = requests.post(self.API_CAMPAIGN_URL, json=payload, headers=self.headers, timeout=30)
             response.raise_for_status()
             data = response.json()
             app_logger.info(f"Successfully created Instantly campaign '{name}' with response: {data}")
