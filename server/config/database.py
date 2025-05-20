@@ -1,4 +1,13 @@
+"""
+Patch for Heroku DATABASE_URL compatibility:
+Heroku provides the DATABASE_URL environment variable with the legacy 'postgres://' prefix, but SQLAlchemy requires 'postgresql://'.
+This patch rewrites the prefix if necessary before SQLAlchemy is initialized.
+"""
 import os
+# Patch DATABASE_URL for SQLAlchemy compatibility with Heroku
+_db_url = os.environ.get('DATABASE_URL')
+if _db_url and _db_url.startswith('postgres://'):
+    os.environ['DATABASE_URL'] = _db_url.replace('postgres://', 'postgresql://', 1)
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
