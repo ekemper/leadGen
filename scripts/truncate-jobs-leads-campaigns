@@ -1,0 +1,14 @@
+-- Disable triggers to avoid foreign key constraint issues
+ALTER TABLE jobs DISABLE TRIGGER ALL;
+ALTER TABLE leads DISABLE TRIGGER ALL;
+ALTER TABLE campaigns DISABLE TRIGGER ALL;
+
+-- Truncate tables and restart identity (reset auto-increment IDs)
+TRUNCATE TABLE jobs RESTART IDENTITY CASCADE;
+TRUNCATE TABLE leads RESTART IDENTITY CASCADE;
+TRUNCATE TABLE campaigns RESTART IDENTITY CASCADE;
+
+-- Re-enable triggers
+ALTER TABLE jobs ENABLE TRIGGER ALL;
+ALTER TABLE leads ENABLE TRIGGER ALL;
+ALTER TABLE campaigns ENABLE TRIGGER ALL;
