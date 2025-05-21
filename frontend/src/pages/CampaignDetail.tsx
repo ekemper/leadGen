@@ -8,7 +8,7 @@ import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
 import Badge from '../components/ui/badge/Badge';
-import { Table, TableHeader, TableBody, TableRow, TableCell, StripedTableBody } from '../components/ui/table';
+import { Table, TableHeader, TableRow, TableCell, StripedTableBody } from '../components/ui/table';
 import LineChartOne from '../components/charts/line/LineChartOne';
 import MonthlyTarget from '../components/ecommerce/MonthlyTarget';
 
