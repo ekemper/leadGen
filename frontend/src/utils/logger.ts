@@ -1,6 +1,5 @@
 export {};
 
-import { api } from '../config/api';
 import { getAuthHeaders } from '../config/api';
 
 interface LogEntry {
@@ -260,7 +259,6 @@ class Logger {
     }
 
     this.isProcessing = true;
-    const logsToSend = [...this.logQueue];
     this.logQueue = [];
 
     try {
