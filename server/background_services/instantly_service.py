@@ -58,4 +58,33 @@ class InstantlyService:
             return data
         except requests.RequestException as e:
             app_logger.error(f"Error creating Instantly campaign '{name}': {str(e)}")
-            return {"error": str(e), "payload": payload} 
+            return {"error": str(e), "payload": payload}
+
+    def get_campaign_analytics_overview(self, campaign_id, start_date=None, end_date=None, campaign_status=None):
+        """
+        Fetch campaign analytics overview from Instantly API.
+        :param campaign_id: The Instantly campaign ID (string)
+        :param start_date: Optional start date (YYYY-MM-DD)
+        :param end_date: Optional end date (YYYY-MM-DD)
+        :param campaign_status: Optional campaign status (string or int)
+        :return: dict (API response or error)
+        """
+        url = "https://api.instantly.ai/api/v2/campaigns/analytics/overview"
+        query = {
+            "id": campaign_id,
+        }
+        if start_date:
+            query["start_date"] = start_date
+        if end_date:
+            query["end_date"] = end_date
+        if campaign_status is not None:
+            query["campaign_status"] = str(campaign_status)
+        try:
+            response = requests.get(url, headers=self.headers, params=query, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            app_logger.info(f"Fetched Instantly analytics overview for campaign {campaign_id}: {data}")
+            return data
+        except requests.RequestException as e:
+            app_logger.error(f"Error fetching Instantly analytics overview for campaign {campaign_id}: {str(e)}")
+            return {"error": str(e), "query": query} 

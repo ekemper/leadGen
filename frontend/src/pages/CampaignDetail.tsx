@@ -2,13 +2,15 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../config/api';
 import { toast } from 'react-toastify';
-import { CampaignStatus, Campaign, CampaignLeadStats } from '../types/campaign';
+import { CampaignStatus, Campaign, CampaignLeadStats, InstantlyAnalytics } from '../types/campaign';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
 import Badge from '../components/ui/badge/Badge';
 import { Table, TableHeader, TableBody, TableRow, TableCell, StripedTableBody } from '../components/ui/table';
+import LineChartOne from '../components/charts/line/LineChartOne';
+import MonthlyTarget from '../components/ecommerce/MonthlyTarget';
 
 type EditableCampaignFields = 'name' | 'description' | 'fileName' | 'totalRecords' | 'url';
 
@@ -76,7 +78,9 @@ const CampaignDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [leadStats, setLeadStats] = useState<CampaignLeadStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [instantlyAnalytics, setInstantlyAnalytics] = useState<InstantlyAnalytics | null>(null);
+  const [campaignLoading, setCampaignLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<Record<EditableCampaignFields, boolean>>({} as Record<EditableCampaignFields, boolean>);
   const [editedFields, setEditedFields] = useState<Partial<Record<EditableCampaignFields, string | number>>>({});
@@ -131,7 +135,7 @@ const CampaignDetail: React.FC = () => {
   };
 
   const fetchCampaign = async () => {
-    setLoading(true);
+    setCampaignLoading(true);
     setError(null);
     try {
       const response = await api.get(`/api/campaigns/${id}`);
@@ -145,20 +149,34 @@ const CampaignDetail: React.FC = () => {
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setCampaignLoading(false);
     }
   };
 
   const fetchLeadStats = async () => {
+    setStatsLoading(true);
     try {
       const response = await api.get(`/api/campaigns/${id}/details`);
-      if (response.status === 'success' && response.data.lead_stats) {
-        setLeadStats(response.data.lead_stats);
+      if (response.status === 'success') {
+        if (response.data.lead_stats) {
+          setLeadStats(response.data.lead_stats);
+        } else {
+          setLeadStats(null);
+        }
+        if (response.data.instantly_analytics) {
+          setInstantlyAnalytics(response.data.instantly_analytics);
+        } else {
+          setInstantlyAnalytics(null);
+        }
       } else {
         setLeadStats(null);
+        setInstantlyAnalytics(null);
       }
     } catch (err: any) {
       setLeadStats(null);
+      setInstantlyAnalytics(null);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -222,11 +240,7 @@ const CampaignDetail: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="text-gray-400">Loading campaign...</div>
-    );
-  }
+  const loading = campaignLoading || statsLoading;
 
   if (error || !campaign) {
     return (
@@ -250,54 +264,148 @@ const CampaignDetail: React.FC = () => {
           { label: campaign.name || `Campaign ${campaign.id}` }
         ]}
       />
+      {/* Campaign Overview Section */}
+      <div className="mb-8">
+        <ComponentCard title="Campaign Overview">
+          {/* Top: Name, Created Date, Status, Description */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-1">{campaign.name}</h1>
+              <div className="flex items-center gap-2 mb-2">
+                <Badge size="sm" color={getStatusColor(campaign.status)}>
+                  {getStatusLabel(campaign.status)}
+                </Badge>
+                <span className="text-gray-500 dark:text-gray-300 text-sm">ID: {campaign.id}</span>
+              </div>
+              <div className="text-gray-600 dark:text-gray-300 text-sm mb-2">
+                {campaign.description ? campaign.description : 'No description provided.'}
+              </div>
+            </div>
+            <div className="flex flex-col md:items-end gap-1">
+              <span className="text-gray-500 dark:text-gray-300 text-sm">Created: {new Date(campaign.created_at).toLocaleString()}</span>
+            </div>
+          </div>
+          {/* Two-column grid for metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* First row: Total Leads Enrolled & Total Emails Sent */}
+            <div className="flex flex-col h-full justify-between">
+              {/* Total Leads Enrolled Large Number Display */}
+              {loading ? (
+                <div className="h-20 w-full bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-2"></div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-end gap-2 mb-2">
+                  <div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Leads Enrolled</div>
+                    <div className="text-4xl font-extrabold text-gray-900 dark:text-white leading-none">
+                      {instantlyAnalytics && instantlyAnalytics.leads_count !== null ? instantlyAnalytics.leads_count : '—'}
+                    </div>
+                  </div>
+                  {/* Subtle upward trend line (sparkline) */}
+                  {instantlyAnalytics && instantlyAnalytics.leads_count !== null && (
+                    <div className="h-8 w-32 sm:w-40 ml-2 flex items-end">
+                      <LineChartOne small inlineOnly oneSeriesOnly />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col h-full justify-between">
+              {/* Total Emails Sent Progress Bar */}
+              {loading ? (
+                <div className="h-20 w-full bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-2"></div>
+              ) : (
+                <div className="mb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Emails Sent</span>
+                    <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
+                      {instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null && campaign.totalRecords
+                        ? `${Math.round((instantlyAnalytics.emails_sent_count / campaign.totalRecords) * 100)}%`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-indigo-100 dark:bg-indigo-900/30 rounded-full h-3">
+                    <div
+                      className="h-3 rounded-full bg-indigo-400 dark:bg-indigo-300 transition-all duration-500"
+                      style={{ width: instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null && campaign.totalRecords
+                        ? `${Math.min(100, (instantlyAnalytics.emails_sent_count / campaign.totalRecords) * 100)}%`
+                        : '0%' }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null
+                      ? `${instantlyAnalytics.emails_sent_count.toLocaleString()} emails sent` : '--'}
+                    {campaign.totalRecords ? ` of ${campaign.totalRecords.toLocaleString()} total` : ''}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Second row: Reply Rate & Bounce Rate */}
+            <div className="flex flex-col h-full justify-between">
+              {/* Reply Rate Radial Gauge */}
+              {loading ? (
+                <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full animate-pulse min-h-[220px]"></div>
+              ) : (
+                instantlyAnalytics && instantlyAnalytics.reply_count !== null && instantlyAnalytics.emails_sent_count !== null ? (
+                  <MonthlyTarget
+                    value={Math.min(100, instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.reply_count / instantlyAnalytics.emails_sent_count) * 100 : 0)}
+                    color={(() => {
+                      const rate = instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.reply_count / instantlyAnalytics.emails_sent_count) * 100 : 0;
+                      if (rate < 10) return ['#EF4444', '#F59E42']; // red to orange
+                      if (rate < 20) return ['#F59E42', '#FACC15']; // orange to yellow
+                      if (rate < 40) return ['#FACC15', '#22C55E']; // yellow to green
+                      return ['#22C55E', '#16A34A']; // green shades
+                    })()}
+                    label="Reply Rate"
+                    hideDropdown
+                    hidePerformancePill
+                    hideFooterStats
+                    hideDescription
+                    hideExtraText
+                    minimalBackground
+                    className="py-8 px-4"
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full flex items-center justify-center min-h-[220px] text-gray-400 dark:text-gray-600">No reply data</div>
+                )
+              )}
+            </div>
+            <div className="flex flex-col h-full justify-between items-center">
+              {/* Bounce Rate Card styled to match Reply Rate gauge */}
+              {loading ? (
+                <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full animate-pulse min-h-[220px]"></div>
+              ) : (
+                <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] w-full flex flex-col items-center py-8 px-4">
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-4">Bounce Rate</h3>
+                  {instantlyAnalytics && instantlyAnalytics.bounced_count !== null && instantlyAnalytics.emails_sent_count !== null ? (
+                    (() => {
+                      const bounceRate = instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.bounced_count / instantlyAnalytics.emails_sent_count) * 100 : 0;
+                      let pillColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+                      let label = 'Good';
+                      if (bounceRate > 10 && bounceRate <= 20) {
+                        pillColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+                        label = 'Caution';
+                      } else if (bounceRate > 20) {
+                        pillColor = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+                        label = 'Problem';
+                      }
+                      return (
+                        <span className={`px-4 py-2 rounded-full font-semibold text-sm ${pillColor}`}>{`${bounceRate.toFixed(1)}% • ${label}`}</span>
+                      );
+                    })()
+                  ) : (
+                    <span className="px-4 py-2 rounded-full font-semibold text-sm bg-gray-100 text-gray-400 dark:bg-gray-900/30 dark:text-gray-500">No bounce data</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </ComponentCard>
+      </div>
       {/* Two-column layout for details and stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
         <div>
-          <ComponentCard title="Campaign Details">
+          <ComponentCard title="Lead Scraping Parameters">
             <div className="space-y-4">
-              <div>
-                {/* Editable Name */}
-                <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90 flex items-center gap-3">
-                  {editMode.name ? (
-                    <input
-                      className="border rounded px-2 py-1 text-lg"
-                      value={editedFields.name ?? (campaign as any).name}
-                      onChange={e => handleFieldChange('name', e.target.value)}
-                      autoFocus
-                    />
-                  ) : (
-                    <>
-                      {campaign.status?.toUpperCase() === CampaignStatus.CREATED
-                        ? <span onClick={() => handleEdit('name')} className="cursor-pointer hover:underline">{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
-                        : <span>{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
-                      }
-                      {/* Status badge */}
-                      <Badge size="sm" color={getStatusColor(campaign.status)}>
-                        {getStatusLabel(campaign.status)}
-                      </Badge>
-                    </>
-                  )}
-                </h2>
-                {/* Status message if present */}
-                {campaign.status_message && (
-                  <div className="text-xs text-gray-400 mt-1">{campaign.status_message}</div>
-                )}
-                {/* Editable Description */}
-                <p className="text-gray-400 mt-1">
-                  {editMode.description ? (
-                    <textarea
-                      className="border rounded px-2 py-1 w-full"
-                      value={editedFields.description ?? (campaign as any).description}
-                      onChange={e => handleFieldChange('description', e.target.value)}
-                      autoFocus
-                    />
-                  ) : (
-                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                      ? <span onClick={() => handleEdit('description')} className="cursor-pointer hover:underline">{(campaign as any).description}</span>
-                      : <span>{(campaign as any).description}</span>
-                  )}
-                </p>
-              </div>
               <div className="grid grid-cols-2 gap-4">
                 {/* Editable File Name */}
                 <div>
@@ -427,6 +535,14 @@ const CampaignDetail: React.FC = () => {
             </ComponentCard>
           </div>
         )}
+      </div>
+      {/* Instantly Analytics Section */}
+      <div className="mt-8">
+        <ComponentCard title="Instantly Analytics (Raw)">
+          <pre className="overflow-x-auto text-xs bg-gray-100 dark:bg-gray-900 rounded p-4 text-gray-800 dark:text-white">
+            {instantlyAnalytics ? JSON.stringify(instantlyAnalytics, null, 2) : 'No Instantly analytics data.'}
+          </pre>
+        </ComponentCard>
       </div>
     </>
   );

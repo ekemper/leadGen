@@ -25,6 +25,7 @@ export interface Campaign {
   totalRecords: number;
   url: string;
   status_message?: string;
+  description?: string;
 }
 
 export interface CampaignStartParams {
@@ -40,4 +41,23 @@ export interface CampaignLeadStats {
   leads_with_email_copy: number;
   leads_with_instantly_record: number;
   error_message: string | null;
+}
+
+export interface InstantlyAnalytics {
+  leads_count: number | null;
+  contacted_count: number | null;
+  emails_sent_count: number | null;
+  open_count: number | null;
+  link_click_count: number | null;
+  reply_count: number | null;
+  bounced_count: number | null;
+  unsubscribed_count: number | null;
+  completed_count: number | null;
+  new_leads_contacted_count: number | null;
+  total_opportunities: number | null;
+  campaign_name: string | null;
+  campaign_id: string | null;
+  campaign_status: string | null;
+  campaign_is_evergreen: boolean | null;
+  error?: string;
 } 

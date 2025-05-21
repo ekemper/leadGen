@@ -444,4 +444,44 @@ class CampaignService:
                 'leads_with_email_copy': 0,
                 'leads_with_instantly_record': 0,
                 'error_message': error_str
-            } 
+            }
+
+    def get_campaign_instantly_analytics(self, campaign) -> dict:
+        """
+        Fetch and map Instantly analytics overview for a campaign.
+        :param campaign: campaign dict (from to_dict())
+        :return: dict with mapped analytics fields, or error
+        """
+        instantly_campaign_id = campaign.get('instantly_campaign_id')
+        if not instantly_campaign_id:
+            return {"error": "No Instantly campaign ID associated with this campaign."}
+        instantly_service = InstantlyService()
+        # Optionally, you could pass start_date, end_date, campaign_status from campaign or params
+        analytics = instantly_service.get_campaign_analytics_overview(instantly_campaign_id)
+        if 'error' in analytics:
+            return {"error": analytics['error']}
+        # Map Instantly analytics response to required fields
+        mapped = {
+            "leads_count": analytics.get("leads_count"),  # This may need to be mapped from another field
+            "contacted_count": analytics.get("contacted_count"),  # This may need to be mapped from another field
+            "emails_sent_count": analytics.get("emails_sent_count"),
+            "open_count": analytics.get("open_count"),
+            "link_click_count": analytics.get("link_click_count"),
+            "reply_count": analytics.get("reply_count"),
+            "bounced_count": analytics.get("bounced_count"),
+            "unsubscribed_count": analytics.get("unsubscribed_count"),
+            "completed_count": analytics.get("completed_count"),
+            "new_leads_contacted_count": analytics.get("new_leads_contacted_count"),
+            "total_opportunities": analytics.get("total_opportunities"),
+            # Campaign status info
+            "campaign_name": campaign.get("name"),
+            "campaign_id": campaign.get("id"),
+            "campaign_status": campaign.get("status"),
+            "campaign_is_evergreen": analytics.get("is_evergreen", False),
+        }
+        # Fallbacks for missing fields
+        if mapped["leads_count"] is None:
+            mapped["leads_count"] = campaign.get("totalRecords")
+        if mapped["contacted_count"] is None:
+            mapped["contacted_count"] = analytics.get("new_leads_contacted_count")
+        return mapped 

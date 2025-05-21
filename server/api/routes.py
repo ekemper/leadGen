@@ -350,7 +350,7 @@ def register_routes(api):
     @api.route('/campaigns/<campaign_id>/details', methods=['GET'])
     @token_required
     def get_campaign_details(campaign_id):
-        """Get campaign details including lead stats."""
+        """Get campaign details including lead stats and Instantly analytics."""
         try:
             campaign_service = get_campaign_service()
             campaign = campaign_service.get_campaign(campaign_id)
@@ -365,11 +365,13 @@ def register_routes(api):
                 }), 404
 
             lead_stats = campaign_service.get_campaign_lead_stats(campaign_id)
+            instantly_analytics = campaign_service.get_campaign_instantly_analytics(campaign)
             response_data = {
                 'status': 'success',
                 'data': {
                     'campaign': campaign,
-                    'lead_stats': lead_stats
+                    'lead_stats': lead_stats,
+                    'instantly_analytics': instantly_analytics
                 }
             }
             return jsonify(response_data), 200

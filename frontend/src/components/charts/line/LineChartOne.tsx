@@ -1,7 +1,8 @@
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 
-export default function LineChartOne() {
+// Add props for small, inlineOnly, and oneSeriesOnly
+export default function LineChartOne({ small = false, inlineOnly = false, oneSeriesOnly = false }: { small?: boolean; inlineOnly?: boolean; oneSeriesOnly?: boolean }) {
   const options: ApexOptions = {
     legend: {
       show: false, // Hide legend
@@ -11,17 +12,17 @@ export default function LineChartOne() {
     colors: ["#465FFF", "#9CB9FF"], // Define line colors
     chart: {
       fontFamily: "Outfit, sans-serif",
-      height: 310,
+      height: small ? 32 : 310,
       type: "line", // Set the chart type to 'line'
       toolbar: {
         show: false, // Hide chart toolbar
       },
+      sparkline: small || inlineOnly ? { enabled: true } : { enabled: false },
     },
     stroke: {
       curve: "straight", // Define the line style (straight, smooth, or step)
       width: [2, 2], // Line width for each dataset
     },
-
     fill: {
       type: "gradient",
       gradient: {
@@ -45,7 +46,7 @@ export default function LineChartOne() {
       },
       yaxis: {
         lines: {
-          show: true, // Show grid lines on y-axis
+          show: !small && !inlineOnly, // Hide grid lines for sparkline
         },
       },
     },
@@ -53,7 +54,7 @@ export default function LineChartOne() {
       enabled: false, // Disable data labels
     },
     tooltip: {
-      enabled: true, // Enable tooltip
+      enabled: !small && !inlineOnly, // Disable tooltip for sparkline
       x: {
         format: "dd MMM yyyy", // Format for x-axis tooltip
       },
@@ -83,6 +84,9 @@ export default function LineChartOne() {
       tooltip: {
         enabled: false, // Disable tooltip for x-axis points
       },
+      labels: {
+        show: !small && !inlineOnly,
+      },
     },
     yaxis: {
       labels: {
@@ -90,6 +94,7 @@ export default function LineChartOne() {
           fontSize: "12px", // Adjust font size for y-axis labels
           colors: ["#6B7280"], // Color of the labels
         },
+        show: !small && !inlineOnly,
       },
       title: {
         text: "", // Remove y-axis title
@@ -100,20 +105,28 @@ export default function LineChartOne() {
     },
   };
 
-  const series = [
-    {
-      name: "Sales",
-      data: [180, 190, 170, 160, 175, 165, 170, 205, 230, 210, 240, 235],
-    },
-    {
-      name: "Revenue",
-      data: [40, 30, 50, 40, 55, 40, 70, 100, 110, 120, 150, 140],
-    },
-  ];
+  const series = oneSeriesOnly
+    ? [
+        {
+          name: "Leads",
+          data: [180, 190, 170, 160, 175, 165, 170, 205, 230, 240, 250, 265],
+        },
+      ]
+    : [
+        {
+          name: "Sales",
+          data: [180, 190, 170, 160, 175, 165, 170, 205, 230, 210, 240, 235],
+        },
+        {
+          name: "Revenue",
+          data: [40, 30, 50, 40, 55, 40, 70, 100, 110, 120, 150, 140],
+        },
+      ];
+
   return (
-    <div className="max-w-full overflow-x-auto custom-scrollbar">
-      <div id="chartEight" className="min-w-[1000px]">
-        <Chart options={options} series={series} type="area" height={310} />
+    <div className={inlineOnly ? "w-full h-full" : "max-w-full overflow-x-auto custom-scrollbar"}>
+      <div id="chartEight" className={inlineOnly ? "w-full h-full" : small ? "min-w-[120px]" : "min-w-[1000px]"}>
+        <Chart options={options} series={series} type="area" height={small || inlineOnly ? 32 : 310} />
       </div>
     </div>
   );
