@@ -1,6 +1,5 @@
 export {};
 
-import { api } from '../config/api';
 import { getAuthHeaders } from '../config/api';
 
 interface LogEntry {
@@ -260,16 +259,16 @@ class Logger {
     }
 
     this.isProcessing = true;
-    const logsToSend = [...this.logQueue];
     this.logQueue = [];
 
     try {
-      await api.post('/api/events', {
-        source: 'browser',
-        tag: 'console',
-        data: logsToSend,
-        type: 'log'
-      });
+      // await api.post('/api/events', {
+      //   source: 'browser',
+      //   tag: 'console',
+      //   data: logsToSend,
+      //   type: 'log'
+      // });
+      // API call to /api/events intentionally disabled
     } catch (error: any) {
       // console.log('error', {error});
       // If sending fails, put logs back in queue
