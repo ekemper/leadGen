@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../config/api';
 import { toast } from 'react-toastify';
 import { CampaignStatus, Campaign, CampaignLeadStats, InstantlyAnalytics } from '../types/campaign';
@@ -11,6 +11,8 @@ import Badge from '../components/ui/badge/Badge';
 import { Table, TableHeader, TableRow, TableCell, StripedTableBody } from '../components/ui/table';
 import LineChartOne from '../components/charts/line/LineChartOne';
 import MonthlyTarget from '../components/ecommerce/MonthlyTarget';
+import Input from '../components/form/input/InputField';
+import TextArea from '../components/form/input/TextArea';
 
 type EditableCampaignFields = 'name' | 'description' | 'fileName' | 'totalRecords' | 'url';
 
@@ -76,6 +78,7 @@ const formatUrlForDisplay = (url: string) => {
 
 const CampaignDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [leadStats, setLeadStats] = useState<CampaignLeadStats | null>(null);
   const [instantlyAnalytics, setInstantlyAnalytics] = useState<InstantlyAnalytics | null>(null);
@@ -89,6 +92,7 @@ const CampaignDetail: React.FC = () => {
   const [startLoading, setStartLoading] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialStatsLoad = useRef(true); // Track if this is the first stats load
 
   // Helper to determine if campaign is in progress
   const isCampaignInProgress = (status: CampaignStatus | string | undefined) => {
@@ -108,7 +112,7 @@ const CampaignDetail: React.FC = () => {
   useEffect(() => {
     fetchCampaign();
     fetchLeadStats();
-    // Only start polling if campaign is in progress
+    // Only start polling if campaign is in an active state
     if (campaign && isCampaignInProgress(campaign.status)) {
       startLeadStatsPolling();
     } else {
@@ -120,18 +124,25 @@ const CampaignDetail: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, campaign?.status]);
 
-  // Stop polling if campaign transitions to COMPLETED or FAILED
+  // Stop polling if campaign transitions out of active state
   useEffect(() => {
-    if (campaign && [CampaignStatus.COMPLETED, CampaignStatus.FAILED].includes(campaign.status as CampaignStatus)) {
+    if (campaign && !isCampaignInProgress(campaign.status)) {
       if (pollingRef.current) clearInterval(pollingRef.current);
     }
   }, [campaign?.status]);
+
+  useEffect(() => {
+    if (error || (!campaign && !campaignLoading)) {
+      toast.error(error || 'Campaign not found');
+      navigate('/campaigns');
+    }
+  }, [error, campaign, campaignLoading, navigate]);
 
   const startLeadStatsPolling = () => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(() => {
       fetchLeadStats();
-    }, 5000);
+    }, 30000);
   };
 
   const fetchCampaign = async () => {
@@ -154,7 +165,9 @@ const CampaignDetail: React.FC = () => {
   };
 
   const fetchLeadStats = async () => {
-    setStatsLoading(true);
+    if (isInitialStatsLoad.current) {
+      setStatsLoading(true);
+    }
     try {
       const response = await api.get(`/api/campaigns/${id}/details`);
       if (response.status === 'success') {
@@ -176,7 +189,10 @@ const CampaignDetail: React.FC = () => {
       setLeadStats(null);
       setInstantlyAnalytics(null);
     } finally {
-      setStatsLoading(false);
+      if (isInitialStatsLoad.current) {
+        setStatsLoading(false);
+        isInitialStatsLoad.current = false;
+      }
     }
   };
 
@@ -243,9 +259,7 @@ const CampaignDetail: React.FC = () => {
   const loading = campaignLoading || statsLoading;
 
   if (error || !campaign) {
-    return (
-      <div className="text-red-500">{error || 'Campaign not found'}</div>
-    );
+    return null;
   }
 
   // Debug: log campaign status
@@ -286,119 +300,121 @@ const CampaignDetail: React.FC = () => {
             </div>
           </div>
           {/* Two-column grid for metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* First row: Total Leads Enrolled & Total Emails Sent */}
-            <div className="flex flex-col h-full justify-between">
-              {/* Total Leads Enrolled Large Number Display */}
-              {loading ? (
-                <div className="h-20 w-full bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-2"></div>
-              ) : (
-                <div className="flex flex-col sm:flex-row sm:items-end gap-2 mb-2">
-                  <div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Leads Enrolled</div>
-                    <div className="text-4xl font-extrabold text-gray-900 dark:text-white leading-none">
-                      {instantlyAnalytics && instantlyAnalytics.leads_count !== null ? instantlyAnalytics.leads_count : '—'}
-                    </div>
-                  </div>
-                  {/* Subtle upward trend line (sparkline) */}
-                  {instantlyAnalytics && instantlyAnalytics.leads_count !== null && (
-                    <div className="h-8 w-32 sm:w-40 ml-2 flex items-end">
-                      <LineChartOne small inlineOnly oneSeriesOnly />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col h-full justify-between">
-              {/* Total Emails Sent Progress Bar */}
-              {loading ? (
-                <div className="h-20 w-full bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-2"></div>
-              ) : (
-                <div className="mb-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Emails Sent</span>
-                    <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
-                      {instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null && campaign.totalRecords
-                        ? `${Math.round((instantlyAnalytics.emails_sent_count / campaign.totalRecords) * 100)}%`
-                        : '--'}
-                    </span>
-                  </div>
-                  <div className="w-full bg-indigo-100 dark:bg-indigo-900/30 rounded-full h-3">
-                    <div
-                      className="h-3 rounded-full bg-indigo-400 dark:bg-indigo-300 transition-all duration-500"
-                      style={{ width: instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null && campaign.totalRecords
-                        ? `${Math.min(100, (instantlyAnalytics.emails_sent_count / campaign.totalRecords) * 100)}%`
-                        : '0%' }}
-                    ></div>
-                  </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null
-                      ? `${instantlyAnalytics.emails_sent_count.toLocaleString()} emails sent` : '--'}
-                    {campaign.totalRecords ? ` of ${campaign.totalRecords.toLocaleString()} total` : ''}
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* Second row: Reply Rate & Bounce Rate */}
-            <div className="flex flex-col h-full justify-between">
-              {/* Reply Rate Radial Gauge */}
-              {loading ? (
-                <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full animate-pulse min-h-[220px]"></div>
-              ) : (
-                instantlyAnalytics && instantlyAnalytics.reply_count !== null && instantlyAnalytics.emails_sent_count !== null ? (
-                  <MonthlyTarget
-                    value={Math.min(100, instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.reply_count / instantlyAnalytics.emails_sent_count) * 100 : 0)}
-                    color={(() => {
-                      const rate = instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.reply_count / instantlyAnalytics.emails_sent_count) * 100 : 0;
-                      if (rate < 10) return ['#EF4444', '#F59E42']; // red to orange
-                      if (rate < 20) return ['#F59E42', '#FACC15']; // orange to yellow
-                      if (rate < 40) return ['#FACC15', '#22C55E']; // yellow to green
-                      return ['#22C55E', '#16A34A']; // green shades
-                    })()}
-                    label="Reply Rate"
-                    hideDropdown
-                    hidePerformancePill
-                    hideFooterStats
-                    hideDescription
-                    hideExtraText
-                    minimalBackground
-                    className="py-8 px-4"
-                  />
+          {campaign.status !== CampaignStatus.CREATED && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* First row: Total Leads Enrolled & Total Emails Sent */}
+              <div className="flex flex-col h-full justify-between">
+                {/* Total Leads Enrolled Large Number Display */}
+                {loading ? (
+                  <div className="h-20 w-full bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-2"></div>
                 ) : (
-                  <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full flex items-center justify-center min-h-[220px] text-gray-400 dark:text-gray-600">No reply data</div>
-                )
-              )}
-            </div>
-            <div className="flex flex-col h-full justify-between items-center">
-              {/* Bounce Rate Card styled to match Reply Rate gauge */}
-              {loading ? (
-                <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full animate-pulse min-h-[220px]"></div>
-              ) : (
-                <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] w-full flex flex-col items-center py-8 px-4">
-                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-4">Bounce Rate</h3>
-                  {instantlyAnalytics && instantlyAnalytics.bounced_count !== null && instantlyAnalytics.emails_sent_count !== null ? (
-                    (() => {
-                      const bounceRate = instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.bounced_count / instantlyAnalytics.emails_sent_count) * 100 : 0;
-                      let pillColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
-                      let label = 'Good';
-                      if (bounceRate > 10 && bounceRate <= 20) {
-                        pillColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
-                        label = 'Caution';
-                      } else if (bounceRate > 20) {
-                        pillColor = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
-                        label = 'Problem';
-                      }
-                      return (
-                        <span className={`px-4 py-2 rounded-full font-semibold text-sm ${pillColor}`}>{`${bounceRate.toFixed(1)}% • ${label}`}</span>
-                      );
-                    })()
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-2 mb-2">
+                    <div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Leads Enrolled</div>
+                      <div className="text-4xl font-extrabold text-gray-900 dark:text-white leading-none">
+                        {instantlyAnalytics && instantlyAnalytics.leads_count !== null ? instantlyAnalytics.leads_count : '—'}
+                      </div>
+                    </div>
+                    {/* Subtle upward trend line (sparkline) */}
+                    {instantlyAnalytics && instantlyAnalytics.leads_count !== null && (
+                      <div className="h-8 w-32 sm:w-40 ml-2 flex items-end">
+                        <LineChartOne small inlineOnly oneSeriesOnly />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col h-full justify-between">
+                {/* Total Emails Sent Progress Bar */}
+                {loading ? (
+                  <div className="h-20 w-full bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-2"></div>
+                ) : (
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Emails Sent</span>
+                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
+                        {instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null && campaign.totalRecords
+                          ? `${Math.round((instantlyAnalytics.emails_sent_count / campaign.totalRecords) * 100)}%`
+                          : '--'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-indigo-100 dark:bg-indigo-900/30 rounded-full h-3">
+                      <div
+                        className="h-3 rounded-full bg-indigo-400 dark:bg-indigo-300 transition-all duration-500"
+                        style={{ width: instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null && campaign.totalRecords
+                          ? `${Math.min(100, (instantlyAnalytics.emails_sent_count / campaign.totalRecords) * 100)}%`
+                          : '0%' }}
+                      ></div>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {instantlyAnalytics && instantlyAnalytics.emails_sent_count !== null
+                        ? `${instantlyAnalytics.emails_sent_count.toLocaleString()} emails sent` : '--'}
+                      {campaign.totalRecords ? ` of ${campaign.totalRecords.toLocaleString()} total` : ''}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Second row: Reply Rate & Bounce Rate */}
+              <div className="flex flex-col h-full justify-between">
+                {/* Reply Rate Radial Gauge */}
+                {loading ? (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full animate-pulse min-h-[220px]"></div>
+                ) : (
+                  instantlyAnalytics && instantlyAnalytics.reply_count !== null && instantlyAnalytics.emails_sent_count !== null ? (
+                    <MonthlyTarget
+                      value={Math.min(100, instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.reply_count / instantlyAnalytics.emails_sent_count) * 100 : 0)}
+                      color={(() => {
+                        const rate = instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.reply_count / instantlyAnalytics.emails_sent_count) * 100 : 0;
+                        if (rate < 10) return ['#EF4444', '#F59E42']; // red to orange
+                        if (rate < 20) return ['#F59E42', '#FACC15']; // orange to yellow
+                        if (rate < 40) return ['#FACC15', '#22C55E']; // yellow to green
+                        return ['#22C55E', '#16A34A']; // green shades
+                      })()}
+                      label="Reply Rate"
+                      hideDropdown
+                      hidePerformancePill
+                      hideFooterStats
+                      hideDescription
+                      hideExtraText
+                      minimalBackground
+                      className="py-8 px-4"
+                    />
                   ) : (
-                    <span className="px-4 py-2 rounded-full font-semibold text-sm bg-gray-100 text-gray-400 dark:bg-gray-900/30 dark:text-gray-500">No bounce data</span>
-                  )}
-                </div>
-              )}
+                    <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full flex items-center justify-center min-h-[220px] text-gray-400 dark:text-gray-600">No reply data</div>
+                  )
+                )}
+              </div>
+              <div className="flex flex-col h-full justify-between items-center">
+                {/* Bounce Rate Card styled to match Reply Rate gauge */}
+                {loading ? (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] py-8 px-4 w-full animate-pulse min-h-[220px]"></div>
+                ) : (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-white/[0.03] w-full flex flex-col items-center py-8 px-4">
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-4">Bounce Rate</h3>
+                    {instantlyAnalytics && instantlyAnalytics.bounced_count !== null && instantlyAnalytics.emails_sent_count !== null ? (
+                      (() => {
+                        const bounceRate = instantlyAnalytics.emails_sent_count > 0 ? (instantlyAnalytics.bounced_count / instantlyAnalytics.emails_sent_count) * 100 : 0;
+                        let pillColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+                        let label = 'Good';
+                        if (bounceRate > 10 && bounceRate <= 20) {
+                          pillColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+                          label = 'Caution';
+                        } else if (bounceRate > 20) {
+                          pillColor = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+                          label = 'Problem';
+                        }
+                        return (
+                          <span className={`px-4 py-2 rounded-full font-semibold text-sm ${pillColor}`}>{`${bounceRate.toFixed(1)}% • ${label}`}</span>
+                        );
+                      })()
+                    ) : (
+                      <span className="px-4 py-2 rounded-full font-semibold text-sm bg-gray-100 text-gray-400 dark:bg-gray-900/30 dark:text-gray-500">No bounce data</span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </ComponentCard>
       </div>
       {/* Two-column layout for details and stats */}
@@ -411,11 +427,10 @@ const CampaignDetail: React.FC = () => {
                 <div>
                   <span className="text-gray-400">File Name:</span>
                   {editMode.fileName ? (
-                    <input
-                      className="ml-2 border rounded px-2 py-1"
-                      value={editedFields.fileName ?? campaign.fileName}
+                    <Input
+                      type="text"
+                      value={String(editedFields.fileName ?? campaign.fileName)}
                       onChange={e => handleFieldChange('fileName', e.target.value)}
-                      autoFocus
                     />
                   ) : (
                     (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
@@ -427,14 +442,12 @@ const CampaignDetail: React.FC = () => {
                 <div>
                   <span className="text-gray-400">Total Records:</span>
                   {editMode.totalRecords ? (
-                    <input
-                      className="ml-2 border rounded px-2 py-1 w-24"
+                    <Input
                       type="number"
-                      min={1}
-                      max={1000}
-                      value={editedFields.totalRecords ?? campaign.totalRecords}
+                      min="1"
+                      max="1000"
+                      value={String(editedFields.totalRecords ?? campaign.totalRecords)}
                       onChange={e => handleFieldChange('totalRecords', Number(e.target.value))}
-                      autoFocus
                     />
                   ) : (
                     (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
@@ -446,11 +459,10 @@ const CampaignDetail: React.FC = () => {
                 <div className="col-span-2">
                   <span className="text-gray-400">URL:</span>
                   {editMode.url ? (
-                    <input
-                      className="ml-2 border rounded px-2 py-1 w-full"
-                      value={editedFields.url ?? campaign.url}
-                      onChange={e => handleFieldChange('url', e.target.value)}
-                      autoFocus
+                    <TextArea
+                      value={String(editedFields.url ?? campaign.url)}
+                      onChange={value => handleFieldChange('url', value)}
+                      rows={3}
                     />
                   ) : (
                     (campaign.status?.toUpperCase() === CampaignStatus.CREATED)

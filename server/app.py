@@ -15,6 +15,7 @@ from server.utils.logging_config import app_logger
 from server.api.openapi import create_spec, register_spec
 from limits.storage import RedisStorage
 import ssl
+from server.extensions import limiter
 
 print('sys.path:', sys.path)
 print('CWD:', os.getcwd())
@@ -42,8 +43,7 @@ def create_app(test_config=None):
          resources={
              r"/*": {
                  "origins": [
-                     "http://localhost", "http://127.0.0.1"#,
-                    #  "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"
+                     "http://localhost", "http://127.0.0.1", "http://localhost:5173", "http://127.0.0.1:5173"
                  ],
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                  "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],
@@ -53,21 +53,8 @@ def create_app(test_config=None):
              }
          })
     
-    # Add CORS headers to all responses
-    @app.after_request
-    def after_request(response):
-        origin = request.headers.get('Origin')
-        allowed_origins = ["http://localhost", "http://127.0.0.1","http://localhost:5173", "http://127.0.0.1:5173"]
-        if origin in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Request-ID'
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Max-Age'] = '3600'
-            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization, X-Request-ID'
-        return response
-    
     # Configure rate limiting (single source of truth)
+    limiter.init_app(app)
     if app.config.get('RATELIMIT_ENABLED', True):
         redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
         storage_options = {}
@@ -75,20 +62,10 @@ def create_app(test_config=None):
             cert_reqs = os.environ.get('REDIS_SSL_CERT_REQS', 'required')
             if cert_reqs == 'none':
                 storage_options['ssl_cert_reqs'] = ssl.CERT_NONE
-        limiter = Limiter(
-            app=app,
-            key_func=get_remote_address,
-            default_limits=["200 per day", "50 per hour"],
-            storage_uri=redis_url,
-            storage_options=storage_options,
-            strategy="moving-window"
-        )
-        # Decorate /api/events with a higher limit
-        from flask import Blueprint
-        for rule in app.url_map.iter_rules():
-            if rule.rule == '/api/events' and 'POST' in rule.methods:
-                view_func = app.view_functions[rule.endpoint]
-                app.view_functions[rule.endpoint] = limiter.limit("1000 per hour")(view_func)
+        limiter.storage_uri = redis_url
+        limiter.storage_options = storage_options
+        limiter.strategy = "moving-window"
+        # Decorate /api/events with a higher limit (handled in decorator now)
         # Exempt /api/health from rate limiting
         @limiter.exempt
         @app.route('/api/health', methods=['GET'])

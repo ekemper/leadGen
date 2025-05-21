@@ -13,6 +13,9 @@ import TableBody from '../components/tables/TableBody';
 import TableRow from '../components/tables/TableRow';
 import TableCell from '../components/tables/TableCell';
 import Badge from '../components/ui/badge/Badge';
+import Select from '../components/form/Select';
+import TextArea from '../components/form/input/TextArea';
+import { toast } from 'react-toastify';
 
 interface Campaign {
   id: string;
@@ -41,42 +44,41 @@ interface FormErrors {
   name?: string;
   description?: string;
   organization_id?: string;
+  url?: string;
 }
 
 const getStatusColor = (status: string) => {
-  switch (status) {
+  switch (status?.toLowerCase()) {
     case 'completed':
       return 'success';
     case 'created':
       return 'info';
     case 'fetching_leads':
-    case 'enriching':
     case 'verifying_emails':
+    case 'enriching_leads':
     case 'generating_emails':
       return 'warning';
     case 'failed':
       return 'error';
+    case 'leads_fetched':
+      return 'success';
     default:
       return 'info';
   }
 };
 
 const getStatusLabel = (status: string) => {
-  switch (status) {
+  switch (status?.toLowerCase()) {
     case 'created':
       return 'Created';
     case 'fetching_leads':
       return 'Fetching Leads';
     case 'leads_fetched':
       return 'Leads Fetched';
-    case 'enriching':
-      return 'Enriching Leads';
-    case 'enriched':
-      return 'Leads Enriched';
     case 'verifying_emails':
       return 'Verifying Emails';
-    case 'emails_verified':
-      return 'Emails Verified';
+    case 'enriching_leads':
+      return 'Enriching Leads';
     case 'generating_emails':
       return 'Generating Emails';
     case 'completed':
@@ -113,6 +115,13 @@ const CampaignsList: React.FC = () => {
     fetchCampaigns();
     fetchOrganizations();
   }, []);
+
+  useEffect(() => {
+    if (error && error.toLowerCase().includes('not found')) {
+      toast.error(error);
+      navigate('/campaigns');
+    }
+  }, [error, navigate]);
 
   const fetchOrganizations = async () => {
     setOrgsLoading(true);
@@ -155,6 +164,9 @@ const CampaignsList: React.FC = () => {
     }
     if (!formData.organization_id) {
       errors.organization_id = 'Organization is required';
+    }
+    if (!formData.url.trim()) {
+      errors.url = 'URL is required';
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -212,104 +224,105 @@ const CampaignsList: React.FC = () => {
   };
 
   const renderCreateForm = () => (
-    <form onSubmit={handleCreate} className="space-y-4 mb-8">
-      <div>
-        <Label htmlFor="organization_id">Organization</Label>
-        {orgsLoading ? (
-          <div className="text-gray-400">Loading organizations...</div>
-        ) : orgsError ? (
-          <div className="text-red-500">{orgsError}</div>
-        ) : organizations.length === 0 ? (
-          <div className="text-gray-400">No organizations available. Please create an organization first.</div>
-        ) : (
-          <select
-            id="organization_id"
-            name="organization_id"
-            value={formData.organization_id}
+    <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] max-w-2xl mx-auto mb-8">
+      <div className="px-6 py-5">
+        <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Create Campaign</h3>
+      </div>
+      <form onSubmit={handleCreate} className="p-4 border-t border-gray-100 dark:border-gray-800 sm:p-6 space-y-6">
+        <div>
+          <Label htmlFor="organization_id">Organization</Label>
+          {orgsLoading ? (
+            <div className="text-gray-400">Loading organizations...</div>
+          ) : orgsError ? (
+            <div className="text-red-500">{orgsError}</div>
+          ) : organizations.length === 0 ? (
+            <div className="text-gray-400">No organizations available. Please create an organization first.</div>
+          ) : (
+            <Select
+              options={organizations.map((org) => ({ value: org.id, label: org.name }))}
+              placeholder="Select an organization"
+              onChange={(value: string) => handleChange({ target: { name: 'organization_id', value } } as any)}
+              defaultValue={formData.organization_id}
+              className={formErrors.organization_id ? 'border-error-500 focus:border-error-300 focus:ring-error-500/10 dark:border-error-500 dark:focus:border-error-800' : ''}
+            />
+          )}
+          {formErrors.organization_id && (
+            <p className="mt-1 text-sm text-error-500">{formErrors.organization_id}</p>
+          )}
+        </div>
+        <div>
+          <Label htmlFor="name">Campaign Name</Label>
+          <Input
+            id="name"
+            name="name"
+            type="text"
+            value={formData.name}
             onChange={handleChange}
             disabled={createLoading}
-            className={`w-full px-3 py-2 border rounded-md ${
-              formErrors.organization_id ? 'border-red-500' : 'border-gray-300'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          >
-            <option value="">Select an organization</option>
-            {organizations.map((org) => (
-              <option key={org.id} value={org.id}>
-                {org.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {formErrors.organization_id && (
-          <p className="mt-1 text-sm text-red-500">{formErrors.organization_id}</p>
-        )}
-      </div>
-      <div>
-        <Label htmlFor="name">Campaign Name</Label>
-        <Input
-          id="name"
-          name="name"
-          type="text"
-          value={formData.name}
-          onChange={handleChange}
-          disabled={createLoading}
-          error={!!formErrors.name}
-          hint={formErrors.name}
-        />
-      </div>
-      <div>
-        <Label htmlFor="description">Description</Label>
-        <textarea
-          id="description"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          disabled={createLoading}
-          className={`w-full px-3 py-2 border rounded-md ${
-            formErrors.description ? 'border-red-500' : 'border-gray-300'
-          } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          rows={4}
-        />
-        {formErrors.description && (
-          <p className="mt-1 text-sm text-red-500">{formErrors.description}</p>
-        )}
-      </div>
-      <div>
-        <Label htmlFor="fileName">File Name</Label>
-        <Input
-          id="fileName"
-          name="fileName"
-          type="text"
-          value={formData.fileName}
-          onChange={handleChange}
-          disabled={createLoading}
-          error={!!formErrors.fileName}
-          hint={formErrors.fileName}
-        />
-      </div>
-      <div>
-        <Label htmlFor="totalRecords">Number of Leads</Label>
-        <Input
-          id="totalRecords"
-          name="totalRecords"
-          type="number"
-          value={formData.totalRecords}
-          onChange={handleChange}
-          min="1"
-          max="1000"
-          disabled={createLoading}
-          error={!!formErrors.count}
-          hint={formErrors.count}
-        />
-      </div>
-      {createError && <div className="text-red-500">{createError}</div>}
-      <Button
-        variant="primary"
-        disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id || !formData.fileName.trim() || !formData.totalRecords}
-      >
-        {createLoading ? 'Creating...' : 'Create Campaign'}
-      </Button>
-    </form>
+            error={!!formErrors.name}
+            hint={formErrors.name}
+          />
+        </div>
+        <div>
+          <Label htmlFor="description">Description</Label>
+          <TextArea
+            value={formData.description}
+            onChange={(value: string) => handleChange({ target: { name: 'description', value } } as any)}
+            disabled={createLoading}
+            error={!!formErrors.description}
+            hint={formErrors.description}
+            rows={6}
+          />
+        </div>
+        <div>
+          <Label htmlFor="fileName">File Name</Label>
+          <Input
+            id="fileName"
+            name="fileName"
+            type="text"
+            value={formData.fileName}
+            onChange={handleChange}
+            disabled={createLoading}
+            error={!!formErrors.fileName}
+            hint={formErrors.fileName}
+          />
+        </div>
+        <div>
+          <Label htmlFor="totalRecords">Number of Leads</Label>
+          <Input
+            id="totalRecords"
+            name="totalRecords"
+            type="number"
+            value={formData.totalRecords}
+            onChange={handleChange}
+            min="1"
+            max="1000"
+            disabled={createLoading}
+            error={!!formErrors.count}
+            hint={formErrors.count}
+          />
+        </div>
+        <div>
+          <Label htmlFor="url">URL</Label>
+          <TextArea
+            value={formData.url}
+            onChange={(value: string) => handleChange({ target: { name: 'url', value } } as any)}
+            disabled={createLoading}
+            error={!!formErrors.url}
+            hint={formErrors.url}
+            rows={3}
+          />
+        </div>
+        {createError && <div className="text-error-500">{createError}</div>}
+        <Button
+          variant="primary"
+          disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id || !formData.fileName.trim() || !formData.totalRecords || !formData.url.trim()}
+          className="w-full"
+        >
+          {createLoading ? 'Creating...' : 'Create Campaign'}
+        </Button>
+      </form>
+    </div>
   );
 
   return (
@@ -335,7 +348,7 @@ const CampaignsList: React.FC = () => {
 
           {loading ? (
             <div className="text-gray-400">Loading campaigns...</div>
-          ) : error ? (
+          ) : error && !error.toLowerCase().includes('not found') ? (
             <div className="text-red-500">{error}</div>
           ) : (
             <>

@@ -25,6 +25,9 @@ from server.api.schemas import (
     ErrorResponseSchema, SuccessResponseSchema, JobSchema
 )
 import threading
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from server.extensions import limiter
 
 # Create blueprint
 api = Blueprint('api', __name__)
@@ -752,6 +755,7 @@ def register_routes(api):
             return jsonify({'status': 'error', 'error': {'code': 500, 'name': 'Internal Server Error', 'message': 'Internal server error'}}), 500
 
     @api.route('/events', methods=['POST'])
+    @limiter.limit("1000 per hour")
     @token_required
     def create_event():
         """Create a new event."""

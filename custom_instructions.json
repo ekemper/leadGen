@@ -69,5 +69,17 @@
         ]
       }
     }
-  ]
+  ],
+  "robust_code_suggestions": {
+    "description": "Guidelines for making robust code suggestions in Flask and similar projects.",
+    "rules": [
+      "Always recommend solutions that are robust across all contexts, not just those that work in a specific or narrow scenario.",
+      "Avoid suggesting patterns that rely on runtime context (like current_app or request) for decorators or initialization code. Instead, use importable, shared instances for things like extensions (e.g., Flask-Limiter, Flask-CORS).",
+      "Favor best practices and idiomatic usage for the framework and ecosystem. For Flask, this means initializing extensions in a way that allows them to be imported and used in blueprints, decorators, and modules without requiring the app context.",
+      "Anticipate edge cases: Consider how the code will behave during app startup, testing, blueprint registration, and in multi-threaded or multi-process environments.",
+      "If a quick fix is possible but not robust, always note its limitations and recommend the best-practice solution as the primary approach.",
+      "Test or reason through the lifecycle of the code: Will it work during import, at runtime, and in all environments (dev, prod, test)?",
+      "If unsure, default to the most widely accepted, maintainable, and future-proof approach—even if it requires a bit more refactoring."
+    ]
+  }
 } 

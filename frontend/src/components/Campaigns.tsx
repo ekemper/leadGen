@@ -14,11 +14,11 @@ const Campaigns: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' && e.target instanceof HTMLInputElement ? e.target.checked : value
     }));
   };
 
@@ -108,19 +108,20 @@ const Campaigns: React.FC = () => {
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>
             URL
           </label>
-          <input
-            type="text"
+          <textarea
             name="url"
             value={formData.url}
             onChange={handleChange}
             required
+            rows={3}
             style={{
               width: '100%',
               padding: '0.5rem',
               backgroundColor: '#1e1e1e',
               border: '1px solid #333',
               borderRadius: '4px',
-              color: '#d4d4d4'
+              color: '#d4d4d4',
+              resize: 'vertical'
             }}
           />
         </div>
