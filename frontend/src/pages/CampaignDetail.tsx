@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../config/api';
 import { toast } from 'react-toastify';
-import { CampaignStatus, Campaign } from '../types/campaign';
+import { CampaignStatus, Campaign, CampaignLeadStats } from '../types/campaign';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
 import Button from '../components/ui/button/Button';
 import Badge from '../components/ui/badge/Badge';
+import { Table, TableHeader, TableBody, TableRow, TableCell, StripedTableBody } from '../components/ui/table';
 
 type EditableCampaignFields = 'name' | 'description' | 'fileName' | 'totalRecords' | 'url';
 
@@ -56,9 +57,25 @@ const getStatusLabel = (status: string) => {
   }
 };
 
+// Helper to format URL for display: base URL on first line, each param on a new line
+const formatUrlForDisplay = (url: string) => {
+  const [base, paramString] = url.split('?', 2);
+  let out = base;
+  if (paramString) {
+    const params = paramString.split('&');
+    const alignSpan = `<span style=\"display:inline-block;width:4ch;\"></span>`;
+    out += '<br />' + alignSpan + '?' + decodeURIComponent(params[0]) +
+      (params.length > 1
+        ? params.slice(1).map(p => '<br />' + alignSpan + '&amp;' + decodeURIComponent(p)).join('')
+        : '');
+  }
+  return out;
+};
+
 const CampaignDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [leadStats, setLeadStats] = useState<CampaignLeadStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<Record<EditableCampaignFields, boolean>>({} as Record<EditableCampaignFields, boolean>);
@@ -67,10 +84,51 @@ const CampaignDetail: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [startLoading, setStartLoading] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper to determine if campaign is in progress
+  const isCampaignInProgress = (status: CampaignStatus | string | undefined) => {
+    return [
+      CampaignStatus.FETCHING_LEADS,
+      CampaignStatus.VERIFYING_EMAILS,
+      CampaignStatus.ENRICHING_LEADS,
+      CampaignStatus.GENERATING_EMAILS
+    ].includes(status as CampaignStatus);
+  };
+
+  // Helper to determine if campaign is past CREATED
+  const isPastCreated = (status: CampaignStatus | string | undefined) => {
+    return status && status !== CampaignStatus.CREATED;
+  };
 
   useEffect(() => {
     fetchCampaign();
-  }, [id]);
+    fetchLeadStats();
+    // Only start polling if campaign is in progress
+    if (campaign && isCampaignInProgress(campaign.status)) {
+      startLeadStatsPolling();
+    } else {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    }
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, campaign?.status]);
+
+  // Stop polling if campaign transitions to COMPLETED or FAILED
+  useEffect(() => {
+    if (campaign && [CampaignStatus.COMPLETED, CampaignStatus.FAILED].includes(campaign.status as CampaignStatus)) {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    }
+  }, [campaign?.status]);
+
+  const startLeadStatsPolling = () => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(() => {
+      fetchLeadStats();
+    }, 5000);
+  };
 
   const fetchCampaign = async () => {
     setLoading(true);
@@ -82,19 +140,8 @@ const CampaignDetail: React.FC = () => {
         return;
       }
       setCampaign(response.data);
-      // Reset edit mode and edited fields after fetch
       setEditMode({} as Record<EditableCampaignFields, boolean>);
       setEditedFields({});
-      
-      // Start polling if campaign is in progress
-      /*
-      if (response.data.status === CampaignStatus.FETCHING_LEADS || 
-          response.data.status === CampaignStatus.VERIFYING_EMAILS ||
-          response.data.status === CampaignStatus.ENRICHING_LEADS ||
-          response.data.status === CampaignStatus.GENERATING_EMAILS) {
-        startStatusPolling();
-      }
-      */
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -102,45 +149,18 @@ const CampaignDetail: React.FC = () => {
     }
   };
 
-  /*
-  const startStatusPolling = () => {
-    if (statusPolling) {
-      clearInterval(statusPolling);
-    }
-    
-    const interval = setInterval(async () => {
-      try {
-        const response = await api.get(`/api/campaigns/${id}`);
-        if (response.status === 'error') {
-          clearInterval(interval);
-          return;
-        }
-        
-        setCampaign(response.data);
-        
-        // Stop polling if campaign is completed or failed
-        if (response.data.status === CampaignStatus.COMPLETED || 
-            response.data.status === CampaignStatus.FAILED) {
-          clearInterval(interval);
-          setStatusPolling(null);
-          
-          // Show appropriate toast message
-          if (response.data.status === CampaignStatus.COMPLETED) {
-            toast.success('Campaign completed successfully');
-          } else {
-            toast.error(`Campaign failed: ${response.data.status_error || 'Unknown error'}`);
-          }
-        }
-      } catch (error) {
-        console.error('Error polling campaign status:', error);
-        clearInterval(interval);
-        setStatusPolling(null);
+  const fetchLeadStats = async () => {
+    try {
+      const response = await api.get(`/api/campaigns/${id}/details`);
+      if (response.status === 'success' && response.data.lead_stats) {
+        setLeadStats(response.data.lead_stats);
+      } else {
+        setLeadStats(null);
       }
-    }, 5000); // Poll every 5 seconds
-    
-    setStatusPolling(interval);
+    } catch (err: any) {
+      setLeadStats(null);
+    }
   };
-  */
 
   // Helper to start editing a field
   const handleEdit = (field: EditableCampaignFields) => {
@@ -230,144 +250,184 @@ const CampaignDetail: React.FC = () => {
           { label: campaign.name || `Campaign ${campaign.id}` }
         ]}
       />
-      <ComponentCard title="Campaign Details">
-        <div className="space-y-4">
-          <div>
-            {/* Editable Name */}
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90 flex items-center gap-3">
-              {editMode.name ? (
-                <input
-                  className="border rounded px-2 py-1 text-lg"
-                  value={editedFields.name ?? (campaign as any).name}
-                  onChange={e => handleFieldChange('name', e.target.value)}
-                  autoFocus
-                />
-              ) : (
-                <>
-                  {campaign.status?.toUpperCase() === CampaignStatus.CREATED
-                    ? <span onClick={() => handleEdit('name')} className="cursor-pointer hover:underline">{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
-                    : <span>{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
-                  }
-                  {/* Status badge */}
-                  <Badge size="sm" color={getStatusColor(campaign.status)}>
-                    {getStatusLabel(campaign.status)}
-                  </Badge>
-                </>
-              )}
-            </h2>
-            {/* Status message if present */}
-            {campaign.status_message && (
-              <div className="text-xs text-gray-400 mt-1">{campaign.status_message}</div>
+      {/* Two-column layout for details and stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+        <div>
+          <ComponentCard title="Campaign Details">
+            <div className="space-y-4">
+              <div>
+                {/* Editable Name */}
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-white/90 flex items-center gap-3">
+                  {editMode.name ? (
+                    <input
+                      className="border rounded px-2 py-1 text-lg"
+                      value={editedFields.name ?? (campaign as any).name}
+                      onChange={e => handleFieldChange('name', e.target.value)}
+                      autoFocus
+                    />
+                  ) : (
+                    <>
+                      {campaign.status?.toUpperCase() === CampaignStatus.CREATED
+                        ? <span onClick={() => handleEdit('name')} className="cursor-pointer hover:underline">{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
+                        : <span>{(campaign as any).name || `Campaign ${(campaign as any).id}`}</span>
+                      }
+                      {/* Status badge */}
+                      <Badge size="sm" color={getStatusColor(campaign.status)}>
+                        {getStatusLabel(campaign.status)}
+                      </Badge>
+                    </>
+                  )}
+                </h2>
+                {/* Status message if present */}
+                {campaign.status_message && (
+                  <div className="text-xs text-gray-400 mt-1">{campaign.status_message}</div>
+                )}
+                {/* Editable Description */}
+                <p className="text-gray-400 mt-1">
+                  {editMode.description ? (
+                    <textarea
+                      className="border rounded px-2 py-1 w-full"
+                      value={editedFields.description ?? (campaign as any).description}
+                      onChange={e => handleFieldChange('description', e.target.value)}
+                      autoFocus
+                    />
+                  ) : (
+                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                      ? <span onClick={() => handleEdit('description')} className="cursor-pointer hover:underline">{(campaign as any).description}</span>
+                      : <span>{(campaign as any).description}</span>
+                  )}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Editable File Name */}
+                <div>
+                  <span className="text-gray-400">File Name:</span>
+                  {editMode.fileName ? (
+                    <input
+                      className="ml-2 border rounded px-2 py-1"
+                      value={editedFields.fileName ?? campaign.fileName}
+                      onChange={e => handleFieldChange('fileName', e.target.value)}
+                      autoFocus
+                    />
+                  ) : (
+                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEdit('fileName')}>{campaign.fileName}</span>
+                      : <span className="ml-2 text-gray-800 dark:text-white/90">{campaign.fileName}</span>
+                  )}
+                </div>
+                {/* Editable Total Records */}
+                <div>
+                  <span className="text-gray-400">Total Records:</span>
+                  {editMode.totalRecords ? (
+                    <input
+                      className="ml-2 border rounded px-2 py-1 w-24"
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={editedFields.totalRecords ?? campaign.totalRecords}
+                      onChange={e => handleFieldChange('totalRecords', Number(e.target.value))}
+                      autoFocus
+                    />
+                  ) : (
+                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEdit('totalRecords')}>{campaign.totalRecords}</span>
+                      : <span className="ml-2 text-gray-800 dark:text-white/90">{campaign.totalRecords}</span>
+                  )}
+                </div>
+                {/* Editable URL */}
+                <div className="col-span-2">
+                  <span className="text-gray-400">URL:</span>
+                  {editMode.url ? (
+                    <input
+                      className="ml-2 border rounded px-2 py-1 w-full"
+                      value={editedFields.url ?? campaign.url}
+                      onChange={e => handleFieldChange('url', e.target.value)}
+                      autoFocus
+                    />
+                  ) : (
+                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90 whitespace-pre-line" onClick={() => handleEdit('url')} dangerouslySetInnerHTML={{__html: formatUrlForDisplay(campaign.url)}} />
+                      : <span className="ml-2 text-gray-800 dark:text-white/90 whitespace-pre-line" dangerouslySetInnerHTML={{__html: formatUrlForDisplay(campaign.url)}} />
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* Save/Cancel or Start Campaign Button */}
+            {Object.keys(editedFields).length > 0 ? (
+              <div className="mt-6 flex gap-2 items-center">
+                <Button variant="primary" onClick={handleSave} disabled={saveLoading}>
+                  {saveLoading ? 'Saving...' : 'Save'}
+                </Button>
+                <Button variant="outline" onClick={handleCancelEdit} disabled={saveLoading}>
+                  Cancel
+                </Button>
+                {saveError && <span className="text-red-500 ml-2">{saveError}</span>}
+              </div>
+            ) : (
+              campaign.status === CampaignStatus.CREATED && (
+                <div className="mt-6 flex gap-2 items-center">
+                  <Button variant="primary" onClick={handleStartCampaign} disabled={startLoading}>
+                    {startLoading ? 'Starting...' : 'Start Campaign'}
+                  </Button>
+                  {startError && <span className="text-red-500 ml-2">{startError}</span>}
+                </div>
+              )
             )}
-            {/* Editable Description */}
-            <p className="text-gray-400 mt-1">
-              {editMode.description ? (
-                <textarea
-                  className="border rounded px-2 py-1 w-full"
-                  value={editedFields.description ?? (campaign as any).description}
-                  onChange={e => handleFieldChange('description', e.target.value)}
-                  autoFocus
-                />
-              ) : (
-                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                  ? <span onClick={() => handleEdit('description')} className="cursor-pointer hover:underline">{(campaign as any).description}</span>
-                  : <span>{(campaign as any).description}</span>
-              )}
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Editable File Name */}
-            <div>
-              <span className="text-gray-400">File Name:</span>
-              {editMode.fileName ? (
-                <input
-                  className="ml-2 border rounded px-2 py-1"
-                  value={editedFields.fileName ?? campaign.fileName}
-                  onChange={e => handleFieldChange('fileName', e.target.value)}
-                  autoFocus
-                />
-              ) : (
-                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                  ? <span className="ml-2 cursor-pointer hover:underline" onClick={() => handleEdit('fileName')}>{campaign.fileName}</span>
-                  : <span className="ml-2">{campaign.fileName}</span>
-              )}
-            </div>
-            {/* Editable Total Records */}
-            <div>
-              <span className="text-gray-400">Total Records:</span>
-              {editMode.totalRecords ? (
-                <input
-                  className="ml-2 border rounded px-2 py-1 w-24"
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={editedFields.totalRecords ?? campaign.totalRecords}
-                  onChange={e => handleFieldChange('totalRecords', Number(e.target.value))}
-                  autoFocus
-                />
-              ) : (
-                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                  ? <span className="ml-2 cursor-pointer hover:underline" onClick={() => handleEdit('totalRecords')}>{campaign.totalRecords}</span>
-                  : <span className="ml-2">{campaign.totalRecords}</span>
-              )}
-            </div>
-            {/* Editable URL */}
-            <div className="col-span-2">
-              <span className="text-gray-400">URL:</span>
-              {editMode.url ? (
-                <input
-                  className="ml-2 border rounded px-2 py-1 w-full"
-                  value={editedFields.url ?? campaign.url}
-                  onChange={e => handleFieldChange('url', e.target.value)}
-                  autoFocus
-                />
-              ) : (
-                (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                  ? <span className="ml-2 cursor-pointer hover:underline" onClick={() => handleEdit('url')}>{campaign.url}</span>
-                  : <span className="ml-2">{campaign.url}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Fetching and Enrichment Details Section */}
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-2">Fetching and Enrichment Details</h3>
-            <div className="rounded border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.02] p-4">
-              {campaign.job_ids ? (
-                <ul className="space-y-1 text-gray-700 dark:text-gray-300 text-sm">
-                  <li><span className="font-medium">Fetch Leads Job ID:</span> {campaign.job_ids.fetch_leads || <span className="text-gray-400">N/A</span>}</li>
-                  <li><span className="font-medium">Enrich Leads Job ID:</span> {campaign.job_ids.enrich_leads || <span className="text-gray-400">N/A</span>}</li>
-                  <li><span className="font-medium">Email Verification Job ID:</span> {campaign.job_ids.email_verification || <span className="text-gray-400">N/A</span>}</li>
-                  <li><span className="font-medium">Email Copy Generation Job ID:</span> {campaign.job_ids.email_copy_generation || <span className="text-gray-400">N/A</span>}</li>
-                </ul>
-              ) : (
-                <div className="text-gray-400">No fetching or enrichment job details available for this campaign.</div>
-              )}
-            </div>
-          </div>
+          </ComponentCard>
         </div>
-        {/* Save/Cancel or Start Campaign Button */}
-        {Object.keys(editedFields).length > 0 ? (
-          <div className="mt-6 flex gap-2 items-center">
-            <Button variant="primary" onClick={handleSave} disabled={saveLoading}>
-              {saveLoading ? 'Saving...' : 'Save'}
-            </Button>
-            <Button variant="outline" onClick={handleCancelEdit} disabled={saveLoading}>
-              Cancel
-            </Button>
-            {saveError && <span className="text-red-500 ml-2">{saveError}</span>}
+        {/* Enrichment Stats Section */}
+        {isPastCreated(campaign.status) && (
+          <div>
+            <ComponentCard title="Enrichment Stats">
+              {leadStats ? (
+                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6">
+                  <div className="max-w-full overflow-x-auto">
+                    <Table>
+                      <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
+                        <TableRow>
+                          <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Metric</TableCell>
+                          <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Value</TableCell>
+                        </TableRow>
+                      </TableHeader>
+                      <StripedTableBody className="divide-y divide-gray-100 dark:divide-gray-800" stripeClassName="bg-gray-100 dark:bg-gray-900/30">
+                        <TableRow>
+                          <TableCell className="pl-4 sm:pl-6 py-3 font-medium text-gray-800 text-theme-sm dark:text-white/90">Total Leads Fetched</TableCell>
+                          <TableCell className="pl-4 sm:pl-6 py-3 text-gray-500 text-theme-sm dark:text-gray-400">{leadStats.total_leads_fetched}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-4 sm:pl-6 py-3 font-medium text-gray-800 text-theme-sm dark:text-white/90">Leads with Email</TableCell>
+                          <TableCell className="pl-4 sm:pl-6 py-3 text-gray-500 text-theme-sm dark:text-gray-400">{leadStats.leads_with_email}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-4 sm:pl-6 py-3 font-medium text-gray-800 text-theme-sm dark:text-white/90">Leads with Verified Email</TableCell>
+                          <TableCell className="pl-4 sm:pl-6 py-3 text-gray-500 text-theme-sm dark:text-gray-400">{leadStats.leads_with_verified_email}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-4 sm:pl-6 py-3 font-medium text-gray-800 text-theme-sm dark:text-white/90">Leads with Enrichment</TableCell>
+                          <TableCell className="pl-4 sm:pl-6 py-3 text-gray-500 text-theme-sm dark:text-gray-400">{leadStats.leads_with_enrichment}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-4 sm:pl-6 py-3 font-medium text-gray-800 text-theme-sm dark:text-white/90">Leads with Email Copy</TableCell>
+                          <TableCell className="pl-4 sm:pl-6 py-3 text-gray-500 text-theme-sm dark:text-gray-400">{leadStats.leads_with_email_copy}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-4 sm:pl-6 py-3 font-medium text-gray-800 text-theme-sm dark:text-white/90">Leads with Instantly Record</TableCell>
+                          <TableCell className="pl-4 sm:pl-6 py-3 text-gray-500 text-theme-sm dark:text-gray-400">{leadStats.leads_with_instantly_record}</TableCell>
+                        </TableRow>
+                      </StripedTableBody>
+                    </Table>
+                  </div>
+                  {leadStats.error_message && (
+                    <div className="mt-2"><Badge color="error" size="sm">Error: {leadStats.error_message}</Badge></div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-gray-400">No lead stats available.</div>
+              )}
+            </ComponentCard>
           </div>
-        ) : (
-          campaign.status === CampaignStatus.CREATED && (
-            <div className="mt-6 flex gap-2 items-center">
-              <Button variant="primary" onClick={handleStartCampaign} disabled={startLoading}>
-                {startLoading ? 'Starting...' : 'Start Campaign'}
-              </Button>
-              {startError && <span className="text-red-500 ml-2">{startError}</span>}
-            </div>
-          )
         )}
-      </ComponentCard>
+      </div>
     </>
   );
 };

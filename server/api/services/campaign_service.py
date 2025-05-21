@@ -1,10 +1,10 @@
-from server.models import Campaign, Job
+from server.models import Campaign, Job, Lead
 from server.config.database import db
 from server.background_services.apollo_service import ApolloService
 from server.utils.logging_config import app_logger
 from server.models.campaign import CampaignStatus
 from server.utils.error_messages import CAMPAIGN_ERRORS, JOB_ERRORS
-from sqlalchemy import text
+from sqlalchemy import text, func
 from typing import Dict, Any, Optional, List
 import threading
 import json
@@ -91,18 +91,19 @@ class CampaignService:
                 raise ValueError(f"Invalid campaign data: {errors}")
             
             # Get all jobs for this campaign
-            jobs = Job.query.filter_by(campaign_id=campaign_id).order_by(Job.created_at.desc()).all()
-            job_list = []
-            for job in jobs:
-                job_dict = job.to_dict()
-                # Validate job data
-                errors = JobSchema().validate(job_dict)
-                if errors:
-                    raise ValueError(f"Invalid job data: {errors}")
-                job_list.append(job_dict)
-            campaign_dict['jobs'] = job_list
+            # jobs = Job.query.filter_by(campaign_id=campaign_id).order_by(Job.created_at.desc()).all()
+            # job_list = []
+            # for job in jobs:
+            #     job_dict = job.to_dict()
+            #     # Validate job data
+            #     errors = JobSchema().validate(job_dict)
+            #     if errors:
+            #         raise ValueError(f"Invalid job data: {errors}")
+            #     job_list.append(job_dict)
+            # campaign_dict['jobs'] = job_list
+            campaign_dict['jobs'] = []
             
-            app_logger.info(f'Successfully fetched campaign {campaign_id} with {len(jobs)} jobs')
+            app_logger.info(f'Successfully fetched campaign {campaign_id} (jobs are empty for now)')
             return campaign_dict
         except Exception as e:
             app_logger.error(f'Error getting campaign: {str(e)}', exc_info=True)
@@ -399,4 +400,48 @@ class CampaignService:
         for k, v in update_data.items():
             setattr(campaign, k, v)
         db.session.commit()
-        return campaign.to_dict() 
+        return campaign.to_dict()
+
+    def get_campaign_lead_stats(self, campaign_id: str) -> Dict[str, int]:
+        """Return stats for a campaign's leads, with an optional error message."""
+        try:
+            total_leads = Lead.query.filter_by(campaign_id=campaign_id).count()
+            leads_with_email = Lead.query.filter(Lead.campaign_id == campaign_id, Lead.email != None).count()
+            leads_with_verified_email = Lead.query.filter(
+                Lead.campaign_id == campaign_id,
+                Lead.email_verification != None,
+                Lead.email_verification.op('->>')('result') == 'ok'
+            ).count()
+            leads_with_enrichment = Lead.query.filter(
+                Lead.campaign_id == campaign_id,
+                Lead.enrichment_results != None
+            ).count()
+            leads_with_email_copy = Lead.query.filter(
+                Lead.campaign_id == campaign_id,
+                Lead.email_copy_gen_results != None
+            ).count()
+            leads_with_instantly_record = Lead.query.filter(
+                Lead.campaign_id == campaign_id,
+                Lead.instantly_lead_record != None
+            ).count()
+            return {
+                'total_leads_fetched': total_leads,
+                'leads_with_email': leads_with_email,
+                'leads_with_verified_email': leads_with_verified_email,
+                'leads_with_enrichment': leads_with_enrichment,
+                'leads_with_email_copy': leads_with_email_copy,
+                'leads_with_instantly_record': leads_with_instantly_record,
+                'error_message': None
+            }
+        except Exception as e:
+            error_str = f"Error in get_campaign_lead_stats for campaign {campaign_id}: {str(e)}"
+            app_logger.error(error_str, exc_info=True)
+            return {
+                'total_leads_fetched': 0,
+                'leads_with_email': 0,
+                'leads_with_verified_email': 0,
+                'leads_with_enrichment': 0,
+                'leads_with_email_copy': 0,
+                'leads_with_instantly_record': 0,
+                'error_message': error_str
+            } 

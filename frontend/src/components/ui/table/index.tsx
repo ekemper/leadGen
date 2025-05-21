@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import React from "react";
 
 // Props for Table
 interface TableProps {
@@ -31,6 +32,27 @@ interface TableCellProps {
   className?: string; // Optional className for styling
 }
 
+/**
+ * StripedTableBody
+ *
+ * A drop-in replacement for TableBody that automatically applies a striped background
+ * to every other TableRow. Use it like:
+ *
+ * <Table>
+ *   <TableHeader>...</TableHeader>
+ *   <StripedTableBody>
+ *     {rows.map((row, idx) => (
+ *       <TableRow key={row.id}>...</TableRow>
+ *     ))}
+ *   </StripedTableBody>
+ * </Table>
+ */
+interface StripedTableBodyProps {
+  children: ReactNode[];
+  className?: string;
+  stripeClassName?: string; // Optional override for the striped row class
+}
+
 // Table Component
 const Table: React.FC<TableProps> = ({ children, className }) => {
   return <table className={`min-w-full  ${className}`}>{children}</table>;
@@ -61,4 +83,29 @@ const TableCell: React.FC<TableCellProps> = ({
   return <CellTag className={` ${className}`}>{children}</CellTag>;
 };
 
-export { Table, TableHeader, TableBody, TableRow, TableCell };
+const StripedTableBody: React.FC<StripedTableBodyProps> = ({ children, className = '', stripeClassName = 'bg-gray-50 dark:bg-white/[0.02]' }) => {
+  // Ensure children is an array
+  const rows = Array.isArray(children) ? children : [children];
+  return (
+    <tbody className={className}>
+      {rows.map((child, idx) => {
+        if (!child) return null;
+        // Only apply to TableRow elements
+        if (typeof child === 'object' && child !== null && 'type' in child && (child as any).type?.displayName === 'TableRow') {
+          return React.cloneElement(child as any, {
+            className: `${(child as any).props.className || ''} ${idx % 2 === 1 ? stripeClassName : ''}`.trim(),
+          });
+        }
+        // Fallback: just render
+        return idx % 2 === 1
+          ? <tr className={stripeClassName}>{child}</tr>
+          : <tr>{child}</tr>;
+      })}
+    </tbody>
+  );
+};
+
+// Set displayName for TableRow for detection
+TableRow.displayName = 'TableRow';
+
+export { Table, TableHeader, TableBody, TableRow, TableCell, StripedTableBody };

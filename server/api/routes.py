@@ -347,6 +347,43 @@ def register_routes(api):
                 app_logger.error(f"Invalid error response format: {errors}")
             return jsonify(error_response), 500
 
+    @api.route('/campaigns/<campaign_id>/details', methods=['GET'])
+    @token_required
+    def get_campaign_details(campaign_id):
+        """Get campaign details including lead stats."""
+        try:
+            campaign_service = get_campaign_service()
+            campaign = campaign_service.get_campaign(campaign_id)
+            if not campaign:
+                return jsonify({
+                    'status': 'error',
+                    'error': {
+                        'code': 404,
+                        'name': 'Not Found',
+                        'message': 'Campaign not found'
+                    }
+                }), 404
+
+            lead_stats = campaign_service.get_campaign_lead_stats(campaign_id)
+            response_data = {
+                'status': 'success',
+                'data': {
+                    'campaign': campaign,
+                    'lead_stats': lead_stats
+                }
+            }
+            return jsonify(response_data), 200
+        except Exception as e:
+            app_logger.error(f"Error fetching campaign details: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'error': {
+                    'code': 500,
+                    'name': 'Internal Server Error',
+                    'message': 'Failed to fetch campaign details'
+                }
+            }), 500
+
     @api.route('/campaigns/<campaign_id>', methods=['PATCH'])
     @token_required
     def update_campaign(campaign_id):

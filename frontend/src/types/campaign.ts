@@ -30,4 +30,14 @@ export interface Campaign {
 export interface CampaignStartParams {
   count: number; // 1-1000
   searchUrl: string;
+}
+
+export interface CampaignLeadStats {
+  total_leads_fetched: number;
+  leads_with_email: number;
+  leads_with_verified_email: number;
+  leads_with_enrichment: number;
+  leads_with_email_copy: number;
+  leads_with_instantly_record: number;
+  error_message: string | null;
 } 

@@ -12,8 +12,8 @@ export default function UserDropdown() {
     const fetchUserData = async () => {
       try {
         const response = await api.get('/api/auth/me');
-        if (response && response.email) {
-          setUserEmail(response.email);
+        if (response && response.data && response.data.email) {
+          setUserEmail(response.data.email);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -37,7 +37,7 @@ export default function UserDropdown() {
         onClick={toggleDropdown}
         className="flex items-center gap-2 px-3 py-2 text-gray-700 rounded-lg hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
       >
-        <span className="block font-medium text-theme-sm">{userEmail}</span>
+        <span className="block font-medium text-theme-sm text-gray-800 dark:text-white/90">{userEmail}</span>
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
@@ -63,18 +63,13 @@ export default function UserDropdown() {
         onClose={closeDropdown}
         className="absolute right-0 mt-[17px] flex w-[260px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark"
       >
-        <div className="py-8 flex justify-start">
-          <a href="/" className="text-2xl font-bold text-gray-800 dark:text-white">
-            SSAI LeadGen
-          </a>
-        </div>
-        <div>
-          <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
+        {/* <div className="pl-0">
+          <span className="block font-medium text-theme-sm text-gray-800 dark:text-white/90 pl-0">
             {userEmail}
           </span>
-        </div>
+        </div> */}
 
-        <ul className="flex flex-col gap-1 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800">
+        <ul className="flex flex-col gap-1 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800 pl-0">
           <li>
             <DropdownItem
               onItemClick={closeDropdown}

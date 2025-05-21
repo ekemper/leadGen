@@ -122,4 +122,13 @@ class UserSchema(Schema):
     id = fields.Str(required=True)
     email = fields.Email(required=True)
     created_at = fields.DateTime(required=True)
-    updated_at = fields.DateTime(required=True) 
+    updated_at = fields.DateTime(required=True)
+
+class CampaignLeadStatsSchema(Schema):
+    total_leads_fetched = fields.Int(required=True)
+    leads_with_email = fields.Int(required=True)
+    leads_with_verified_email = fields.Int(required=True)
+    leads_with_enrichment = fields.Int(required=True)
+    leads_with_email_copy = fields.Int(required=True)
+    leads_with_instantly_record = fields.Int(required=True)
+    error_message = fields.Str(allow_none=True) 
