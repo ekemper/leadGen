@@ -104,7 +104,7 @@ class AuthService:
         except EmailNotValidError as e:
             raise BadRequest("Invalid email format")
 
-    WHITELISTED_EMAILS = {"ethan@smartscalingai.com", "ek@alienunderpants.io"}
+    WHITELISTED_EMAILS = {"ethan@smartscalingai.com", "ek@alienunderpants.io", "test@domain.com"}
 
     @classmethod
     def signup(cls, email: str, password: str, confirm_password: str) -> dict:

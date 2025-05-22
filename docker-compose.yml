@@ -34,6 +34,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    environment:
+      - USE_APIFY_CLIENT_MOCK=true
     env_file: .env
     depends_on:
       redis:

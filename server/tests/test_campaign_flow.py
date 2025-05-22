@@ -9,16 +9,36 @@ import requests
 import time
 import random
 import string
+from server.models.user import User
+from server.config.database import db
+from flask import Flask
 
 API_BASE = "http://localhost:5001/api"
+
+TEST_EMAIL = "test@domain.com"
 
 # Utility to generate a random email for test user
 def random_email():
     return f"testuser_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}@example.com"
 
+def random_password():
+    specials = "!@#$%^&*()"
+    # Ensure at least one of each required type
+    password = [
+        random.choice(string.ascii_lowercase),
+        random.choice(string.ascii_uppercase),
+        random.choice(string.digits),
+        random.choice(specials),
+    ]
+    # Fill the rest with random choices
+    chars = string.ascii_letters + string.digits + specials
+    password += random.choices(chars, k=8)
+    random.shuffle(password)
+    return ''.join(password)
+
 def signup_and_login():
-    email = random_email()
-    password = "Test1234!"
+    email = TEST_EMAIL
+    password = random_password()
     signup_data = {
         "email": email,
         "password": password,
@@ -36,7 +56,7 @@ def signup_and_login():
         raise Exception("Login failed")
     token = resp.json()["data"]["token"]
     print(f"[Auth] Got token: {token[:8]}...")
-    return token
+    return token, email
 
 def create_organization(token):
     headers = {"Authorization": f"Bearer {token}"}
@@ -81,6 +101,9 @@ def start_campaign(token, campaign_id):
         print(f"[Campaign] Start failed: {resp.status_code} {resp.text}")
         raise Exception("Campaign start failed")
     print(f"[Campaign] Started campaign {campaign_id}")
+    # Wait for jobs to be created by the worker
+    print("[Wait] Sleeping 5 seconds to allow jobs to be created...")
+    time.sleep(5)
 
 def poll_leads(token, campaign_id, expected_count, timeout=60):
     headers = {"Authorization": f"Bearer {token}"}
@@ -148,6 +171,8 @@ def poll_enrichment(leads, token, campaign_id, timeout=240):
     for lead in leads:
         enrichment_job = enrichment_jobs_by_lead_id.get(lead["id"])
         if not enrichment_job:
+            print(f"[DEBUG] All jobs: {jobs}")
+            print(f"[DEBUG] Enrichment jobs by lead id: {enrichment_jobs_by_lead_id}")
             raise Exception(f"No enrichment job found for lead {lead['email']} (id={lead['id']}) in campaign jobs list")
         enrichment_job = poll_job_completion(lead, campaign_id, headers, API_BASE, timeout, interval=4)
         if enrichment_job["status"] != "COMPLETED":
@@ -164,17 +189,30 @@ def poll_enrichment(leads, token, campaign_id, timeout=240):
 
 def main():
     from server.background_services.mock_apify_client import MOCK_LEADS_DATA
-    token = signup_and_login()
-    organization_id = create_organization(token)
-    campaign_id = create_campaign(token, organization_id=organization_id)
-    start_campaign(token, campaign_id)
-    leads = poll_leads(token, campaign_id, expected_count=len(MOCK_LEADS_DATA), timeout=60)
-    # Assert that the leads match the mock data (by email, name, etc)
-    mock_emails = {lead["email"] for lead in MOCK_LEADS_DATA}
-    db_emails = {lead["email"] for lead in leads}
-    assert mock_emails == db_emails, f"Emails in DB: {db_emails}, expected: {mock_emails}"
-    poll_enrichment(leads, token, campaign_id, timeout=240)
-    print("\n[Success] All leads ingested and enriched successfully!")
+    app = Flask(__name__)
+    app.config.from_object('server.config.settings')
+    # Ensure app context for db cleanup
+    with app.app_context():
+        token = None
+        email = TEST_EMAIL
+        # try:
+        token, email = signup_and_login()
+        organization_id = create_organization(token)
+        campaign_id = create_campaign(token, organization_id=organization_id)
+        start_campaign(token, campaign_id)
+        leads = poll_leads(token, campaign_id, expected_count=len(MOCK_LEADS_DATA), timeout=60)
+        mock_emails = {lead["email"] for lead in MOCK_LEADS_DATA}
+        db_emails = {lead["email"] for lead in leads}
+        assert mock_emails == db_emails, f"Emails in DB: {db_emails}, expected: {mock_emails}"
+        poll_enrichment(leads, token, campaign_id, timeout=240)
+        print("\n[Success] All leads ingested and enriched successfully!")
+        # finally:
+            # Cleanup: delete the test user
+            # user = User.query.filter_by(email=email).first()
+            # if user:
+            #     db.session.delete(user)
+            #     db.session.commit()
+            #     print(f"[Cleanup] Deleted test user: {email}")
 
 if __name__ == "__main__":
     main() 
