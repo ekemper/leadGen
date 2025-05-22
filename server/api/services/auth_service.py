@@ -104,6 +104,8 @@ class AuthService:
         except EmailNotValidError as e:
             raise BadRequest("Invalid email format")
 
+    WHITELISTED_EMAILS = {"ethan@smartscalingai.com", "ek@alienunderpants.io"}
+
     @classmethod
     def signup(cls, email: str, password: str, confirm_password: str) -> dict:
         """
@@ -120,6 +122,18 @@ class AuthService:
         Raises:
             BadRequest: For validation errors
         """
+        # Whitelist check
+        if email.lower() not in cls.WHITELISTED_EMAILS:
+            app_logger.warning(
+                "Signup failed: email not whitelisted",
+                extra={
+                    'email': email,
+                    'action': 'signup_failed',
+                    'reason': 'email_not_whitelisted'
+                }
+            )
+            raise Forbidden("This email is not allowed to sign up.")
+        
         # Log signup attempt
         app_logger.info(
             "Signup attempt",
@@ -221,17 +235,27 @@ class AuthService:
 
     def login(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Authenticate a user and return a token."""
+        # Whitelist check
+        email = data.get('email', '').lower()
+        if email not in self.WHITELISTED_EMAILS:
+            app_logger.warning(
+                "Login failed: email not whitelisted",
+                extra={
+                    'email': email,
+                    'action': 'login_failed',
+                    'reason': 'email_not_whitelisted'
+                }
+            )
+            raise Forbidden("This email is not allowed to log in.")
+        
         try:
             # Validate input data
             errors = LoginSchema().validate(data)
             if errors:
                 raise BadRequest(f"Invalid login data: {errors}")
                 
-            email = data['email']
-            password = data['password']
-            
             user = User.query.filter_by(email=email).first()
-            if not user or not user.check_password(password):
+            if not user or not user.check_password(data['password']):
                 raise Unauthorized("Invalid email or password")
             
             # Generate token

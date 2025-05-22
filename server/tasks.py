@@ -12,6 +12,7 @@ from server.models.job import Job
 import traceback
 from datetime import datetime
 from server.background_services.instantly_service import InstantlyService
+import os
 
 print("server.tasks module loaded")
 
@@ -147,6 +148,7 @@ def enrich_lead_task(lead_id):
         from server.models.lead import Lead
         lead = Lead.query.get(lead_id)
         job = None
+        app_logger.info(f"[enrich_lead_task] Starting for lead_id={lead_id}, USE_APIFY_CLIENT_MOCK={os.environ.get('USE_APIFY_CLIENT_MOCK')}")
         if not lead:
             app_logger.error(f"Lead {lead_id} not found for enrichment task.")
             return
@@ -160,7 +162,9 @@ def enrich_lead_task(lead_id):
             job.update_status(JobStatus.IN_PROGRESS)
 
             # 1. Email verification
+            app_logger.info(f"[enrich_lead_task] Verifying email for lead {lead_id} ({lead.email})")
             email_result = verify_lead_email(lead)
+            app_logger.info(f"[enrich_lead_task] Email verification result for lead {lead_id}: {email_result}")
             email_success = email_result and email_result.get('result') == 'ok'
             error_details = {}
             if not email_success:
@@ -173,10 +177,13 @@ def enrich_lead_task(lead_id):
                 }
                 job.error_details = error_details
                 job.update_status(JobStatus.COMPLETED)
+                app_logger.warning(f"[enrich_lead_task] Email verification failed for lead {lead_id}, skipping enrichment.")
                 return
 
             # 2. Enrichment
+            app_logger.info(f"[enrich_lead_task] Enriching lead {lead_id} with Perplexity API")
             enrichment_result = enrich_lead_with_perplexity(lead)
+            app_logger.info(f"[enrich_lead_task] Enrichment result for lead {lead_id}: {enrichment_result}")
             enrichment_success = 'error' not in enrichment_result
             if not enrichment_success:
                 error_details['enrichment'] = enrichment_result
@@ -188,17 +195,21 @@ def enrich_lead_task(lead_id):
                 }
                 job.error_details = error_details
                 job.update_status(JobStatus.COMPLETED)
+                app_logger.warning(f"[enrich_lead_task] Enrichment failed for lead {lead_id}, skipping email copy and Instantly.")
                 return
 
             # 3. Email copy generation
             try:
+                app_logger.info(f"[enrich_lead_task] Generating email copy for lead {lead_id}")
                 email_copy_result = generate_lead_email_copy(lead, enrichment_result)
+                app_logger.info(f"[enrich_lead_task] Email copy generation result for lead {lead_id}: {email_copy_result}")
                 email_copy_success = True
             except Exception as e:
                 email_copy_success = False
                 lead.email_copy_gen_results = None
                 db.session.commit()
                 error_details['email_copy'] = str(e)
+                app_logger.error(f"[enrich_lead_task] Email copy generation failed for lead {lead_id}: {str(e)}")
 
             # 4. Instantly lead creation
             instantly_success = False
@@ -219,6 +230,7 @@ def enrich_lead_task(lead_id):
                 error_details['instantly'] = msg
             elif email_copy_success:
                 try:
+                    app_logger.info(f"[enrich_lead_task] Creating Instantly lead for lead {lead_id}")
                     from server.background_services.instantly_service import InstantlyService
                     from server.models.campaign import Campaign
                     instantly_service = InstantlyService()
@@ -233,6 +245,7 @@ def enrich_lead_task(lead_id):
                     instantly_success = not ('error' in instantly_result)
                     lead.instantly_lead_record = instantly_result
                     db.session.commit()
+                    app_logger.info(f"[enrich_lead_task] Instantly lead creation result for lead {lead_id}: {instantly_result}")
                 except Exception as e:
                     error_details['instantly'] = str(e)
                     lead.instantly_lead_record = {'error': str(e)}
