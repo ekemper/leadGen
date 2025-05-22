@@ -13,6 +13,7 @@ from datetime import datetime
 import json
 import traceback
 import apify_client
+from server.background_services.mock_apify_client import MockApifyClient
 
 """
 IMPORTANT: Apify Python client (v1.10.0 and some other versions) expects webhook payload keys in snake_case (e.g., 'event_types', 'request_url', 'payload_template', 'idempotency_key'),
@@ -37,7 +38,12 @@ class ApolloService:
         self.api_token = os.getenv('APIFY_API_TOKEN')
         if not self.api_token:
             raise ValueError("APIFY_API_TOKEN environment variable is not set")
-        self.client = ApifyClient(self.api_token)
+        # Use mock client if env var is set
+        use_mock = os.getenv("USE_APIFY_CLIENT_MOCK", "false").lower() == "true"
+        if use_mock:
+            self.client = MockApifyClient(self.api_token)
+        else:
+            self.client = ApifyClient(self.api_token)
         self.actor_id = "code_crafter/apollo-io-scraper"
         # self.actor_id = "supreme_coder/apollo-scraper"
 

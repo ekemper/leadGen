@@ -9,6 +9,8 @@ from server.app import create_app
 from server.utils.logging_config import app_logger
 from server.config.queue_config import get_redis_connection, QUEUE_CONFIG
 
+print("USE_APIFY_CLIENT_MOCK:", os.environ.get("USE_APIFY_CLIENT_MOCK"))
+
 # --- EARLY LOGGING ---
 app_logger.info("run_worker.py script started")
 app_logger.info(

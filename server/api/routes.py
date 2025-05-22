@@ -539,10 +539,24 @@ def register_routes(api):
     @api.route('/leads', methods=['GET'])
     @token_required
     def get_leads():
-        """Get all leads for the current user."""
+        """Get all leads for the current user, optionally filtered by campaign_id."""
         try:
             lead_service = get_lead_service()
-            leads = lead_service.get_leads()
+            campaign_id = request.args.get('campaign_id')
+            if campaign_id:
+                # Validate campaign_id is a real campaign
+                from server.models import Campaign
+                campaign = Campaign.query.get(campaign_id)
+                if not campaign:
+                    return jsonify({
+                        'status': 'error',
+                        'error': {
+                            'code': 400,
+                            'name': 'Bad Request',
+                            'message': f'Invalid campaign_id: {campaign_id}'
+                        }
+                    }), 400
+            leads = lead_service.get_leads(campaign_id=campaign_id)
             return jsonify({
                 'status': 'success',
                 'data': {
@@ -607,15 +621,23 @@ def register_routes(api):
     @api.route('/leads/<lead_id>', methods=['GET'])
     @token_required
     def get_lead(lead_id):
-        """Get a specific lead."""
+        """Get a specific lead by ID."""
         try:
             lead_service = get_lead_service()
             lead = lead_service.get_lead(lead_id=lead_id)
+            if not lead:
+                return jsonify({
+                    'status': 'error',
+                    'error': {
+                        'code': 404,
+                        'name': 'Not Found',
+                        'message': f'Lead {lead_id} not found'
+                    }
+                }), 404
             return jsonify({
                 'status': 'success',
                 'data': lead
             }), 200
-        
         except NotFound as e:
             return jsonify({
                 'status': 'error',
@@ -625,7 +647,6 @@ def register_routes(api):
                     'message': str(e)
                 }
             }), 404
-        
         except Exception as e:
             app_logger.error(f"Error fetching lead: {str(e)}")
             return jsonify({
@@ -981,4 +1002,29 @@ def register_routes(api):
                     'name': 'Internal Server Error',
                     'message': 'Failed to clean up campaign jobs'
                 }
-            }), 500 
+            }), 500
+
+    @api.route('/jobs', methods=['GET'])
+    @token_required
+    def get_jobs():
+        """Get jobs, optionally filtered by campaign_id."""
+        from server.api.services.job_service import JobService
+        job_service = JobService()
+        campaign_id = request.args.get('campaign_id')
+        jobs = job_service.get_jobs(campaign_id=campaign_id)
+        # Validate each job
+        for job in jobs:
+            errors = JobSchema().validate(job)
+            if errors:
+                return jsonify({
+                    'status': 'error',
+                    'error': {
+                        'code': 500,
+                        'name': 'Internal Server Error',
+                        'message': f'Invalid job data: {errors}'
+                    }
+                }), 500
+        return jsonify({
+            'status': 'success',
+            'data': {'jobs': jobs}
+        }), 200 
