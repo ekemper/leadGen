@@ -1,15 +1,16 @@
 from datetime import datetime
 import uuid
 import json
-import logging
-from server.config.database import db
-from sqlalchemy.dialects.postgresql import JSON
-from server.utils.logging_config import app_logger
-from server.utils.error_messages import JOB_ERRORS
 from typing import Optional, Dict, Any
+from sqlalchemy import Column, String, DateTime, ForeignKey, JSON
+from sqlalchemy.orm import relationship
+from server.config.database import db
+from server.utils.logging_config import setup_logger
+from server.utils.error_messages import JOB_ERRORS
 from server.models.job_status import JobStatus
 
-logger = logging.getLogger(__name__)
+# Configure module logger
+logger = setup_logger('job_model')
 
 class Job(db.Model):
     __tablename__ = 'jobs'

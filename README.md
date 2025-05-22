@@ -46,7 +46,7 @@ leadGen/
    ```
 2. Install dependencies:
    ```bash
-   pip install -r server/requirements.txt
+   pip install -r requirements.txt
    ```
 3. Run database migrations:
    ```bash

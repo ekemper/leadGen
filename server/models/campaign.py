@@ -1,16 +1,18 @@
 from datetime import datetime
 import uuid
-import logging
+from typing import Dict, Any, Optional, List
+from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, Enum as SQLAEnum
+from sqlalchemy.orm import relationship
 from server.config.database import db
-from server.utils.logging_config import app_logger
+from server.utils.logging_config import setup_logger
 from sqlalchemy.dialects.postgresql import JSON
 from enum import Enum
-from typing import Dict, Any, Optional
 from server.models.campaign_status import CampaignStatus
 from server.models.job import Job
 from server.utils.error_messages import CAMPAIGN_ERRORS, JOB_ERRORS
 
-logger = logging.getLogger(__name__)
+# Configure module logger
+logger = setup_logger('campaign_model')
 
 class Campaign(db.Model):
     __tablename__ = 'campaigns'

@@ -7,5 +7,6 @@ from server.models.campaign import Campaign
 from server.models.organization import Organization
 from server.models.event import Event
 from server.models.job import Job
+# from server.models.scraper import Scraper
 
 __all__ = ['User', 'Lead', 'Campaign', 'Organization', 'Event', 'Job'] 

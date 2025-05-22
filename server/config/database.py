@@ -9,8 +9,71 @@ _db_url = os.environ.get('DATABASE_URL')
 if _db_url and _db_url.startswith('postgres://'):
     os.environ['DATABASE_URL'] = _db_url.replace('postgres://', 'postgresql://', 1)
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from server.utils.logging_config import setup_logger, ContextLogger
 
 db = SQLAlchemy()
+
+# Set up logger
+logger = setup_logger('database')
+
+def get_database_url():
+    """Get the database URL from environment variables."""
+    with ContextLogger(logger, phase='url_validation'):
+        # Check if we're in test mode
+        if os.environ.get('TESTING') == 'true':
+            # Use in-memory SQLite for testing
+            db_url = 'sqlite:///:memory:'
+            logger.info('Using in-memory SQLite database for testing')
+            return db_url
+        
+        # Get database URL from environment
+        db_url = os.environ.get('DATABASE_URL')
+        if not db_url:
+            error_msg = 'DATABASE_URL environment variable not set'
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Validate database URL
+        if not db_url.startswith('postgresql://'):
+            error_msg = f'Invalid database URL: {db_url}. Must be a PostgreSQL URL.'
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.info("Database URL validated", extra={
+            'metadata': {
+                'url_type': 'postgresql',
+                'is_test': False
+            }
+        })
+        return db_url
+
+def init_database():
+    """Initialize the database connection."""
+    with ContextLogger(logger, phase='initialization'):
+        try:
+            # Get database URL
+            db_url = get_database_url()
+            
+            # Create engine and session factory
+            engine = create_engine(db_url)
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            
+            logger.info("Database initialized successfully", extra={
+                'metadata': {
+                    'engine_type': engine.name,
+                    'pool_size': engine.pool.size()
+                }
+            })
+            return engine, SessionLocal
+            
+        except Exception as e:
+            error_msg = f'Failed to initialize database: {str(e)}'
+            logger.error(error_msg, extra={
+                'metadata': {'error': str(e)}
+            }, exc_info=True)
+            raise RuntimeError(error_msg) from e
 
 def get_db_url():
     """Get the database URL: use Neon for runtime, sqlite for tests."""

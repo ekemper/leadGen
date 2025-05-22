@@ -1,7 +1,7 @@
 from server.models import Campaign, Job, Lead
 from server.config.database import db
 from server.background_services.apollo_service import ApolloService
-from server.utils.logging_config import app_logger
+from server.utils.logging_config import setup_logger
 from server.models.campaign import CampaignStatus
 from server.utils.error_messages import CAMPAIGN_ERRORS, JOB_ERRORS
 from sqlalchemy import text, func
@@ -15,7 +15,8 @@ from server.api.schemas import CampaignSchema, CampaignCreateSchema, CampaignSta
 from server.tasks import enqueue_fetch_and_save_leads
 from server.background_services.instantly_service import InstantlyService
 
-logger = logging.getLogger(__name__)
+# Configure module logger
+logger = setup_logger('campaign_service')
 
 class CampaignService:
     def __init__(self):
@@ -37,11 +38,11 @@ class CampaignService:
     def get_campaigns(self) -> List[Dict[str, Any]]:
         """Get all campaigns."""
         try:
-            app_logger.info('Fetching all campaigns')
+            logger.info('Fetching all campaigns')
             self._ensure_transaction()
             
             campaigns = Campaign.query.order_by(Campaign.created_at.desc()).all()
-            app_logger.info(f'Found {len(campaigns)} campaigns')
+            logger.info(f'Found {len(campaigns)} campaigns')
             
             campaign_list = []
             for campaign in campaigns:
@@ -63,25 +64,25 @@ class CampaignService:
                         campaign_dict['latest_job'] = job_dict
                     campaign_list.append(campaign_dict)
                 except Exception as e:
-                    app_logger.error(f'Error converting campaign {campaign.id} to dict: {str(e)}', exc_info=True)
+                    logger.error(f'Error converting campaign {campaign.id} to dict: {str(e)}', exc_info=True)
                     continue
             
-            app_logger.info(f'Successfully converted {len(campaign_list)} campaigns to dict')
+            logger.info(f'Successfully converted {len(campaign_list)} campaigns to dict')
             return campaign_list
         except Exception as e:
-            app_logger.error(f'Error getting campaigns: {str(e)}', exc_info=True)
+            logger.error(f'Error getting campaigns: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
     def get_campaign(self, campaign_id: str) -> Dict[str, Any]:
         """Get a single campaign by ID."""
         try:
-            app_logger.info(f'Fetching campaign {campaign_id}')
+            logger.info(f'Fetching campaign {campaign_id}')
             self._ensure_transaction()
             
             campaign = Campaign.query.get(campaign_id)
             if not campaign:
-                app_logger.warning(f'Campaign {campaign_id} not found')
+                logger.warning(f'Campaign {campaign_id} not found')
                 return None
             
             campaign_dict = campaign.to_dict()
@@ -103,10 +104,10 @@ class CampaignService:
             # campaign_dict['jobs'] = job_list
             campaign_dict['jobs'] = []
             
-            app_logger.info(f'Successfully fetched campaign {campaign_id} (jobs are empty for now)')
+            logger.info(f'Successfully fetched campaign {campaign_id} (jobs are empty for now)')
             return campaign_dict
         except Exception as e:
-            app_logger.error(f'Error getting campaign: {str(e)}', exc_info=True)
+            logger.error(f'Error getting campaign: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
@@ -139,9 +140,9 @@ class CampaignService:
                     campaign.instantly_campaign_id = instantly_campaign_id
                     db.session.commit()
                 else:
-                    app_logger.error(f"Instantly campaign creation failed: {instantly_response}")
+                    logger.error(f"Instantly campaign creation failed: {instantly_response}")
             except Exception as e:
-                app_logger.error(f"Error calling InstantlyService.create_campaign: {str(e)}")
+                logger.error(f"Error calling InstantlyService.create_campaign: {str(e)}")
 
             campaign_dict = campaign.to_dict()
             # Validate output data
@@ -151,7 +152,7 @@ class CampaignService:
                 
             return campaign_dict
         except Exception as e:
-            app_logger.error(f'Error creating campaign: {str(e)}', exc_info=True)
+            logger.error(f'Error creating campaign: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
@@ -435,7 +436,7 @@ class CampaignService:
             }
         except Exception as e:
             error_str = f"Error in get_campaign_lead_stats for campaign {campaign_id}: {str(e)}"
-            app_logger.error(error_str, exc_info=True)
+            logger.error(error_str, exc_info=True)
             return {
                 'total_leads_fetched': 0,
                 'leads_with_email': 0,

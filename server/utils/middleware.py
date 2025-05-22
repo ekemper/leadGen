@@ -1,12 +1,15 @@
-import uuid
 import time
 from functools import wraps
 from flask import request, g
-from server.utils.logging_config import app_logger
+from server.utils.logging_config import setup_logger, ContextLogger
+from uuid import uuid4
+
+# Set up logger
+logger = setup_logger('middleware')
 
 def generate_request_id():
     """Generate a unique request ID."""
-    return str(uuid.uuid4())
+    return str(uuid4())
 
 def log_request_info():
     """Log information about the current request."""
@@ -14,13 +17,14 @@ def log_request_info():
     if request.path == '/health':
         return
     
-    extra = dict(g.request_context)
-    if hasattr(g, 'start_time'):
-        extra['duration_ms'] = int((time.time() - g.start_time) * 1000)
-    if hasattr(g, 'status_code'):
-        extra['status_code'] = g.status_code
-    
-    app_logger.info('Request processed', extra=extra)
+    with ContextLogger(logger, **g.request_context):
+        extra = {
+            'metadata': {
+                'duration_ms': int((time.time() - g.start_time) * 1000) if hasattr(g, 'start_time') else None,
+                'status_code': g.status_code if hasattr(g, 'status_code') else None
+            }
+        }
+        logger.info('Request processed', extra=extra)
 
 def request_middleware(app):
     """Configure request middleware for the Flask app."""
@@ -30,6 +34,7 @@ def request_middleware(app):
         # Accept request ID from header or generate new
         request_id = request.headers.get('X-Request-ID') or generate_request_id()
         g.request_id = request_id
+        
         # Build context object
         g.request_context = {
             'request_id': request_id,
@@ -37,13 +42,15 @@ def request_middleware(app):
             'session_id': request.cookies.get('session'),
             'client_ip': request.remote_addr,
             'user_agent': request.user_agent.string,
+            'path': request.path,
+            'method': request.method
         }
         g.start_time = time.time()
         
         # Log incoming request
         if request.path != '/health':
-            extra = dict(g.request_context)
-            app_logger.info('Request started', extra=extra)
+            with ContextLogger(logger, **g.request_context):
+                logger.info('Request started')
     
     @app.after_request
     def after_request(response):
@@ -56,9 +63,12 @@ def request_middleware(app):
     @app.teardown_request
     def teardown_request(exception=None):
         if exception:
-            extra = dict(g.request_context)
-            extra['error'] = str(exception)
-            app_logger.error('Request failed', extra=extra)
+            with ContextLogger(logger, **g.request_context):
+                logger.error('Request failed', extra={
+                    'metadata': {
+                        'error': str(exception)
+                    }
+                }, exc_info=True)
         else:
             log_request_info()
 
@@ -67,26 +77,29 @@ def log_function_call(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.time()
-        try:
-            result = func(*args, **kwargs)
-            duration_ms = int((time.time() - start_time) * 1000)
-            extra = dict(getattr(g, 'request_context', {}))
-            extra.update({
-                'function': func.__name__,
-                'duration_ms': duration_ms,
-                'success': True
-            })
-            app_logger.info(f'Function {func.__name__} completed', extra=extra)
-            return result
-        except Exception as e:
-            duration_ms = int((time.time() - start_time) * 1000)
-            extra = dict(getattr(g, 'request_context', {}))
-            extra.update({
-                'function': func.__name__,
-                'duration_ms': duration_ms,
-                'error': str(e),
-                'success': False
-            })
-            app_logger.error(f'Function {func.__name__} failed', extra=extra)
-            raise
+        context = getattr(g, 'request_context', {})
+        context.update({'function': func.__name__})
+        
+        with ContextLogger(logger, **context):
+            try:
+                result = func(*args, **kwargs)
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                logger.info("Function completed", extra={
+                    'metadata': {
+                        'duration_ms': duration_ms,
+                        'success': True
+                    }
+                })
+                return result
+            except Exception as e:
+                duration_ms = int((time.time() - start_time) * 1000)
+                logger.error("Function failed", extra={
+                    'metadata': {
+                        'duration_ms': duration_ms,
+                        'error': str(e),
+                        'success': False
+                    }
+                }, exc_info=True)
+                raise
     return wrapper 

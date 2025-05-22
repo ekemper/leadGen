@@ -6,7 +6,95 @@ from typing import Dict, List, Optional, Any
 from rq.registry import FinishedJobRegistry, FailedJobRegistry
 from rq.job import Job
 from server.config.queue_config import get_queue
-from server.utils.logging_config import app_logger
+from server.utils.logging_config import setup_logger, ContextLogger
+from server.models.job import Job as JobModel
+from server.models.job_status import JobStatus
+from server.config.database import db
+
+# Configure module logger
+logger = setup_logger('job_storage')
+
+class JobStorage:
+    """
+    DEPRECATED: Use Job model directly instead.
+    Storage for job metadata and results.
+    """
+    
+    def __init__(self):
+        """Initialize the job storage."""
+        self.logger = logger
+
+    def save_job_result(self, job_id: str, campaign_id: str, result: Dict[str, Any]) -> None:
+        """Save a job result."""
+        with ContextLogger(self.logger, job_id=job_id, campaign_id=campaign_id):
+            try:
+                job = JobModel.query.get(job_id)
+                if not job:
+                    self.logger.warning(f"Job {job_id} not found")
+                    return
+                
+                job.result = result
+                job.completed_at = datetime.utcnow()
+                job.status = JobStatus.COMPLETED
+                db.session.commit()
+                
+                self.logger.info("Saved job result", extra={
+                    'metadata': {
+                        'job_id': job_id,
+                        'campaign_id': campaign_id
+                    }
+                })
+            except Exception as e:
+                self.logger.error(f"Error saving job result: {str(e)}", exc_info=True)
+                db.session.rollback()
+                raise
+
+    def save_job_error(self, job_id: str, campaign_id: str, error: str) -> None:
+        """Save a job error."""
+        with ContextLogger(self.logger, job_id=job_id, campaign_id=campaign_id):
+            try:
+                job = JobModel.query.get(job_id)
+                if not job:
+                    self.logger.warning(f"Job {job_id} not found")
+                    return
+                
+                job.error_message = error
+                job.completed_at = datetime.utcnow()
+                job.status = JobStatus.FAILED
+                db.session.commit()
+                
+                self.logger.error("Saved job error", extra={
+                    'metadata': {
+                        'job_id': job_id,
+                        'campaign_id': campaign_id,
+                        'error': error
+                    }
+                })
+            except Exception as e:
+                self.logger.error(f"Error saving job error: {str(e)}", exc_info=True)
+                db.session.rollback()
+                raise
+
+    def cleanup_old_jobs(self, campaign_id: str) -> None:
+        """Clean up old jobs for a campaign."""
+        with ContextLogger(self.logger, campaign_id=campaign_id):
+            try:
+                # Get all jobs for campaign
+                jobs = JobModel.query.filter_by(campaign_id=campaign_id).all()
+                
+                for job in jobs:
+                    if job.status == JobStatus.COMPLETED:
+                        db.session.delete(job)
+                        self.logger.info(f"Cleaned up old completed job {job.id} for campaign {campaign_id}")
+                    elif job.status == JobStatus.FAILED:
+                        db.session.delete(job)
+                        self.logger.info(f"Cleaned up old failed job {job.id} for campaign {campaign_id}")
+                
+                db.session.commit()
+            except Exception as e:
+                self.logger.error(f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}", exc_info=True)
+                db.session.rollback()
+                raise
 
 def store_job_result(job: Job, result: Any) -> None:
     """
@@ -28,7 +116,7 @@ def store_job_result(job: Job, result: Any) -> None:
         }
         job.result = job_result
         
-        app_logger.info(
+        logger.info(
             f"Stored result for job {job.id}",
             extra={
                 'job_id': job.id,
@@ -37,7 +125,7 @@ def store_job_result(job: Job, result: Any) -> None:
             }
         )
     except Exception as e:
-        app_logger.error(
+        logger.error(
             f"Error storing job result: {str(e)}",
             extra={
                 'job_id': job.id,
@@ -92,7 +180,7 @@ def get_job_results(campaign_id: str) -> Dict[str, List[Dict]]:
         
         return results
     except Exception as e:
-        app_logger.error(
+        logger.error(
             f"Error getting job results: {str(e)}",
             extra={
                 'campaign_id': campaign_id,
@@ -122,7 +210,7 @@ def cleanup_old_jobs(campaign_id: str, days: int = 7) -> None:
             if job and job.args and len(job.args) > 0 and job.args[0].get('campaign_id') == campaign_id:
                 if job.ended_at and job.ended_at < cutoff:
                     job.delete()
-                    app_logger.info(f"Cleaned up old completed job {job_id} for campaign {campaign_id}")
+                    logger.info(f"Cleaned up old completed job {job_id} for campaign {campaign_id}")
         
         # Clean up failed jobs
         for job_id in failed_registry.get_job_ids():
@@ -130,6 +218,6 @@ def cleanup_old_jobs(campaign_id: str, days: int = 7) -> None:
             if job and job.args and len(job.args) > 0 and job.args[0].get('campaign_id') == campaign_id:
                 if job.ended_at and job.ended_at < cutoff:
                     job.delete()
-                    app_logger.info(f"Cleaned up old failed job {job_id} for campaign {campaign_id}")
+                    logger.info(f"Cleaned up old failed job {job_id} for campaign {campaign_id}")
     except Exception as e:
-        app_logger.error(f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}") 
+        logger.error(f"Error cleaning up old jobs for campaign {campaign_id}: {str(e)}") 

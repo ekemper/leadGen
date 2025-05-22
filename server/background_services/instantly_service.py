@@ -1,6 +1,10 @@
 import os
 import requests
-from server.utils.logging_config import app_logger
+from typing import Dict, Any, Optional
+from server.utils.logging_config import setup_logger
+
+# Configure module logger
+logger = setup_logger('instantly_service')
 
 class InstantlyService:
     """Service for integrating with Instantly API to create leads."""
@@ -26,10 +30,10 @@ class InstantlyService:
         try:
             response = requests.post(self.API_URL, json=payload, headers=self.headers, timeout=30)
             response.raise_for_status()
-            app_logger.info(f"Successfully created Instantly lead for {email} in campaign {campaign_id}")
+            logger.info(f"Successfully created Instantly lead for {email} in campaign {campaign_id}")
             return response.json()
         except requests.RequestException as e:
-            app_logger.error(f"Error creating Instantly lead for {email}: {str(e)}")
+            logger.error(f"Error creating Instantly lead for {email}: {str(e)}")
             return {"error": str(e), "payload": payload}
 
     def create_campaign(self, name, schedule_name="My Schedule", timing_from="09:00", timing_to="17:00", days=None, timezone="Etc/GMT+12"):
@@ -54,10 +58,10 @@ class InstantlyService:
             response = requests.post(self.API_CAMPAIGN_URL, json=payload, headers=self.headers, timeout=30)
             response.raise_for_status()
             data = response.json()
-            app_logger.info(f"Successfully created Instantly campaign '{name}' with response: {data}")
+            logger.info(f"Successfully created Instantly campaign '{name}' with response: {data}")
             return data
         except requests.RequestException as e:
-            app_logger.error(f"Error creating Instantly campaign '{name}': {str(e)}")
+            logger.error(f"Error creating Instantly campaign '{name}': {str(e)}")
             return {"error": str(e), "payload": payload}
 
     def get_campaign_analytics_overview(self, campaign_id, start_date=None, end_date=None, campaign_status=None):
@@ -83,8 +87,8 @@ class InstantlyService:
             response = requests.get(url, headers=self.headers, params=query, timeout=30)
             response.raise_for_status()
             data = response.json()
-            app_logger.info(f"Fetched Instantly analytics overview for campaign {campaign_id}: {data}")
+            logger.info(f"Fetched Instantly analytics overview for campaign {campaign_id}: {data}")
             return data
         except requests.RequestException as e:
-            app_logger.error(f"Error fetching Instantly analytics overview for campaign {campaign_id}: {str(e)}")
+            logger.error(f"Error fetching Instantly analytics overview for campaign {campaign_id}: {str(e)}")
             return {"error": str(e), "query": query} 

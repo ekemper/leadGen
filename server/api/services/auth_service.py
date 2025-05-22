@@ -6,12 +6,16 @@ from datetime import datetime, timedelta
 from flask import current_app
 from server.models import User
 from server.config.database import db
-from server.utils.logging_config import app_logger
+from server.utils.logging_config import setup_logger
 from server.api.services.validation_service import ValidationService
 from email_validator import validate_email, EmailNotValidError
 from werkzeug.exceptions import BadRequest, Unauthorized, Forbidden
 from typing import Dict, Any, Optional
 from server.api.schemas import UserSchema, LoginSchema, TokenSchema
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Configure module logger
+logger = setup_logger('auth_service')
 
 class AuthService:
     """Service for handling authentication-related operations."""
@@ -55,7 +59,7 @@ class AuthService:
                 hashed_password if isinstance(hashed_password, bytes) else hashed_password.encode('utf-8')
             )
         except Exception as e:
-            app_logger.error(f"Error verifying password: {str(e)}")
+            logger.error(f"Error verifying password: {str(e)}")
             return False
 
     @staticmethod
@@ -124,7 +128,7 @@ class AuthService:
         """
         # Whitelist check
         if email.lower() not in cls.WHITELISTED_EMAILS:
-            app_logger.warning(
+            logger.warning(
                 "Signup failed: email not whitelisted",
                 extra={
                     'email': email,
@@ -135,7 +139,7 @@ class AuthService:
             raise Forbidden("This email is not allowed to sign up.")
         
         # Log signup attempt
-        app_logger.info(
+        logger.info(
             "Signup attempt",
             extra={
                 'email': email,
@@ -145,7 +149,7 @@ class AuthService:
         
         # Validate passwords match
         if password != confirm_password:
-            app_logger.warning(
+            logger.warning(
                 "Signup failed: passwords do not match",
                 extra={
                     'email': email,
@@ -159,7 +163,7 @@ class AuthService:
         try:
             cls.validate_password(password)
         except BadRequest as e:
-            app_logger.warning(
+            logger.warning(
                 "Signup failed: invalid password",
                 extra={
                     'email': email,
@@ -174,7 +178,7 @@ class AuthService:
         try:
             cls.validate_email_format(email)
         except BadRequest as e:
-            app_logger.warning(
+            logger.warning(
                 "Signup failed: invalid email",
                 extra={
                     'email': email,
@@ -187,7 +191,7 @@ class AuthService:
         
         # Check if user already exists
         if User.query.filter_by(email=email.lower()).first():
-            app_logger.warning(
+            logger.warning(
                 "Signup failed: email already registered",
                 extra={
                     'email': email,
@@ -210,7 +214,7 @@ class AuthService:
             db.session.commit()
             
             # Log successful registration
-            app_logger.info(
+            logger.info(
                 "User registered successfully",
                 extra={
                     'user_id': user.id,
@@ -222,7 +226,7 @@ class AuthService:
             return {'success': True, 'message': 'User registered successfully'}
         except Exception as e:
             db.session.rollback()
-            app_logger.error(
+            logger.error(
                 "Error creating user",
                 extra={
                     'email': email,
@@ -238,7 +242,7 @@ class AuthService:
         # Whitelist check
         email = data.get('email', '').lower()
         if email not in self.WHITELISTED_EMAILS:
-            app_logger.warning(
+            logger.warning(
                 "Login failed: email not whitelisted",
                 extra={
                     'email': email,
@@ -271,7 +275,7 @@ class AuthService:
             )
             
             # Log token generation
-            app_logger.info(
+            logger.info(
                 "Token generated",
                 extra={
                     'user_id': user.id,
@@ -288,7 +292,7 @@ class AuthService:
             
             return response_data
         except Exception as e:
-            app_logger.error(f'Error during login: {str(e)}', exc_info=True)
+            logger.error(f'Error during login: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
@@ -339,7 +343,7 @@ class AuthService:
                 
             return response_data
         except Exception as e:
-            app_logger.error(f'Error during registration: {str(e)}', exc_info=True)
+            logger.error(f'Error during registration: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
@@ -370,19 +374,19 @@ class AuthService:
             
             return user_dict
         except Exception as e:
-            app_logger.error(f'Error getting current user: {str(e)}', exc_info=True)
+            logger.error(f'Error getting current user: {str(e)}', exc_info=True)
             db.session.rollback()
             raise
 
     def update_user(self, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Update a user's information."""
         try:
-            app_logger.info(f'Updating user {user_id}')
+            logger.info(f'Updating user {user_id}')
             self._ensure_transaction()
             
             user = User.query.get(user_id)
             if not user:
-                app_logger.warning(f'User {user_id} not found')
+                logger.warning(f'User {user_id} not found')
                 return None
             
             # Validate input data
@@ -407,6 +411,6 @@ class AuthService:
             
             return user_dict
         except Exception as e:
-            app_logger.error(f'Error updating user: {str(e)}', exc_info=True)
+            logger.error(f'Error updating user: {str(e)}', exc_info=True)
             db.session.rollback()
             raise 

@@ -1,21 +1,15 @@
 import logging
 from logging.config import fileConfig
-
 from flask import current_app
-
 from alembic import context
+from server.utils.logging_config import setup_logger, ContextLogger
 
-from server.utils.logging_config import app_logger
+# Set up logger
+logger = setup_logger('alembic.env')
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-fileConfig(config.config_file_name)
-logger = logging.getLogger('alembic.env')
-
 
 def get_engine():
     try:
@@ -25,14 +19,12 @@ def get_engine():
         # this works with Flask-SQLAlchemy>=3
         return current_app.extensions['migrate'].db.engine
 
-
 def get_engine_url():
     try:
         return get_engine().url.render_as_string(hide_password=False).replace(
             '%', '%%')
     except AttributeError:
         return str(get_engine().url).replace('%', '%%')
-
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -46,12 +38,10 @@ target_db = current_app.extensions['migrate'].db
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-
 def get_metadata():
-    if hasattr(target_db, 'metadatas'):
-        return target_db.metadatas[None]
-    return target_db.metadata
-
+    if hasattr(current_app.extensions['migrate'].db, 'metadatas'):
+        return current_app.extensions['migrate'].db.metadatas[None]
+    return current_app.extensions['migrate'].db.metadata
 
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
@@ -65,14 +55,22 @@ def run_migrations_offline():
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(
-        url=url, target_metadata=get_metadata(), literal_binds=True
-    )
+    with ContextLogger(logger, mode='offline'):
+        try:
+            url = config.get_main_option("sqlalchemy.url")
+            context.configure(
+                url=url, target_metadata=get_metadata(), literal_binds=True
+            )
 
-    with context.begin_transaction():
-        context.run_migrations()
-
+            with context.begin_transaction():
+                context.run_migrations()
+                
+            logger.info("Offline migrations completed successfully")
+        except Exception as e:
+            logger.error("Failed to run offline migrations", extra={
+                'metadata': {'error': str(e)}
+            }, exc_info=True)
+            raise
 
 def run_migrations_online():
     """Run migrations in 'online' mode.
@@ -81,39 +79,39 @@ def run_migrations_online():
     and associate a connection with the context.
 
     """
+    with ContextLogger(logger, mode='online'):
+        try:
+            # this callback is used to prevent an auto-migration from being generated
+            # when there are no changes to the schema
+            def process_revision_directives(context, revision, directives):
+                if getattr(config.cmd_opts, 'autogenerate', False):
+                    script = directives[0]
+                    if script.upgrade_ops.is_empty():
+                        directives[:] = []
+                        logger.info('No changes in schema detected.')
 
-    # this callback is used to prevent an auto-migration from being generated
-    # when there are no changes to the schema
-    # reference: http://alembic.zzzcomputing.com/en/latest/cookbook.html
-    def process_revision_directives(context, revision, directives):
-        if getattr(config.cmd_opts, 'autogenerate', False):
-            script = directives[0]
-            if script.upgrade_ops.is_empty():
-                directives[:] = []
-                logger.info('No changes in schema detected.')
+            conf_args = current_app.extensions['migrate'].configure_args
+            if conf_args.get("process_revision_directives") is None:
+                conf_args["process_revision_directives"] = process_revision_directives
 
-    conf_args = current_app.extensions['migrate'].configure_args
-    if conf_args.get("process_revision_directives") is None:
-        conf_args["process_revision_directives"] = process_revision_directives
+            connectable = get_engine()
 
-    connectable = get_engine()
+            with connectable.connect() as connection:
+                context.configure(
+                    connection=connection,
+                    target_metadata=get_metadata(),
+                    **conf_args
+                )
 
-    try:
-        with connectable.connect() as connection:
-            context.configure(
-                connection=connection,
-                target_metadata=get_metadata(),
-                **conf_args
-            )
-
-            with context.begin_transaction():
-                context.run_migrations()
-                
-        app_logger.info('No changes in schema detected.', extra={'component': 'server'})
-    except Exception as e:
-        app_logger.error(f'Error running migrations: {str(e)}', extra={'component': 'server'})
-        raise
-
+                with context.begin_transaction():
+                    context.run_migrations()
+                    
+            logger.info("Online migrations completed successfully")
+        except Exception as e:
+            logger.error("Failed to run online migrations", extra={
+                'metadata': {'error': str(e)}
+            }, exc_info=True)
+            raise
 
 if context.is_offline_mode():
     run_migrations_offline()

@@ -13,6 +13,8 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
+      log-service:
+        condition: service_healthy
     ports:
       - "5001:5001"
     restart: unless-stopped
@@ -43,6 +45,8 @@ services:
       db:
         condition: service_healthy
       backend:
+        condition: service_healthy
+      log-service:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -78,6 +82,28 @@ services:
     environment:
       - NODE_ENV=development
     command: ["npm", "run", "dev", "--", "--host", "--port", "5173"]
+
+  log-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.log-service
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/app/logs
+    ports:
+      - "8765:8765"
+    environment:
+      - LOG_SERVICE_HOST=0.0.0.0
+      - LOG_SERVICE_PORT=8765
+      - LOG_BUFFER_SIZE=1000
+      - LOG_DIR=/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   redis:
     image: redis:7

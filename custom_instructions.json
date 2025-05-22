@@ -68,6 +68,63 @@
           "class Campaign(db.Model):\n    def update_status(self, new_status):\n        valid_statuses = ['created', 'running']  # Redefined instead of using class constant"
         ]
       }
+    },
+    {
+      "id": "logging-standards",
+      "description": "Ensure all logging follows the standards defined in documentation/log_streaming_system.md",
+      "severity": "error",
+      "checks": [
+        {
+          "id": "logger-setup",
+          "description": "Logger setup must follow the standardized pattern",
+          "rules": [
+            "Use setup_logger from server.utils.logging_config",
+            "Use component-specific logger names",
+            "Configure appropriate log levels",
+            "Never create raw logging instances"
+          ]
+        },
+        {
+          "id": "context-management",
+          "description": "Context must be properly managed in all logging operations",
+          "rules": [
+            "Use ContextLogger for all operations that need context",
+            "Preserve request context across operations",
+            "Include relevant business context in logs",
+            "Clean up context after operations complete"
+          ]
+        },
+        {
+          "id": "error-handling",
+          "description": "Error logging must be consistent and informative",
+          "rules": [
+            "Include stack traces with exc_info=True",
+            "Use appropriate error levels (ERROR vs WARNING)",
+            "Include error context in metadata",
+            "Follow sanitization rules for error data"
+          ]
+        },
+        {
+          "id": "log-format",
+          "description": "Log format must follow the standardized JSON structure",
+          "rules": [
+            "Include all required fields (timestamp, level, source, message)",
+            "Use metadata field for operation-specific data",
+            "Follow the defined context structure",
+            "Properly format timestamps in ISO format"
+          ]
+        }
+      ],
+      "examples": {
+        "good": [
+          "logger = setup_logger('component_name')\n\nwith ContextLogger(logger, operation='task'):\n    logger.info('Operation started', extra={'metadata': {'key': 'value'}})",
+          "try:\n    operation()\nexcept Exception as e:\n    logger.error('Operation failed', extra={'metadata': {'error': str(e)}}, exc_info=True)"
+        ],
+        "bad": [
+          "logger = logging.getLogger('name')  # Wrong: Not using setup_logger",
+          "logger.info(f'User {email} logged in')  # Wrong: Not using proper structure and exposing sensitive data"
+        ]
+      }
     }
   ],
   "robust_code_suggestions": {
@@ -79,7 +136,10 @@
       "Anticipate edge cases: Consider how the code will behave during app startup, testing, blueprint registration, and in multi-threaded or multi-process environments.",
       "If a quick fix is possible but not robust, always note its limitations and recommend the best-practice solution as the primary approach.",
       "Test or reason through the lifecycle of the code: Will it work during import, at runtime, and in all environments (dev, prod, test)?",
-      "If unsure, default to the most widely accepted, maintainable, and future-proof approach—even if it requires a bit more refactoring."
+      "If unsure, default to the most widely accepted, maintainable, and future-proof approach—even if it requires a bit more refactoring.",
+      "Always reference documentation/log_streaming_system.md when making suggestions involving logging or observability",
+      "Ensure logging patterns are consistent with the established standards and best practices",
+      "Consider the full logging context when suggesting code changes or additions"
     ]
   }
 } 

@@ -52,38 +52,24 @@ class LogSanitizer:
     def sanitize_value(cls, value: Any) -> Any:
         """Sanitize a single value."""
         if isinstance(value, str):
-            # Check for sensitive patterns
+            # Check against patterns
             for pattern_name, pattern in cls.SENSITIVE_PATTERNS.items():
-                if re.search(pattern, value):
-                    return f"[REDACTED_{pattern_name.upper()}]"
+                value = re.sub(pattern, f"[REDACTED_{pattern_name.upper()}]", value)
             return value
         elif isinstance(value, dict):
             return cls.sanitize_dict(value)
-        elif isinstance(value, list):
+        elif isinstance(value, (list, tuple)):
             return [cls.sanitize_value(item) for item in value]
         return value
     
     @classmethod
-    def sanitize_dict(cls, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Sanitize a dictionary of data."""
-        if not isinstance(data, dict):
-            return data
-            
+    def sanitize_dict(cls, data: Dict) -> Dict:
+        """Sanitize a dictionary recursively."""
         sanitized = {}
         for key, value in data.items():
-            # Check if the key itself is sensitive
-            if any(sensitive in key.lower() for sensitive in cls.SENSITIVE_FIELDS):
-                # Use specific redaction message based on the field type
-                if 'email' in key.lower():
-                    sanitized[key] = "[REDACTED_EMAIL]"
-                elif 'phone' in key.lower():
-                    sanitized[key] = "[REDACTED_PHONE]"
-                elif 'api_key' in key.lower():
-                    sanitized[key] = "[REDACTED_API_KEY]"
-                elif 'password' in key.lower():
-                    sanitized[key] = "[REDACTED_PASSWORD]"
-                else:
-                    sanitized[key] = "[REDACTED]"
+            # Check if key is sensitive
+            if any(field.lower() in key.lower() for field in cls.SENSITIVE_FIELDS):
+                sanitized[key] = f"[REDACTED_{key.upper()}]"
             else:
                 sanitized[key] = cls.sanitize_value(value)
         return sanitized
@@ -112,133 +98,105 @@ class LogSanitizer:
         return record
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
+    """Custom JSON formatter with standardized fields."""
     def add_fields(self, log_record, record, message_dict):
-        # Add basic fields first
         super(CustomJsonFormatter, self).add_fields(log_record, record, message_dict)
         
-        # Add timestamp if not present
+        # Add standard fields
         if not log_record.get('timestamp'):
             log_record['timestamp'] = datetime.utcnow().isoformat()
-        
-        # Add log level if not present
         if not log_record.get('level'):
             log_record['level'] = record.levelname.upper()
-            
-        # Add source name if not present
         if not log_record.get('source'):
             log_record['source'] = record.name
-            
-        # Handle message field properly
-        if 'message' in message_dict:
-            log_record['message'] = message_dict['message']
-        elif hasattr(record, 'message'):
-            log_record['message'] = record.message
+        
+        # Add context if available
+        if hasattr(record, 'context'):
+            log_record['context'] = record.context
+        
+        # Add metadata if available
+        if hasattr(record, 'metadata'):
+            log_record['metadata'] = record.metadata
 
 class SanitizingFilter(logging.Filter):
     """Filter to sanitize log records before they are processed."""
-    
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Filter and sanitize the log record."""
+    def filter(self, record):
         LogSanitizer.sanitize_log_record(record)
         return True
 
-class EnhancedColorFormatter(logging.Formatter):
-    LEVEL_COLORS = {
-        'DEBUG': Fore.CYAN,
-        'INFO': Fore.GREEN,
-        'WARNING': Fore.YELLOW,
-        'ERROR': Fore.RED,
-        'CRITICAL': Fore.MAGENTA
-    }
-    CONTEXT_COLOR = Fore.CYAN
-    KEY_COLOR = Fore.YELLOW
-    VALUE_COLOR = Fore.WHITE
-    TIME_COLOR = Fore.LIGHTBLACK_EX
-
-    def format(self, record):
-        color = self.LEVEL_COLORS.get(record.levelname, '')
-        reset = Style.RESET_ALL
-        time_str = datetime.utcnow().isoformat()
-        msg = record.getMessage()
-        context = ''
-        # Extract context from message prefix, e.g., [WEBHOOK]
-        if msg.startswith('['):
-            end = msg.find(']')
-            if end != -1:
-                context = msg[:end+1]
-                msg = msg[end+2:].lstrip()
-        # Pretty-print JSON if possible
-        pretty_json = None
-        try:
-            if isinstance(record.msg, dict):
-                pretty_json = json.dumps(record.msg, indent=2)
-            else:
-                # Try to parse as JSON
-                parsed = json.loads(msg)
-                pretty_json = json.dumps(parsed, indent=2)
-        except Exception:
-            pass  # Not JSON, leave as is
-        # Colorize context
-        context_str = f"{self.CONTEXT_COLOR}{context}{reset}" if context else ""
-        # Colorize level
-        level_str = f"{color}[{record.levelname}]{reset}"
-        # Colorize time
-        time_str_col = f"{self.TIME_COLOR}{time_str}{reset}"
-        # If pretty_json, colorize keys/values
-        if pretty_json:
-            def colorize_json(json_str):
-                lines = json_str.splitlines()
-                colored = []
-                for line in lines:
-                    # Colorize keys and values
-                    if ':' in line:
-                        key, val = line.split(':', 1)
-                        colored.append(f"{self.KEY_COLOR}{key}:{reset}{self.VALUE_COLOR}{val}{reset}")
-                    else:
-                        colored.append(f"{self.VALUE_COLOR}{line}{reset}")
-                return '\n'.join(colored)
-            msg = '\n' + colorize_json(pretty_json)
-        return f"{level_str} {time_str_col} {context_str} {msg}"
-
-def setup_central_logger(level=logging.INFO):
-    """Set up a centralized logger with JSON formatting and stdout output only."""
+def setup_logger(name: str = None, level: int = logging.INFO) -> logging.Logger:
+    """
+    Set up a logger with standardized configuration.
+    
+    Args:
+        name: Logger name (defaults to 'app')
+        level: Logging level (defaults to INFO)
+    
+    Returns:
+        Configured logger instance
+    """
+    # Create logs directory if it doesn't exist
+    os.makedirs(LOG_DIR, exist_ok=True)
+    
+    # Create logger
+    logger = logging.getLogger(name or 'app')
+    logger.setLevel(level)
+    logger.handlers = []  # Remove any existing handlers
+    
+    # Create handlers
+    console_handler = logging.StreamHandler(sys.stdout)
+    file_handler = RotatingFileHandler(
+        os.path.join(LOG_DIR, f"{name or 'app'}.log"),
+        maxBytes=MAX_BYTES,
+        backupCount=BACKUP_COUNT
+    )
+    
+    # Create formatter
     formatter = CustomJsonFormatter(
-        fmt='%(timestamp)s %(level)s %(name)s %(message)s %(source)s %(component)s',
+        fmt='%(timestamp)s %(level)s %(name)s %(message)s',
         json_ensure_ascii=False,
         reserved_attrs=[]
     )
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(level)
-
-    logger = logging.getLogger('app')
-    logger.setLevel(level)
-    logger.handlers = []
-    logger.addFilter(SanitizingFilter())
-    logger.addHandler(console_handler)
+    
+    # Configure handlers
+    for handler in [console_handler, file_handler]:
+        handler.setFormatter(formatter)
+        handler.addFilter(SanitizingFilter())
+        handler.setLevel(level)
+        logger.addHandler(handler)
+    
+    # Prevent propagation to avoid duplicate logs
     logger.propagate = False
+    
+    return logger
 
-    # Set root logger to use the same handler
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-    root_logger.handlers = []
-    root_logger.addHandler(console_handler)
-    root_logger.addFilter(SanitizingFilter())
+class ContextLogger:
+    """Context manager for adding context to logs."""
+    def __init__(self, logger, **context):
+        self.logger = logger
+        self.context = context
+        self.old_context = {}
+        
+    def __enter__(self):
+        # Store and update context
+        self.old_context = getattr(self.logger, 'context', {}).copy()
+        current_context = self.old_context.copy()
+        current_context.update(self.context)
+        setattr(self.logger, 'context', current_context)
+        return self.logger
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Restore original context
+        setattr(self.logger, 'context', self.old_context)
 
-    # Configure third-party loggers
+def configure_third_party_loggers():
+    """Configure logging levels for third-party libraries."""
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
     logging.getLogger('flask_limiter').setLevel(logging.ERROR)
     logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
     logging.getLogger('sqlalchemy.pool').setLevel(logging.INFO)
 
-    try:
-        logger.info(f"Centralized logger initialized", extra={'component': 'app'})
-    except Exception as e:
-        console_handler.setLevel(logging.ERROR)
-        logger.error(f"Failed to initialize centralized logger: {str(e)}", extra={'component': 'app'})
-        raise
+# Configure third-party loggers
+configure_third_party_loggers()
 
-    return logger
-
-app_logger = setup_central_logger() 
+__all__ = ['ContextLogger', 'setup_logger', 'LogSanitizer'] 

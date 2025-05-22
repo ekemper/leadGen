@@ -1,10 +1,20 @@
-from server.models import Organization
+from server.models.organization import Organization
+from server.utils.logging_config import setup_logger, ContextLogger
 from server.config.database import db
-from server.utils.logging_config import app_logger
+from typing import Dict, Any, List, Optional
 import re
 from html import escape
 
+# Configure module logger
+logger = setup_logger('organization_service')
+
 class OrganizationService:
+    """Service for managing organizations."""
+    
+    def __init__(self):
+        """Initialize the organization service."""
+        self.logger = logger
+
     def sanitize_input(self, data: dict) -> dict:
         """Sanitize input data to prevent XSS and other attacks."""
         sanitized = {}
@@ -36,30 +46,26 @@ class OrganizationService:
         
         return True, ''
 
-    def create_organization(self, data):
-        try:
-            # Sanitize input
-            sanitized_data = self.sanitize_input(data)
-            
-            # For creation, we require both fields
-            if not sanitized_data.get('name'):
-                raise ValueError('Name is required')
-            if len(sanitized_data['name'].strip()) < 3:
-                raise ValueError('Name must be at least 3 characters long')
-            if not sanitized_data.get('description'):
-                raise ValueError('Description is required')
-
-            org = Organization(
-                name=sanitized_data['name'],
-                description=sanitized_data.get('description')
-            )
-            db.session.add(org)
-            db.session.commit()
-            return org.to_dict()
-        except Exception as e:
-            db.session.rollback()
-            app_logger.error(f"Error creating organization: {str(e)}", extra={'component': 'server'})
-            raise
+    def create_organization(self, data: Dict[str, Any]) -> Organization:
+        """Create a new organization."""
+        with ContextLogger(self.logger):
+            try:
+                organization = Organization(
+                    name=data['name'],
+                    description=data.get('description'),
+                    website=data.get('website'),
+                    industry=data.get('industry')
+                )
+                db.session.add(organization)
+                db.session.commit()
+                
+                self.logger.info(f"Created organization: {organization.name}")
+                return organization
+                
+            except Exception as e:
+                self.logger.error(f"Error creating organization: {str(e)}", exc_info=True)
+                db.session.rollback()
+                raise
 
     def get_organization(self, org_id):
         org = Organization.query.get(org_id)
@@ -69,28 +75,26 @@ class OrganizationService:
         orgs = Organization.query.all()
         return [org.to_dict() for org in orgs]
 
-    def update_organization(self, org_id, data):
-        try:
-            # Sanitize input
-            sanitized_data = self.sanitize_input(data)
-            
-            # Validate only the fields being updated
-            is_valid, error_message = self.validate_organization_data(sanitized_data)
-            if not is_valid:
-                raise ValueError(error_message)
-
-            org = Organization.query.get(org_id)
-            if not org:
-                return None
-
-            if 'name' in sanitized_data:
-                org.name = sanitized_data['name']
-            if 'description' in sanitized_data:
-                org.description = sanitized_data['description']
-
-            db.session.commit()
-            return org.to_dict()
-        except Exception as e:
-            db.session.rollback()
-            app_logger.error(f"Error updating organization: {str(e)}", extra={'component': 'server'})
-            raise 
+    def update_organization(self, org_id: int, data: Dict[str, Any]) -> Organization:
+        """Update an existing organization."""
+        with ContextLogger(self.logger, org_id=org_id):
+            try:
+                organization = Organization.query.get(org_id)
+                if not organization:
+                    raise ValueError(f"Organization {org_id} not found")
+                
+                # Update fields
+                organization.name = data.get('name', organization.name)
+                organization.description = data.get('description', organization.description)
+                organization.website = data.get('website', organization.website)
+                organization.industry = data.get('industry', organization.industry)
+                
+                db.session.commit()
+                
+                self.logger.info(f"Updated organization: {organization.name}")
+                return organization
+                
+            except Exception as e:
+                self.logger.error(f"Error updating organization: {str(e)}", exc_info=True)
+                db.session.rollback()
+                raise 

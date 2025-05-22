@@ -5,7 +5,7 @@ from server.models import Campaign
 from server.models.campaign import CampaignStatus
 from server.models.job_status import JobStatus
 from server.config.database import db
-from server.utils.logging_config import app_logger
+from server.utils.logging_config import setup_logger
 from rq import get_current_job, Queue, Retry
 from server.config.queue_config import get_queue, QUEUE_CONFIG
 from server.models.job import Job
@@ -13,6 +13,11 @@ import traceback
 from datetime import datetime
 from server.background_services.instantly_service import InstantlyService
 import os
+from typing import Dict, Any
+from server.api.services.campaign_service import CampaignService
+
+# Configure module logger
+logger = setup_logger('tasks')
 
 print("server.tasks module loaded")
 
@@ -22,7 +27,7 @@ def handle_task_error(campaign_id, error, job_type):
     flask_app = create_app()
     with flask_app.app_context():
         try:
-            app_logger.error(f"Error in {job_type} for campaign {campaign_id}: {str(error)}")
+            logger.error(f"Error in {job_type} for campaign {campaign_id}: {str(error)}")
             campaign = Campaign.query.get(campaign_id)
             if campaign:
                 campaign.update_status(CampaignStatus.FAILED, error_message=str(error))
@@ -31,7 +36,7 @@ def handle_task_error(campaign_id, error, job_type):
             if job:
                 job.update_status(JobStatus.FAILED, error_message=str(error))
         except Exception as e:
-            app_logger.error(f"Error handling task error: {str(e)}", exc_info=True)
+            logger.error(f"Error handling task error: {str(e)}", exc_info=True)
 
 def fetch_and_save_leads_task(params, campaign_id):
     """Fetch and save leads from Apollo."""
@@ -41,7 +46,7 @@ def fetch_and_save_leads_task(params, campaign_id):
         job = None
         campaign = None
         try:
-            app_logger.info(f"Starting fetch_and_save_leads_task for campaign {campaign_id}")
+            logger.info(f"Starting fetch_and_save_leads_task for campaign {campaign_id}")
             campaign = Campaign.query.get(campaign_id)
             if not campaign:
                 raise Exception(f"Campaign {campaign_id} not found")
@@ -60,7 +65,7 @@ def fetch_and_save_leads_task(params, campaign_id):
             # Update campaign status directly
             campaign.update_status(CampaignStatus.COMPLETED)
 
-            app_logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
+            logger.info(f"Successfully fetched {result.get('count', 0)} leads for campaign {campaign_id}")
 
             # Enqueue enrichment job for each lead
             from server.models.lead import Lead
@@ -148,9 +153,9 @@ def enrich_lead_task(lead_id):
         from server.models.lead import Lead
         lead = Lead.query.get(lead_id)
         job = None
-        app_logger.info(f"[enrich_lead_task] Starting for lead_id={lead_id}, USE_APIFY_CLIENT_MOCK={os.environ.get('USE_APIFY_CLIENT_MOCK')}")
+        logger.info(f"[enrich_lead_task] Starting for lead_id={lead_id}, USE_APIFY_CLIENT_MOCK={os.environ.get('USE_APIFY_CLIENT_MOCK')}")
         if not lead:
-            app_logger.error(f"Lead {lead_id} not found for enrichment task.")
+            logger.error(f"Lead {lead_id} not found for enrichment task.")
             return
         try:
             from server.models.job import Job
@@ -162,9 +167,9 @@ def enrich_lead_task(lead_id):
             job.update_status(JobStatus.IN_PROGRESS)
 
             # 1. Email verification
-            app_logger.info(f"[enrich_lead_task] Verifying email for lead {lead_id} ({lead.email})")
+            logger.info(f"[enrich_lead_task] Verifying email for lead {lead_id} ({lead.email})")
             email_result = verify_lead_email(lead)
-            app_logger.info(f"[enrich_lead_task] Email verification result for lead {lead_id}: {email_result}")
+            logger.info(f"[enrich_lead_task] Email verification result for lead {lead_id}: {email_result}")
             email_success = email_result and email_result.get('result') == 'ok'
             error_details = {}
             if not email_success:
@@ -177,13 +182,13 @@ def enrich_lead_task(lead_id):
                 }
                 job.error_details = error_details
                 job.update_status(JobStatus.COMPLETED)
-                app_logger.warning(f"[enrich_lead_task] Email verification failed for lead {lead_id}, skipping enrichment.")
+                logger.warning(f"[enrich_lead_task] Email verification failed for lead {lead_id}, skipping enrichment.")
                 return
 
             # 2. Enrichment
-            app_logger.info(f"[enrich_lead_task] Enriching lead {lead_id} with Perplexity API")
+            logger.info(f"[enrich_lead_task] Enriching lead {lead_id} with Perplexity API")
             enrichment_result = enrich_lead_with_perplexity(lead)
-            app_logger.info(f"[enrich_lead_task] Enrichment result for lead {lead_id}: {enrichment_result}")
+            logger.info(f"[enrich_lead_task] Enrichment result for lead {lead_id}: {enrichment_result}")
             enrichment_success = 'error' not in enrichment_result
             if not enrichment_success:
                 error_details['enrichment'] = enrichment_result
@@ -195,21 +200,21 @@ def enrich_lead_task(lead_id):
                 }
                 job.error_details = error_details
                 job.update_status(JobStatus.COMPLETED)
-                app_logger.warning(f"[enrich_lead_task] Enrichment failed for lead {lead_id}, skipping email copy and Instantly.")
+                logger.warning(f"[enrich_lead_task] Enrichment failed for lead {lead_id}, skipping email copy and Instantly.")
                 return
 
             # 3. Email copy generation
             try:
-                app_logger.info(f"[enrich_lead_task] Generating email copy for lead {lead_id}")
+                logger.info(f"[enrich_lead_task] Generating email copy for lead {lead_id}")
                 email_copy_result = generate_lead_email_copy(lead, enrichment_result)
-                app_logger.info(f"[enrich_lead_task] Email copy generation result for lead {lead_id}: {email_copy_result}")
+                logger.info(f"[enrich_lead_task] Email copy generation result for lead {lead_id}: {email_copy_result}")
                 email_copy_success = True
             except Exception as e:
                 email_copy_success = False
                 lead.email_copy_gen_results = None
                 db.session.commit()
                 error_details['email_copy'] = str(e)
-                app_logger.error(f"[enrich_lead_task] Email copy generation failed for lead {lead_id}: {str(e)}")
+                logger.error(f"[enrich_lead_task] Email copy generation failed for lead {lead_id}: {str(e)}")
 
             # 4. Instantly lead creation
             instantly_success = False
@@ -226,11 +231,11 @@ def enrich_lead_task(lead_id):
                 missing_fields.append('email_copy_gen_results')
             if missing_fields:
                 msg = f"Skipping Instantly lead creation for lead {lead.id} due to missing fields: {', '.join(missing_fields)}"
-                app_logger.warning(msg)
+                logger.warning(msg)
                 error_details['instantly'] = msg
             elif email_copy_success:
                 try:
-                    app_logger.info(f"[enrich_lead_task] Creating Instantly lead for lead {lead_id}")
+                    logger.info(f"[enrich_lead_task] Creating Instantly lead for lead {lead_id}")
                     from server.background_services.instantly_service import InstantlyService
                     from server.models.campaign import Campaign
                     instantly_service = InstantlyService()
@@ -245,12 +250,12 @@ def enrich_lead_task(lead_id):
                     instantly_success = not ('error' in instantly_result)
                     lead.instantly_lead_record = instantly_result
                     db.session.commit()
-                    app_logger.info(f"[enrich_lead_task] Instantly lead creation result for lead {lead_id}: {instantly_result}")
+                    logger.info(f"[enrich_lead_task] Instantly lead creation result for lead {lead_id}: {instantly_result}")
                 except Exception as e:
                     error_details['instantly'] = str(e)
                     lead.instantly_lead_record = {'error': str(e)}
                     db.session.commit()
-                    app_logger.error(f"Instantly lead creation failed for lead {lead.id}: {str(e)}")
+                    logger.error(f"Instantly lead creation failed for lead {lead.id}: {str(e)}")
 
             # Save overall job result
             job.result = {
@@ -264,11 +269,11 @@ def enrich_lead_task(lead_id):
             if instantly_result:
                 job.result['instantly_result'] = instantly_result
             job.update_status(JobStatus.COMPLETED)
-            app_logger.info(f"Lead {lead_id} enrichment, email copy, and Instantly lead creation complete.")
+            logger.info(f"Lead {lead_id} enrichment, email copy, and Instantly lead creation complete.")
         except Exception as e:
             db.session.rollback()
             error_msg = f"Error in enrich_lead_task for lead {lead_id}: {str(e)}"
-            app_logger.error(error_msg)
+            logger.error(error_msg)
             if job:
                 job.update_status(JobStatus.FAILED, error_message=error_msg)
             raise

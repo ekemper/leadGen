@@ -8,10 +8,13 @@ import re
 import uuid
 from server.models import User, Campaign, Job
 from server.config.database import db
-from server.utils.logging_config import app_logger
+from server.utils.logging_config import setup_logger, ContextLogger
 from werkzeug.exceptions import BadRequest, Unauthorized, NotFound, InternalServerError
+
+# Configure module logger
+logger = setup_logger('routes')
 from server.api.services.auth_service import AuthService
-from server.api.services.scraper_service import ScraperService
+# from server.api.services.scraper_service import ScraperService
 from server.api.services.lead_service import LeadService
 import json
 from flask import Blueprint
@@ -28,13 +31,17 @@ import threading
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from server.extensions import limiter
+import logging
+from server.config.logging_config import ContextLogger
 
 # Create blueprint
 api = Blueprint('api', __name__)
 
+logger = logging.getLogger('api')
+
 # Service factory functions
-def get_scraper_service():
-    return ScraperService()
+# def get_scraper_service():
+#     return ScraperService()
 
 def get_apollo_service():
     return ApolloService()
@@ -71,14 +78,14 @@ def token_required(f):
         
         # Get token from Authorization header
         auth_header = request.headers.get('Authorization')
-        app_logger.debug(f"Auth header: {auth_header}")
+        logger.debug(f"Auth header: {auth_header}")
         
         if auth_header and auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
-            app_logger.debug(f"Token extracted: {token[:10]}...")
+            logger.debug(f"Token extracted: {token[:10]}...")
         
         if not token:
-            app_logger.error("No token found in request")
+            logger.error("No token found in request")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -94,7 +101,7 @@ def token_required(f):
             current_user = User.query.filter_by(id=data['user_id']).first()
             
             if not current_user:
-                app_logger.error(f"User not found for token: {token[:10]}...")
+                logger.error(f"User not found for token: {token[:10]}...")
                 return jsonify({
                     'status': 'error',
                     'error': {
@@ -109,7 +116,7 @@ def token_required(f):
             return f(*args, **kwargs)
             
         except jwt.ExpiredSignatureError:
-            app_logger.error("Token has expired")
+            logger.error("Token has expired")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -120,7 +127,7 @@ def token_required(f):
             }), 401
             
         except jwt.InvalidTokenError as e:
-            app_logger.error(f"Invalid token: {str(e)}")
+            logger.error(f"Invalid token: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -138,12 +145,12 @@ def register_routes(api):
     @api.route('/health', methods=['GET'])
     def health_check():
         """Health check endpoint (public, no auth)."""
-        app_logger.debug('Health check endpoint called')
-        return jsonify({
-            'status': 'healthy',
-            'message': 'API is running',
-            'endpoint': '/api/health'
-        }), 200
+        with ContextLogger(logger, endpoint='health'):
+            logger.debug('Health check called')
+            return jsonify({
+                'status': 'healthy',
+                'message': 'API is running'
+            })
 
     @api.route('/')
     def root():
@@ -157,259 +164,269 @@ def register_routes(api):
     @api.route('/auth/signup', methods=['POST'])
     def signup():
         """Handle user registration."""
-        try:
-            data = request.get_json()
-            if not data:
+        with ContextLogger(logger):
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({
+                        'status': 'error',
+                        'error': {
+                            'code': 400,
+                            'name': 'Bad Request',
+                            'message': 'No input data provided'
+                        }
+                    }), 400
+                
+                email = data.get('email')
+                password = data.get('password')
+                confirm_password = data.get('confirm_password')
+                
+                if not all([email, password, confirm_password]):
+                    return jsonify({
+                        'status': 'error',
+                        'error': {
+                            'code': 400,
+                            'name': 'Bad Request',
+                            'message': 'All fields are required'
+                        }
+                    }), 400
+                
+                result = AuthService.signup(email, password, confirm_password)
+                return jsonify({
+                    'status': 'success',
+                    'data': result
+                }), 201
+            
+            except BadRequest as e:
                 return jsonify({
                     'status': 'error',
                     'error': {
                         'code': 400,
                         'name': 'Bad Request',
-                        'message': 'No input data provided'
+                        'message': str(e)
                     }
                 }), 400
             
-            email = data.get('email')
-            password = data.get('password')
-            confirm_password = data.get('confirm_password')
-            
-            if not all([email, password, confirm_password]):
+            except Exception as e:
+                logger.error(f"Error during signup: {str(e)}")
                 return jsonify({
                     'status': 'error',
                     'error': {
                         'code': 400,
                         'name': 'Bad Request',
-                        'message': 'All fields are required'
+                        'message': str(e)
                     }
                 }), 400
-            
-            result = AuthService.signup(email, password, confirm_password)
-            return jsonify({
-                'status': 'success',
-                'data': result
-            }), 201
-        
-        except BadRequest as e:
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 400,
-                    'name': 'Bad Request',
-                    'message': str(e)
-                }
-            }), 400
-        
-        except Exception as e:
-            app_logger.error(f"Error during signup: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 400,
-                    'name': 'Bad Request',
-                    'message': str(e)
-                }
-            }), 400
 
     @api.route('/auth/login', methods=['POST'])
     def login():
         """Handle user login."""
-        try:
-            data = request.get_json()
-            # Log only non-sensitive info
-            app_logger.info(f"LOGIN ATTEMPT: Email: {data.get('email', '[MISSING]')}, Headers: {dict(request.headers)}, Content-Type: {request.content_type}")
-            if not data:
+        with ContextLogger(logger):
+            try:
+                data = request.get_json()
+                # Log only non-sensitive info
+                logger.info(f"LOGIN ATTEMPT: Email: {data.get('email', '[MISSING]')}, Headers: {dict(request.headers)}, Content-Type: {request.content_type}")
+                
+                if not data:
+                    return jsonify({
+                        'status': 'error',
+                        'error': {
+                            'code': 400,
+                            'name': 'Bad Request',
+                            'message': 'No input data provided'
+                        }
+                    }), 400
+                
+                auth_service = AuthService()
+                result = auth_service.login(data)
+                return jsonify({
+                    'status': 'success',
+                    'data': result
+                }), 200
+                
+            except Unauthorized as e:
                 return jsonify({
                     'status': 'error',
                     'error': {
-                        'code': 400,
-                        'name': 'Bad Request',
-                        'message': 'No input data provided'
+                        'code': 401,
+                        'name': 'Unauthorized',
+                        'message': str(e)
                     }
-                }), 400
-
-            auth_service = AuthService()
-            result = auth_service.login(data)
-            return jsonify({
-                'status': 'success',
-                'data': result
-            }), 200
-        except Unauthorized as e:
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 401,
-                    'name': 'Unauthorized',
-                    'message': str(e)
-                }
-            }), 401
-        except Exception as e:
-            app_logger.error(f"LOGIN ERROR: {str(e)}", exc_info=True)
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 500,
-                    'name': 'Internal Server Error',
-                    'message': str(e)
-                }
-            }), 500
+                }), 401
+                
+            except Exception as e:
+                logger.error(f"LOGIN ERROR: {str(e)}", exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'error': {
+                        'code': 500,
+                        'name': 'Internal Server Error',
+                        'message': str(e)
+                    }
+                }), 500
 
     # Protected routes (token required)
-    @api.route('/scrape', methods=['POST'])
-    @token_required
-    def scrape_url():
-        """Scrape a URL for contact information."""
-        try:
-            data = request.get_json()
-            if not data or 'url' not in data:
-                raise BadRequest("URL is required")
-            
-            scraper_service = get_scraper_service()
-            result = scraper_service.scrape_url(data['url'])
-            return jsonify(result), 200
-            
-        except Exception as e:
-            app_logger.error(f"Error during scraping: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 400,
-                    'name': 'Bad Request',
-                    'message': str(e)
-                }
-            }), 400
+    # @api.route('/scrape', methods=['POST'])
+    # @token_required
+    # def scrape_url():
+    #     """Scrape a URL for contact information."""
+    #     with ContextLogger(logger):
+    #         try:
+    #             data = request.get_json()
+    #             if not data or 'url' not in data:
+    #                 raise BadRequest("URL is required")
+                
+    #             scraper_service = get_scraper_service()
+    #             result = scraper_service.scrape_url(data['url'])
+    #             return jsonify(result), 200
+                
+    #         except Exception as e:
+    #             logger.error(f"Error during scraping: {str(e)}")
+    #             return jsonify({
+    #                 'status': 'error',
+    #                 'error': {
+    #                     'code': 400,
+    #                     'name': 'Bad Request',
+    #                     'message': str(e)
+    #                 }
+    #             }), 400
 
     @api.route('/campaigns', methods=['GET'])
     @token_required
     def get_campaigns():
         """Get all campaigns for the current user."""
-        try:
-            campaign_service = get_campaign_service()
-            campaigns = campaign_service.get_campaigns()
-            return jsonify({'status': 'success', 'data': {'campaigns': campaigns}}), 200
-        except Exception as e:
-            app_logger.error(f"Error getting campaigns: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 500,
-                    'name': 'Internal Server Error',
-                    'message': str(e)
-                }
-            }), 500
+        with ContextLogger(logger):
+            try:
+                campaign_service = get_campaign_service()
+                campaigns = campaign_service.get_campaigns()
+                return jsonify({'status': 'success', 'data': {'campaigns': campaigns}}), 200
+            except Exception as e:
+                logger.error(f"Error getting campaigns: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': {
+                        'code': 500,
+                        'name': 'Internal Server Error',
+                        'message': str(e)
+                    }
+                }), 500
 
     @api.route('/campaigns/<campaign_id>', methods=['GET'])
     @token_required
     def get_campaign(campaign_id):
         """Get a single campaign by ID."""
-        try:
-            campaign_service = get_campaign_service()
-            campaign = campaign_service.get_campaign(campaign_id)
-            if not campaign:
+        with ContextLogger(logger, campaign_id=campaign_id):
+            try:
+                campaign_service = get_campaign_service()
+                campaign = campaign_service.get_campaign(campaign_id)
+                if not campaign:
+                    error_response = {
+                        'status': 'error',
+                        'error': {
+                            'code': 404,
+                            'name': 'Not Found',
+                            'message': 'Campaign not found'
+                        }
+                    }
+                    errors = ErrorResponseSchema().validate(error_response)
+                    if errors:
+                        logger.error(f"Invalid error response format: {errors}")
+                    return jsonify(error_response), 404
+                    
+                # Validate campaign data
+                errors = CampaignSchema().validate(campaign)
+                if errors:
+                    raise ValueError(f"Invalid campaign data: {errors}")
+                    
+                response_data = {
+                    'status': 'success',
+                    'data': campaign
+                }
+                
+                # Validate response format
+                errors = SuccessResponseSchema().validate(response_data)
+                if errors:
+                    raise ValueError(f"Invalid response format: {errors}")
+                    
+                return jsonify(response_data), 200
+                
+            except Exception as e:
+                logger.error(f"Error fetching campaign: {str(e)}")
                 error_response = {
                     'status': 'error',
                     'error': {
-                        'code': 404,
-                        'name': 'Not Found',
-                        'message': 'Campaign not found'
+                        'code': 500,
+                        'name': 'Internal Server Error',
+                        'message': 'Failed to fetch campaign'
                     }
                 }
                 errors = ErrorResponseSchema().validate(error_response)
                 if errors:
-                    app_logger.error(f"Invalid error response format: {errors}")
-                return jsonify(error_response), 404
-                
-            # Validate campaign data
-            errors = CampaignSchema().validate(campaign)
-            if errors:
-                raise ValueError(f"Invalid campaign data: {errors}")
-                
-            response_data = {
-                'status': 'success',
-                'data': campaign
-            }
-            
-            # Validate response format
-            errors = SuccessResponseSchema().validate(response_data)
-            if errors:
-                raise ValueError(f"Invalid response format: {errors}")
-                
-            return jsonify(response_data), 200
-            
-        except Exception as e:
-            app_logger.error(f"Error fetching campaign: {str(e)}")
-            error_response = {
-                'status': 'error',
-                'error': {
-                    'code': 500,
-                    'name': 'Internal Server Error',
-                    'message': 'Failed to fetch campaign'
-                }
-            }
-            errors = ErrorResponseSchema().validate(error_response)
-            if errors:
-                app_logger.error(f"Invalid error response format: {errors}")
-            return jsonify(error_response), 500
+                    logger.error(f"Invalid error response format: {errors}")
+                return jsonify(error_response), 500
 
     @api.route('/campaigns/<campaign_id>/details', methods=['GET'])
     @token_required
     def get_campaign_details(campaign_id):
         """Get campaign details including lead stats and Instantly analytics."""
-        try:
-            campaign_service = get_campaign_service()
-            campaign = campaign_service.get_campaign(campaign_id)
-            if not campaign:
+        with ContextLogger(logger, campaign_id=campaign_id):
+            try:
+                campaign_service = get_campaign_service()
+                campaign = campaign_service.get_campaign(campaign_id)
+                if not campaign:
+                    return jsonify({
+                        'status': 'error',
+                        'error': {
+                            'code': 404,
+                            'name': 'Not Found',
+                            'message': 'Campaign not found'
+                        }
+                    }), 404
+
+                lead_stats = campaign_service.get_campaign_lead_stats(campaign_id)
+                instantly_analytics = campaign_service.get_campaign_instantly_analytics(campaign)
+                response_data = {
+                    'status': 'success',
+                    'data': {
+                        'campaign': campaign,
+                        'lead_stats': lead_stats,
+                        'instantly_analytics': instantly_analytics
+                    }
+                }
+                return jsonify(response_data), 200
+            except Exception as e:
+                logger.error(f"Error fetching campaign details: {str(e)}")
                 return jsonify({
                     'status': 'error',
                     'error': {
-                        'code': 404,
-                        'name': 'Not Found',
-                        'message': 'Campaign not found'
+                        'code': 500,
+                        'name': 'Internal Server Error',
+                        'message': 'Failed to fetch campaign details'
                     }
-                }), 404
-
-            lead_stats = campaign_service.get_campaign_lead_stats(campaign_id)
-            instantly_analytics = campaign_service.get_campaign_instantly_analytics(campaign)
-            response_data = {
-                'status': 'success',
-                'data': {
-                    'campaign': campaign,
-                    'lead_stats': lead_stats,
-                    'instantly_analytics': instantly_analytics
-                }
-            }
-            return jsonify(response_data), 200
-        except Exception as e:
-            app_logger.error(f"Error fetching campaign details: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'error': {
-                    'code': 500,
-                    'name': 'Internal Server Error',
-                    'message': 'Failed to fetch campaign details'
-                }
-            }), 500
+                }), 500
 
     @api.route('/campaigns/<campaign_id>', methods=['PATCH'])
     @token_required
     def update_campaign(campaign_id):
         """Update campaign properties."""
-        data = request.get_json()
-        if not data:
-            return make_error_response(400, 'Bad Request', 'No data provided')
-        allowed_fields = {'name', 'description', 'fileName', 'totalRecords', 'url'}
-        update_data = {k: v for k, v in data.items() if k in allowed_fields}
-        if not update_data:
-            return make_error_response(400, 'Bad Request', 'No valid fields to update')
-        try:
-            campaign_service = get_campaign_service()
-            updated = campaign_service.update_campaign(campaign_id, update_data)
-            errors = CampaignSchema().validate(updated)
-            if errors:
-                return make_error_response(400, 'Bad Request', f'Invalid campaign data: {errors}')
-            return jsonify({'status': 'success', 'data': updated}), 200
-        except Exception as e:
-            app_logger.error(f"Error updating campaign: {str(e)}")
-            return make_error_response(500, 'Internal Server Error', 'Failed to update campaign')
+        with ContextLogger(logger, campaign_id=campaign_id):
+            data = request.get_json()
+            if not data:
+                return make_error_response(400, 'Bad Request', 'No data provided')
+            allowed_fields = {'name', 'description', 'fileName', 'totalRecords', 'url'}
+            update_data = {k: v for k, v in data.items() if k in allowed_fields}
+            if not update_data:
+                return make_error_response(400, 'Bad Request', 'No valid fields to update')
+            try:
+                campaign_service = get_campaign_service()
+                updated = campaign_service.update_campaign(campaign_id, update_data)
+                errors = CampaignSchema().validate(updated)
+                if errors:
+                    return make_error_response(400, 'Bad Request', f'Invalid campaign data: {errors}')
+                return jsonify({'status': 'success', 'data': updated}), 200
+            except Exception as e:
+                logger.error(f"Error updating campaign: {str(e)}")
+                return make_error_response(500, 'Internal Server Error', 'Failed to update campaign')
 
     # --- Error response helper ---
     def make_error_response(code, name, message, status_code=400):
@@ -423,59 +440,54 @@ def register_routes(api):
         }
         errors = ErrorResponseSchema().validate(error_response)
         if errors:
-            app_logger.error(f"Invalid error response format: {errors}")
+            logger.error(f"Invalid error response format: {errors}")
         return jsonify(error_response), status_code
 
     @api.route('/campaigns', methods=['POST'])
     @token_required
     def create_campaign():
-        """
-        Create a new campaign.
-
-        Request JSON fields:
-          - name (str, required)
-          - description (str, required)
-          - organization_id (str, required)
-          - fileName (str, required)
-          - totalRecords (int, required)
-          - url (str, required)
-        """
-        data = request.get_json()
-        app_logger.info(f"Received campaign creation request: {json.dumps(data, default=str)}")
-
-        if not data:
-            return make_error_response(400, 'Bad Request', 'No data provided')
-
-        errors = CampaignCreateSchema().validate(data)
-        if errors:
-            app_logger.warning(f"Validation errors during campaign creation: {errors}")
-            return make_error_response(400, 'Bad Request', str(errors))
-
-        try:
-            campaign_service = get_campaign_service()
-            result = campaign_service.create_campaign(data)
-
-            # Validate response data
-            errors = CampaignSchema().validate(result)
-            if errors:
-                app_logger.error(f"Response validation errors after campaign creation: {errors}")
-                return make_error_response(500, 'Internal Server Error', f"Invalid campaign data: {errors}", status_code=500)
-
-            response_data = {'status': 'success', 'data': result}
-            errors = SuccessResponseSchema().validate(response_data)
-            if errors:
-                app_logger.error(f"Response format validation errors: {errors}")
-                return make_error_response(500, 'Internal Server Error', f"Invalid response format: {errors}", status_code=500)
-
-            return jsonify(response_data), 201
-
-        except ValueError as e:
-            app_logger.warning(f"ValueError during campaign creation: {str(e)}")
-            return make_error_response(400, 'Bad Request', str(e))
-        except Exception as e:
-            app_logger.error(f"Error creating campaign: {str(e)}", exc_info=True)
-            app_logger.error(f"Request data that caused error: {json.dumps(data, default=str)}")
-            return make_error_response(500, 'Internal Server Error', 'Failed to create campaign', status_code=500)
+        """Create a new campaign."""
+        with ContextLogger(logger):
+            try:
+                data = request.get_json()
+                logger.info(f"Received campaign creation request: {json.dumps(data, default=str)}")
+                
+                # Validate request data
+                errors = CampaignCreateSchema().validate(data)
+                if errors:
+                    logger.warning(f"Validation errors during campaign creation: {errors}")
+                    return make_error_response(400, 'Bad Request', f'Invalid campaign data: {errors}')
+                
+                # Create campaign
+                campaign_service = get_campaign_service()
+                campaign = campaign_service.create_campaign(data)
+                
+                # Validate response data
+                errors = CampaignSchema().validate(campaign)
+                if errors:
+                    logger.error(f"Response validation errors after campaign creation: {errors}")
+                    raise ValueError(f"Invalid campaign data: {errors}")
+                
+                # Prepare and validate response
+                response_data = {
+                    'status': 'success',
+                    'data': campaign
+                }
+                errors = SuccessResponseSchema().validate(response_data)
+                if errors:
+                    logger.error(f"Response format validation errors: {errors}")
+                    raise ValueError(f"Invalid response format: {errors}")
+                
+                return jsonify(response_data), 201
+                
+            except ValueError as e:
+                logger.warning(f"ValueError during campaign creation: {str(e)}")
+                return make_error_response(400, 'Bad Request', str(e))
+                
+            except Exception as e:
+                logger.error(f"Error creating campaign: {str(e)}", exc_info=True)
+                logger.error(f"Request data that caused error: {json.dumps(data, default=str)}")
+                return make_error_response(500, 'Internal Server Error', 'Failed to create campaign')
 
     @api.route('/campaigns/<campaign_id>/start', methods=['POST', 'OPTIONS'])
     @token_required
@@ -518,11 +530,11 @@ def register_routes(api):
             }
             errors = ErrorResponseSchema().validate(error_response)
             if errors:
-                app_logger.error(f"Invalid error response format: {errors}")
+                logger.error(f"Invalid error response format: {errors}")
             return jsonify(error_response), 400
             
         except Exception as e:
-            app_logger.error(f"Error starting campaign: {str(e)}")
+            logger.error(f"Error starting campaign: {str(e)}")
             error_response = {
                 'status': 'error',
                 'error': {
@@ -533,7 +545,7 @@ def register_routes(api):
             }
             errors = ErrorResponseSchema().validate(error_response)
             if errors:
-                app_logger.error(f"Invalid error response format: {errors}")
+                logger.error(f"Invalid error response format: {errors}")
             return jsonify(error_response), 500
 
     @api.route('/leads', methods=['GET'])
@@ -564,7 +576,7 @@ def register_routes(api):
                 }
             }), 200
         except Exception as e:
-            app_logger.error(f"Error getting leads: {str(e)}")
+            logger.error(f"Error getting leads: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -608,7 +620,7 @@ def register_routes(api):
             }), 400
         
         except Exception as e:
-            app_logger.error(f"Error creating lead: {str(e)}")
+            logger.error(f"Error creating lead: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -648,7 +660,7 @@ def register_routes(api):
                 }
             }), 404
         except Exception as e:
-            app_logger.error(f"Error fetching lead: {str(e)}")
+            logger.error(f"Error fetching lead: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -702,7 +714,7 @@ def register_routes(api):
             }), 400
         
         except Exception as e:
-            app_logger.error(f"Error updating lead: {str(e)}")
+            logger.error(f"Error updating lead: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -721,7 +733,7 @@ def register_routes(api):
             organizations = organization_service.get_organizations()
             return jsonify({'status': 'success', 'data': {'organizations': organizations}}), 200
         except Exception as e:
-            app_logger.error(f"Error getting organizations: {str(e)}")
+            logger.error(f"Error getting organizations: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -745,7 +757,7 @@ def register_routes(api):
         except ValueError as e:
             return jsonify({'status': 'error', 'error': {'code': 400, 'name': 'Bad Request', 'message': str(e)}}), 400
         except Exception as e:
-            app_logger.error(f"Error creating organization: {str(e)}")
+            logger.error(f"Error creating organization: {str(e)}")
             return jsonify({'status': 'error', 'error': {'code': 500, 'name': 'Internal Server Error', 'message': 'Internal server error'}}), 500
 
     @api.route('/organizations/<org_id>', methods=['GET'])
@@ -772,7 +784,7 @@ def register_routes(api):
         except ValueError as e:
             return jsonify({'status': 'error', 'error': {'code': 400, 'name': 'Bad Request', 'message': str(e)}}), 400
         except Exception as e:
-            app_logger.error(f"Error updating organization: {str(e)}")
+            logger.error(f"Error updating organization: {str(e)}")
             return jsonify({'status': 'error', 'error': {'code': 500, 'name': 'Internal Server Error', 'message': 'Internal server error'}}), 500
 
     @api.route('/events', methods=['POST'])
@@ -805,7 +817,7 @@ def register_routes(api):
                 'data': result
             }), 201
         except Exception as e:
-            app_logger.error(f"Error creating event: {str(e)}")
+            logger.error(f"Error creating event: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -824,7 +836,7 @@ def register_routes(api):
             events = event_service.get_events()
             return jsonify({'status': 'success', 'data': {'events': events}}), 200
         except Exception as e:
-            app_logger.error(f"Error getting events: {str(e)}")
+            logger.error(f"Error getting events: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -856,7 +868,7 @@ def register_routes(api):
                 }
             }), 200
         except Exception as e:
-            app_logger.error(f"Error getting current user: {str(e)}")
+            logger.error(f"Error getting current user: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -925,7 +937,7 @@ def register_routes(api):
             }), 200
 
         except Exception as e:
-            app_logger.error(f"Error getting campaign results: {str(e)}")
+            logger.error(f"Error getting campaign results: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -994,7 +1006,7 @@ def register_routes(api):
 
         except Exception as e:
             db.session.rollback()
-            app_logger.error(f"Error cleaning up campaign jobs: {str(e)}")
+            logger.error(f"Error cleaning up campaign jobs: {str(e)}")
             return jsonify({
                 'status': 'error',
                 'error': {
@@ -1027,4 +1039,19 @@ def register_routes(api):
         return jsonify({
             'status': 'success',
             'data': {'jobs': jobs}
-        }), 200 
+        }), 200
+
+    @api.route('/auth/check', methods=['GET'])
+    def check_auth():
+        with ContextLogger(logger, endpoint='auth_check'):
+            try:
+                auth_header = request.headers.get('Authorization')
+                logger.debug("Checking auth", extra={
+                    'metadata': {'auth_header': auth_header[:10] if auth_header else None}
+                })
+                
+                # ... rest of the function ...
+                
+            except Exception as e:
+                logger.error("Auth check failed", exc_info=True)
+                raise 

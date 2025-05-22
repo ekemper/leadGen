@@ -1,8 +1,8 @@
 # Testing Guide
 
 ## Prerequisites
-- Python 3.9+
-- All backend dependencies installed (see server/requirements.txt)
+- Python 3.11 or higher installed
+- All backend dependencies installed (see requirements.txt)
 - Node.js 20.x+
 - All frontend dependencies installed (see frontend/package.json)
 
