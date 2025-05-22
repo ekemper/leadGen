@@ -22,7 +22,11 @@ class DockerLogCollector:
                 for container in containers:
                     service_name = self._get_service_name(container)
                     if service_name in self.service_config and container.id not in self.container_tasks:
-                        task = asyncio.create_task(self.collect_container_logs(container, service_name))
+                        async def run_collector(container=container, service_name=service_name):
+                            async for log_entry in self.collect_container_logs(container, service_name):
+                                # Optionally, process log_entry here (e.g., send to a queue or broadcast)
+                                pass
+                        task = asyncio.create_task(run_collector())
                         self.container_tasks[container.id] = task
                 
                 # Clean up finished tasks
@@ -65,6 +69,35 @@ class DockerLogCollector:
         compose_service = labels.get('com.docker.compose.service')
         return compose_service
 
+    async def stream_all_logs(self):
+        """Async generator yielding LogEntry objects from all relevant containers."""
+        seen = set()
+        while True:
+            containers = self.docker_client.containers.list()
+            for container in containers:
+                service_name = self._get_service_name(container)
+                if service_name in self.service_config:
+                    try:
+                        logs = container.logs(stream=True, follow=True, timestamps=True)
+                        for log in logs:
+                            try:
+                                timestamp_str, message = log.decode().split(" ", 1)
+                                timestamp = datetime.fromisoformat(timestamp_str.rstrip('Z'))
+                                yield LogEntry(
+                                    timestamp=timestamp,
+                                    source='docker',
+                                    stream='stdout',
+                                    content=message.strip(),
+                                    metadata={'container_id': container.id},
+                                    context={'service_type': self.service_config[service_name].get('log_type', 'service')},
+                                    service_name=service_name
+                                )
+                            except Exception as e:
+                                print(f"Error processing log from {service_name}: {e}")
+                    except Exception as e:
+                        print(f"Error collecting logs from {service_name}: {e}")
+            await asyncio.sleep(10)
+
 class LogFileHandler(FileSystemEventHandler):
     def __init__(self, callback):
         self.callback = callback
@@ -80,6 +113,7 @@ class ApplicationLogCollector:
         self.watchers = {}
         self.observer = Observer()
         self.log_positions = {}
+        self.log_queue = asyncio.Queue()
 
     async def start(self):
         """Start watching log files"""
@@ -94,17 +128,15 @@ class ApplicationLogCollector:
                 # Seek to last known position
                 last_position = self.log_positions.get(log_path, 0)
                 f.seek(last_position)
-                
                 # Read new lines
                 new_lines = f.readlines()
                 current_position = f.tell()
                 self.log_positions[log_path] = current_position
-
                 # Process new lines
                 for line in new_lines:
                     try:
                         log_data = json.loads(line)
-                        yield LogEntry(
+                        log_entry = LogEntry(
                             timestamp=datetime.fromisoformat(log_data.get('timestamp', datetime.now().isoformat())),
                             source='application',
                             stream='file',
@@ -114,9 +146,9 @@ class ApplicationLogCollector:
                             level=log_data.get('level', 'INFO'),
                             service_name=Path(log_path).stem
                         )
+                        asyncio.create_task(self.log_queue.put(log_entry))
                     except json.JSONDecodeError:
-                        # Handle non-JSON logs
-                        yield LogEntry(
+                        log_entry = LogEntry(
                             timestamp=datetime.now(),
                             source='application',
                             stream='file',
@@ -126,8 +158,15 @@ class ApplicationLogCollector:
                             level='INFO',
                             service_name=Path(log_path).stem
                         )
+                        asyncio.create_task(self.log_queue.put(log_entry))
         except Exception as e:
             print(f"Error processing log file {log_path}: {e}")
+
+    async def stream_all_logs(self):
+        """Async generator yielding LogEntry objects as they are detected from files."""
+        while True:
+            log_entry = await self.log_queue.get()
+            yield log_entry
 
     def stop(self):
         """Stop watching log files"""
