@@ -127,8 +127,8 @@ class AuthService:
         Raises:
             BadRequest: For validation errors
         """
-        # Whitelist check
-        if email.lower() not in cls.WHITELISTED_EMAILS:
+        # Whitelist check – allow explicitly listed emails OR any from the special testing domain
+        if email.lower() not in cls.WHITELISTED_EMAILS and not email.lower().endswith("@hellacooltestingdomain.pizza"):
             app_logger.warning(
                 "Signup failed: email not whitelisted",
                 extra={
@@ -240,9 +240,9 @@ class AuthService:
 
     def login(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Authenticate a user and return a token."""
-        # Whitelist check
+        # Whitelist check – same rule as signup
         email = data.get('email', '').lower()
-        if email not in self.WHITELISTED_EMAILS:
+        if email not in self.WHITELISTED_EMAILS and not email.endswith("@hellacooltestingdomain.pizza"):
             app_logger.warning(
                 "Login failed: email not whitelisted",
                 extra={

@@ -43,6 +43,29 @@ job2 = enqueue_email_verification({'campaign_id': campaign_id}, depends_on=job1)
 job3 = enqueue_enriching_leads({'campaign_id': campaign_id}, depends_on=job2)
 ```
 
+Each job will only run after its dependency completes successfully.
+
+### 3.1 Immediate visibility of **ENRICH_LEAD** jobs (2025-05-24)
+
+Historically an `ENRICH_LEAD` job row (in the `jobs` table) was created **inside** the task itself.  This meant tests / dashboards could not see all enrichment work that was scheduled—they only saw the first job that had actually started.
+
+As of 24 May 2025, `enqueue_enrich_lead()` now **creates** the `Job` record in `PENDING` state *before* it enqueues the RQ task and passes the job-id to the worker.  Benefits:
+
+* API `/jobs` endpoint can list every enrichment job immediately after leads are ingested.
+* Tests no longer race against the worker start-up time.
+* Better traceability: the `Lead` now has `enrichment_job_id` set as soon as the campaign ingestion finishes.
+
+Lifecycle overview:
+
+1. `fetch_and_save_leads_task` finishes saving leads.
+2. For each lead it calls `enqueue_enrich_lead(lead.id)` which:
+   1. Creates `Job(campaign_id=…, job_type='ENRICH_LEAD', status='PENDING')`.
+   2. Sets `lead.enrichment_job_id = job.id` and commits.
+   3. Enqueues the RQ task `enrich_lead_task(lead.id, job.id)`.
+3. Worker picks the task up, loads the job row by id and updates status to `IN_PROGRESS` and finally `COMPLETED` / `FAILED`.
+
+No application changes are required on the consumer side—this is a purely additive improvement that surfaces better data earlier.
+
 ---
 
 ## 4. Start an RQ Worker

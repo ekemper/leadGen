@@ -82,6 +82,9 @@ class LeadSchema(Schema):
     raw_data = fields.Dict(allow_none=True)
     created_at = fields.DateTime(required=True)
     updated_at = fields.DateTime(required=True)
+    enrichment_results = fields.Dict(allow_none=True)
+    email_copy_gen_results = fields.Raw(allow_none=True)
+    instantly_lead_record = fields.Dict(allow_none=True)
 
 class LeadCreateSchema(Schema):
     """Schema for lead creation requests."""

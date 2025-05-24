@@ -1006,6 +1006,7 @@ def register_routes(api):
 
     @api.route('/jobs', methods=['GET'])
     @token_required
+    @limiter.limit("2000 per hour")
     def get_jobs():
         """Get jobs, optionally filtered by campaign_id."""
         from server.api.services.job_service import JobService

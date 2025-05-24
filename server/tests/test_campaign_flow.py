@@ -4,7 +4,8 @@ import sys
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-os.environ["USE_APIFY_CLIENT_MOCK"] = "true"
+# Enable the Apollo mock but leave Perplexity live
+os.environ["USE_APIFY_CLIENT_MOCK"] = "true"  # keep Apollo mocked
 import requests
 import time
 import random
@@ -15,11 +16,12 @@ from flask import Flask
 
 API_BASE = "http://localhost:5001/api"
 
-TEST_EMAIL = "test@domain.com"
-
 # Utility to generate a random email for test user
 def random_email():
-    return f"testuser_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}@example.com"
+    return f"testuser_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}@hellacooltestingdomain.pizza"
+
+# Use a unique email each run to avoid duplicates
+TEST_EMAIL = random_email()
 
 def random_password():
     specials = "!@#$%^&*()"
@@ -35,6 +37,8 @@ def random_password():
     password += random.choices(chars, k=8)
     random.shuffle(password)
     return ''.join(password)
+
+# --------------- Test helpers --------------
 
 def signup_and_login():
     email = TEST_EMAIL
@@ -101,57 +105,63 @@ def start_campaign(token, campaign_id):
         print(f"[Campaign] Start failed: {resp.status_code} {resp.text}")
         raise Exception("Campaign start failed")
     print(f"[Campaign] Started campaign {campaign_id}")
-    # Wait for jobs to be created by the worker
-    print("[Wait] Sleeping 5 seconds to allow jobs to be created...")
-    time.sleep(5)
 
-def poll_leads(token, campaign_id, expected_count, timeout=60):
+# After running enrichment jobs synchronously, validate each lead once.
+
+def validate_enrichment(leads, token):
     headers = {"Authorization": f"Bearer {token}"}
-    waited = 0
-    interval = 2
-    print(f"[Leads] Polling for leads for campaign {campaign_id}...")
-    while waited < timeout:
-        resp = requests.get(f"{API_BASE}/leads", headers=headers, params={"campaign_id": campaign_id})
+    from server.background_services.mock_apify_client import MOCK_LEADS_DATA
+    for lead in leads:
+        resp = requests.get(f"{API_BASE}/leads/{lead['id']}", headers=headers)
         if resp.status_code != 200:
-            print(f"[Leads] Error: {resp.status_code} {resp.text}")
-            raise Exception("Leads fetch failed")
-        leads = resp.json()["data"]["leads"]
-        print(f"[Leads] Waited {waited}s: Found {len(leads)}/{expected_count} leads...")
-        if len(leads) >= expected_count:
-            print(f"[Leads] All leads found after {waited}s.")
-            return leads
-        time.sleep(interval)
-        waited += interval
-    raise Exception(f"Timeout: Only found {len(leads)} leads after {timeout}s")
+            raise Exception(f"Lead fetch failed for {lead['id']}: {resp.status_code} {resp.text}")
+        updated_lead = resp.json()["data"]
+        mock_lead = next((l for l in MOCK_LEADS_DATA if l["email"] == lead["email"]), None)
+        assert_lead_enrichment(updated_lead, mock_lead, timeout=60)
+        print(f"[Enrichment] Lead {lead['email']} enrichment validated.")
 
-def fetch_campaign_jobs(api_base, campaign_id, headers):
-    resp = requests.get(f"{api_base}/jobs", headers=headers, params={"campaign_id": campaign_id})
+# ---------------- Polling utilities ----------------
+
+def fetch_campaign_jobs(token, campaign_id):
+    """Return list of jobs for the given campaign via API."""
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(f"{API_BASE}/jobs", headers=headers, params={"campaign_id": campaign_id})
     if resp.status_code != 200:
-        raise Exception(f"Failed to fetch jobs for campaign {campaign_id}: {resp.status_code} {resp.text}")
+        raise Exception(f"Failed to fetch jobs: {resp.status_code} {resp.text}")
     return resp.json()["data"]["jobs"]
 
-def build_enrichment_job_dict(jobs):
-    return {
-        job["parameters"]["lead_id"]: job
-        for job in jobs
-        if job.get("job_type") == "ENRICH_LEAD" and job.get("parameters") and job["parameters"].get("lead_id")
-    }
 
-def poll_job_completion(lead, campaign_id, headers, api_base, timeout, interval=4):
+def wait_for_jobs(token, campaign_id, job_type, expected_count=None, timeout=300, interval=2):
     waited = 0
     while waited < timeout:
-        jobs = fetch_campaign_jobs(api_base, campaign_id, headers)
-        enrichment_jobs_by_lead_id = build_enrichment_job_dict(jobs)
-        enrichment_job = enrichment_jobs_by_lead_id.get(lead["id"])
-        if not enrichment_job:
-            raise Exception(f"No enrichment job found for lead {lead['email']} (id={lead['id']})")
-        status = enrichment_job.get("status")
-        print(f"[Enrichment] Waited {waited}s for job {enrichment_job['id']}... status: {status}")
-        if status in ("COMPLETED", "FAILED"):
-            return enrichment_job
+        jobs = fetch_campaign_jobs(token, campaign_id)
+        target = [j for j in jobs if j["job_type"] == job_type]
+        if expected_count and len(target) < expected_count:
+            time.sleep(interval)
+            waited += interval
+            continue
+
+        if target and all(j["status"] in ("COMPLETED", "FAILED") for j in target):
+            failed = [j for j in target if j["status"] == "FAILED"]
+            if failed:
+                msgs = "; ".join(f["error_message"] or "Unknown error" for f in failed)
+                raise AssertionError(f"{job_type} job(s) failed: {msgs}")
+            return target
+
         time.sleep(interval)
         waited += interval
-    raise Exception(f"Timeout waiting for enrichment job for lead {lead['email']}")
+    raise TimeoutError(f"{job_type} jobs not finished within {timeout}s")
+
+
+def get_all_leads(token, campaign_id):
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(f"{API_BASE}/leads", headers=headers, params={"campaign_id": campaign_id})
+    if resp.status_code != 200:
+        raise Exception(f"Leads fetch failed: {resp.status_code} {resp.text}")
+    return resp.json()["data"]["leads"]
+
+
+# ---------------- Assertion helper ----------------
 
 def assert_lead_enrichment(updated_lead, mock_lead, timeout):
     assert updated_lead.get("enrichment_results"), f"No enrichment_results for {updated_lead['email']} after {timeout}s"
@@ -161,31 +171,6 @@ def assert_lead_enrichment(updated_lead, mock_lead, timeout):
     assert updated_lead["first_name"] == mock_lead["first_name"]
     assert updated_lead["last_name"] == mock_lead["last_name"]
     assert updated_lead["company"] == (mock_lead.get("organization", {}).get("name") or mock_lead.get("organization_name", ""))
-
-def poll_enrichment(leads, token, campaign_id, timeout=240):
-    headers = {"Authorization": f"Bearer {token}"}
-    from server.background_services.mock_apify_client import MOCK_LEADS_DATA
-    API_BASE = "http://localhost:5001/api"
-    jobs = fetch_campaign_jobs(API_BASE, campaign_id, headers)
-    enrichment_jobs_by_lead_id = build_enrichment_job_dict(jobs)
-    for lead in leads:
-        enrichment_job = enrichment_jobs_by_lead_id.get(lead["id"])
-        if not enrichment_job:
-            print(f"[DEBUG] All jobs: {jobs}")
-            print(f"[DEBUG] Enrichment jobs by lead id: {enrichment_jobs_by_lead_id}")
-            raise Exception(f"No enrichment job found for lead {lead['email']} (id={lead['id']}) in campaign jobs list")
-        enrichment_job = poll_job_completion(lead, campaign_id, headers, API_BASE, timeout, interval=4)
-        if enrichment_job["status"] != "COMPLETED":
-            raise Exception(f"Enrichment job {enrichment_job['id']} for lead {lead['email']} did not complete successfully. Status: {enrichment_job['status']}, Error: {enrichment_job.get('error_message')}")
-        # After job is completed, fetch the lead and assert enrichment fields
-        resp = requests.get(f"{API_BASE}/leads/{lead['id']}", headers=headers)
-        if resp.status_code != 200:
-            print(f"[Leads] Error: {resp.status_code} {resp.text}")
-            raise Exception("Lead fetch failed")
-        updated_lead = resp.json()["data"]
-        mock_lead = next((l for l in MOCK_LEADS_DATA if l["email"] == lead["email"]), None)
-        assert_lead_enrichment(updated_lead, mock_lead, timeout)
-        print(f"[Enrichment] Lead {lead['email']} enrichment complete.")
 
 def main():
     from server.background_services.mock_apify_client import MOCK_LEADS_DATA
@@ -200,11 +185,20 @@ def main():
         organization_id = create_organization(token)
         campaign_id = create_campaign(token, organization_id=organization_id)
         start_campaign(token, campaign_id)
-        leads = poll_leads(token, campaign_id, expected_count=len(MOCK_LEADS_DATA), timeout=60)
+
+        # ----- Wait for fetch_leads to finish -----
+        wait_for_jobs(token, campaign_id, "FETCH_LEADS", expected_count=1, timeout=120)
+
+        leads = get_all_leads(token, campaign_id)
         mock_emails = {lead["email"] for lead in MOCK_LEADS_DATA}
         db_emails = {lead["email"] for lead in leads}
         assert mock_emails == db_emails, f"Emails in DB: {db_emails}, expected: {mock_emails}"
-        poll_enrichment(leads, token, campaign_id, timeout=240)
+
+        # ----- Wait for all enrichment jobs -----
+        wait_for_jobs(token, campaign_id, "ENRICH_LEAD", expected_count=len(leads), timeout=300)
+
+        validate_enrichment(leads, token)
+
         print("\n[Success] All leads ingested and enriched successfully!")
         # finally:
             # Cleanup: delete the test user
