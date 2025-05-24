@@ -109,16 +109,23 @@ def start_campaign(token, campaign_id):
 # After running enrichment jobs synchronously, validate each lead once.
 
 def validate_enrichment(leads, token):
+    print(f"[Validation] Starting enrichment validation for {len(leads)} leads...")
     headers = {"Authorization": f"Bearer {token}"}
     from server.background_services.mock_apify_client import MOCK_LEADS_DATA
-    for lead in leads:
+    
+    validated_count = 0
+    for i, lead in enumerate(leads, 1):
+        print(f"[Validation] Validating lead {i}/{len(leads)}: {lead['email']}")
         resp = requests.get(f"{API_BASE}/leads/{lead['id']}", headers=headers)
         if resp.status_code != 200:
             raise Exception(f"Lead fetch failed for {lead['id']}: {resp.status_code} {resp.text}")
         updated_lead = resp.json()["data"]
         mock_lead = next((l for l in MOCK_LEADS_DATA if l["email"] == lead["email"]), None)
         assert_lead_enrichment(updated_lead, mock_lead, timeout=60)
-        print(f"[Enrichment] Lead {lead['email']} enrichment validated.")
+        validated_count += 1
+        print(f"[Validation] ✓ Lead {lead['email']} enrichment validated ({validated_count}/{len(leads)})")
+    
+    print(f"[Validation] SUCCESS: All {len(leads)} leads validated successfully!")
 
 # ---------------- Polling utilities ----------------
 
@@ -128,15 +135,40 @@ def fetch_campaign_jobs(token, campaign_id):
     resp = requests.get(f"{API_BASE}/jobs", headers=headers, params={"campaign_id": campaign_id})
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch jobs: {resp.status_code} {resp.text}")
-    return resp.json()["data"]["jobs"]
+    jobs_data = resp.json()["data"]["jobs"]
+    print(f"[API] Fetched {len(jobs_data)} total jobs for campaign {campaign_id}")
+    return jobs_data
 
 
 def wait_for_jobs(token, campaign_id, job_type, expected_count=None, timeout=300, interval=2):
+    print(f"[Polling] Starting to wait for {job_type} jobs (campaign {campaign_id})")
+    if expected_count:
+        print(f"[Polling] Expecting {expected_count} {job_type} job(s) to complete")
+    else:
+        print(f"[Polling] Waiting for any {job_type} job(s) to complete")
+    
     waited = 0
+    last_status_log = 0
+    status_log_interval = 10  # Log status every 10 seconds
+    
     while waited < timeout:
         jobs = fetch_campaign_jobs(token, campaign_id)
         target = [j for j in jobs if j["job_type"] == job_type]
+        
+        # Log current status periodically
+        if waited - last_status_log >= status_log_interval:
+            print(f"[Polling] {waited}s elapsed - Found {len(target)} {job_type} job(s)")
+            if target:
+                status_counts = {}
+                for job in target:
+                    status = job["status"]
+                    status_counts[status] = status_counts.get(status, 0) + 1
+                status_summary = ", ".join(f"{status}: {count}" for status, count in status_counts.items())
+                print(f"[Polling] Job status breakdown: {status_summary}")
+            last_status_log = waited
+        
         if expected_count and len(target) < expected_count:
+            print(f"[Polling] Only found {len(target)}/{expected_count} {job_type} jobs, waiting...")
             time.sleep(interval)
             waited += interval
             continue
@@ -144,21 +176,41 @@ def wait_for_jobs(token, campaign_id, job_type, expected_count=None, timeout=300
         if target and all(j["status"] in ("COMPLETED", "FAILED") for j in target):
             failed = [j for j in target if j["status"] == "FAILED"]
             if failed:
+                print(f"[Polling] ERROR: {len(failed)} {job_type} job(s) failed!")
+                for job in failed:
+                    print(f"[Polling] Failed job {job['id']}: {job.get('error_message', 'Unknown error')}")
                 msgs = "; ".join(f["error_message"] or "Unknown error" for f in failed)
                 raise AssertionError(f"{job_type} job(s) failed: {msgs}")
+            
+            print(f"[Polling] SUCCESS: All {len(target)} {job_type} job(s) completed after {waited}s")
             return target
 
         time.sleep(interval)
         waited += interval
+    
+    # Timeout reached - provide detailed status
+    print(f"[Polling] TIMEOUT: {job_type} jobs not finished within {timeout}s")
+    jobs = fetch_campaign_jobs(token, campaign_id)
+    target = [j for j in jobs if j["job_type"] == job_type]
+    if target:
+        print(f"[Polling] Final status of {len(target)} {job_type} job(s):")
+        for job in target:
+            print(f"[Polling]   Job {job['id']}: {job['status']} - {job.get('error_message', 'No error message')}")
+    else:
+        print(f"[Polling] No {job_type} jobs found at timeout")
+    
     raise TimeoutError(f"{job_type} jobs not finished within {timeout}s")
 
 
 def get_all_leads(token, campaign_id):
+    print(f"[API] Fetching all leads for campaign {campaign_id}...")
     headers = {"Authorization": f"Bearer {token}"}
     resp = requests.get(f"{API_BASE}/leads", headers=headers, params={"campaign_id": campaign_id})
     if resp.status_code != 200:
         raise Exception(f"Leads fetch failed: {resp.status_code} {resp.text}")
-    return resp.json()["data"]["leads"]
+    leads_data = resp.json()["data"]["leads"]
+    print(f"[API] Successfully retrieved {len(leads_data)} leads")
+    return leads_data
 
 
 # ---------------- Assertion helper ----------------
@@ -176,37 +228,61 @@ def main():
     from server.background_services.mock_apify_client import MOCK_LEADS_DATA
     app = Flask(__name__)
     app.config.from_object('server.config.settings')
+    
+    print("\n" + "="*60)
+    print("🚀 STARTING CAMPAIGN FLOW TEST")
+    print("="*60)
+    
     # Ensure app context for db cleanup
     with app.app_context():
         token = None
         email = TEST_EMAIL
         # try:
+        print("\n📋 PHASE 1: Authentication & Setup")
+        print("-" * 30)
         token, email = signup_and_login()
         organization_id = create_organization(token)
         campaign_id = create_campaign(token, organization_id=organization_id)
+        
+        print(f"\n🎯 PHASE 2: Campaign Execution")
+        print("-" * 30)
         start_campaign(token, campaign_id)
 
-        # ----- Wait for fetch_leads to finish -----
+        print(f"\n⏳ PHASE 3: Lead Fetching")
+        print("-" * 30)
+        print(f"[Phase] Waiting for FETCH_LEADS job to complete...")
         wait_for_jobs(token, campaign_id, "FETCH_LEADS", expected_count=1, timeout=120)
 
+        print(f"\n📊 PHASE 4: Lead Data Verification")
+        print("-" * 30)
         leads = get_all_leads(token, campaign_id)
+        print(f"[Phase] Retrieved {len(leads)} leads from database")
+        
         mock_emails = {lead["email"] for lead in MOCK_LEADS_DATA}
         db_emails = {lead["email"] for lead in leads}
+        print(f"[Phase] Expected {len(mock_emails)} leads, found {len(db_emails)} leads")
+        print(f"[Phase] Expected emails: {sorted(mock_emails)}")
+        print(f"[Phase] Database emails: {sorted(db_emails)}")
+        
         assert mock_emails == db_emails, f"Emails in DB: {db_emails}, expected: {mock_emails}"
+        print(f"[Phase] ✓ Lead data verification passed!")
 
-        # ----- Wait for all enrichment jobs -----
+        print(f"\n⚡ PHASE 5: Lead Enrichment")
+        print("-" * 30)
+        print(f"[Phase] Waiting for {len(leads)} ENRICH_LEAD job(s) to complete...")
         wait_for_jobs(token, campaign_id, "ENRICH_LEAD", expected_count=len(leads), timeout=300)
 
+        print(f"\n✅ PHASE 6: Enrichment Validation")
+        print("-" * 30)
         validate_enrichment(leads, token)
 
-        print("\n[Success] All leads ingested and enriched successfully!")
-        # finally:
-            # Cleanup: delete the test user
-            # user = User.query.filter_by(email=email).first()
-            # if user:
-            #     db.session.delete(user)
-            #     db.session.commit()
-            #     print(f"[Cleanup] Deleted test user: {email}")
+        print("\n" + "="*60)
+        print("🎉 CAMPAIGN FLOW TEST COMPLETED SUCCESSFULLY!")
+        print("="*60)
+        print(f"✓ {len(leads)} leads fetched")
+        print(f"✓ {len(leads)} leads enriched") 
+        print(f"✓ {len(leads)} leads validated")
+        print("="*60)
 
 if __name__ == "__main__":
     main() 
