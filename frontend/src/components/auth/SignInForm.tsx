@@ -41,12 +41,12 @@ export default function SignInForm() {
   return (
     <div className="flex items-center justify-center w-full h-screen lg:w-1/2">
       <div className="w-full max-w-md p-6">
-        <div className="flex items-center justify-center mb-8">
-          <Link to="/" className="flex items-center">
-            <ChevronLeftIcon className="w-6 h-6 mr-2" />
-            <span>Back to Home</span>
-          </Link>
-        </div>
+      <div className="mb-5 sm:mb-8">
+            <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
+              Sign In
+            </h1>
+
+          </div>
         <div>
           {error && <div className="text-red-500 mb-4">{error}</div>}
           <form onSubmit={handleSubmit}>
