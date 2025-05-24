@@ -150,7 +150,7 @@ def setup_logs():
         except OSError as e:
             print(f"Warning: Failed to remove log file {log_file}: {str(e)}")
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_queue(monkeypatch):
     """Mock RQ queue for testing."""
     mock_queue = MagicMock(spec=Queue)
@@ -159,5 +159,27 @@ def mock_queue(monkeypatch):
     def mock_get_queue():
         return mock_queue
     
+    # Patch queue retrieval in both queue_config and tasks modules
     monkeypatch.setattr('server.config.queue_config.get_queue', mock_get_queue)
+    # server.tasks imports get_queue directly, so patch that reference as well (if already imported)
+    monkeypatch.setattr('server.tasks.get_queue', mock_get_queue, raising=False)
+
+    # Patch enqueue_fetch_and_save_leads to a no-op so starting a campaign doesn't touch RQ
+    monkeypatch.setattr('server.api.services.campaign_service.enqueue_fetch_and_save_leads', lambda params, campaign_id: None, raising=False)
+
+    # Patch InstantlyService to avoid external network and env vars
+    monkeypatch.setattr('server.api.services.campaign_service.InstantlyService.__init__', lambda self: None, raising=False)
+    monkeypatch.setattr('server.api.services.campaign_service.InstantlyService.create_campaign', lambda self, name: {'id': 'mock-instantly-id'}, raising=False)
+    monkeypatch.setattr('server.api.services.campaign_service.InstantlyService.get_campaign_analytics_overview', lambda self, campaign_id: {}, raising=False)
+
     return mock_queue 
+
+# ---------------------------------------------------------------------------
+# Ensure test user email passes AuthService whitelist
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def whitelist_test_email():
+    """Add the default test email to AuthService whitelist for signup/login during tests."""
+    from server.api.services.auth_service import AuthService
+    AuthService.WHITELISTED_EMAILS.add('test@example.com') 
