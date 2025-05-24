@@ -92,17 +92,32 @@ If you encounter issues not covered here, check the logs and ensure all environm
 
 ## Logging
 
-All worker logs are now written to **stdout only**. This means:
-- Logs are available via Docker's logging system.
-- There are no separate log files created by the worker inside the container.
-- You can view worker logs using:
-  ```sh
-  docker-compose logs -f worker
-  ```
-- You can collect all logs (including worker logs) into a single file on the host with:
-  ```sh
-  docker-compose logs --no-color -t > ./logs/combined.log
-  ```
-- This approach unifies application and container logs, making it easier to monitor and aggregate logs from all services.
+The worker now leverages the **central logging bootstrap** used by every other Python process in LeadGen.  Concretely:
 
-If you encounter issues not covered here, check the logs and ensure all environment variables and services are correctly configured. 
+* A JSON log entry is emitted to **stdout**, so you can still run
+
+  ```sh
+  docker compose logs -f worker
+  ```
+
+* The same entry is also appended to `logs/combined.log` on the host (10 MiB-rotating file shared by all containers).
+
+This dual-sink setup gives you live streaming via Docker **and** a persistent history you can grep locally or ship to ELK/Loki.
+
+```jsonc
+// tail -1 logs/combined.log | jq .
+{
+  "timestamp": "2025-05-24T12:34:56.789Z",
+  "level": "INFO",
+  "name": "worker",
+  "message": "Job 123 processed successfully",
+  "source": "worker",
+  "component": "rq"
+}
+```
+
+If you ever miss logs, first check this file; if it's empty your worker may not have started or the volume isn't mounted.
+
+---
+
+If you encounter issues not covered here, inspect `logs/combined.log` and ensure all environment variables and services are correctly configured. 

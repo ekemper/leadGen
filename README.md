@@ -176,48 +176,29 @@ docker compose run --rm backend python scripts/reset_and_seed.py
 
 ## Logging and Observability
 
-### Unified Logging via Docker
+### Central logger + shared `combined.log`
 
-All application logs (backend, worker, and frontend event logs sent to the backend) are now written to **stdout only**. This means:
+Every Python process in LeadGen bootstrap's the same logger defined in `server/utils/logging_config.py`.  Two destinations are wired by default:
 
-- All logs are available via Docker's logging system.
-- There are no separate log files created by the application inside the containers.
-- You can view all logs for all services using:
-  ```sh
-  docker-compose logs
-  ```
-- You can collect all logs into a single file on the host with:
-  ```sh
-  docker-compose logs --no-color -t > ./logs/combined.log
-  ```
-- This includes:
-  - Backend (Flask server) logs
-  - Worker process logs
-  - Frontend browser event logs (sent to the backend via `/api/events`)
-  - Container lifecycle and healthcheck logs
+1. **stdout** — visible with Docker commands such as `docker compose logs -f`.
+2. **`logs/combined.log`** — a host-side, 10 MiB rolling file that aggregates entries from _all_ containers.
 
-#### Log Format
-- All application logs are in JSON format, with fields: `timestamp`, `level`, `message`, `source`, and `component`.
-- Docker logs (from Redis, Postgres, Nginx, etc.) are in their default format.
+This dual sink gives you real-time streaming in the terminal **and** a persistent history for grepping or shipping to ELK/Loki.
 
-#### Why This Approach?
-- **Unified view:** All logs (application and container) are available in one place.
-- **Easy aggregation:** You can forward or process logs using Docker-native tools or external log shippers.
-- **No need to manage log files or rotation inside containers.**
-
-#### Example: Viewing Logs
-To view logs for all services in real time:
 ```sh
-docker-compose logs -f
-```
-To view logs for a specific service (e.g., backend):
-```sh
-docker-compose logs -f backend
+# live tail across stack
+docker compose logs -f
+
+# inspect only backend entries from the file
+jq 'select(.name | test("^server"))' logs/combined.log | less -R
 ```
 
-#### Example: Collecting All Logs to a File
-```sh
-docker-compose logs --no-color -t > ./logs/combined.log
-```
+#### Log format (JSON-lines)
+
+Key fields: `timestamp`, `level`, `name`, `message`, `source`, `component`.  Sensitive data is redacted automatically.
+
+#### Override log level
+
+Set `LOG_LEVEL=DEBUG` in your environment or `docker-compose.override.yml` to increase verbosity.
 
 ---

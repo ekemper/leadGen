@@ -75,16 +75,14 @@ rq-dashboard
 Then visit [http://localhost:9181](http://localhost:9181).
 
 ### Logging
-The worker provides detailed logging:
-- Job start/end times
-- Process IDs
-- Error tracebacks
-- Queue configuration
-- Worker status
 
-Logs are available in:
-- Worker logs: `logs/worker.log`
-- Combined logs: `logs/combined.log`
+The worker uses the **central logger**, so every job event is emitted both to Docker `stdout` and to the shared `logs/combined.log` file.  Expect JSON lines similar to:
+
+```json
+{"timestamp": "2025-05-24T12:35:00Z", "level": "INFO", "name": "worker", "message": "Started job 123", "component": "rq"}
+```
+
+`worker.log` is no longer created; grep `combined.log` or run `docker compose logs -f worker` for live output.
 
 ---
 
@@ -107,7 +105,7 @@ Each job will only run after its dependency completes successfully.
 - If you change code, restart your RQ workers
 - Check the logs for any job failures or retries
 - Monitor job timeouts and adjust configuration if needed
-- Check worker logs for detailed error information
+- Check `logs/combined.log` or `docker compose logs worker` for detailed error information
 - Monitor worker restarts (occurs every 1000 jobs)
 
 ---

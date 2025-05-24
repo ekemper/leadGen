@@ -13,8 +13,11 @@ import traceback
 from datetime import datetime
 from server.background_services.instantly_service import InstantlyService
 import os
+from server.utils.logger import get_logger
 
-print("server.tasks module loaded")
+# module-level logger
+logger = get_logger(__name__)
+logger.debug("server.tasks module loaded")
 
 def handle_task_error(campaign_id, error, job_type):
     """Handle task errors and update campaign status."""

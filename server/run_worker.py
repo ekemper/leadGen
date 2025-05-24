@@ -1,5 +1,4 @@
 import os
-print("USE_APIFY_CLIENT_MOCK:", os.environ.get("USE_APIFY_CLIENT_MOCK"))
 
 import sys
 import signal

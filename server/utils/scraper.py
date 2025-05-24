@@ -17,8 +17,8 @@ Features:
 
 import os
 import time
-import logging
 import random
+from server.utils.logger import get_logger
 import requests
 from urllib.parse import urlparse
 from typing import Dict, Any, Optional, Union, List, Tuple
@@ -26,12 +26,8 @@ from bs4 import BeautifulSoup
 import trafilatura
 from requests.exceptions import RequestException
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("web_scraper")
+# Obtain central logger
+logger = get_logger("web_scraper")
 
 class WebScraper:
     """

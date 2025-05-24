@@ -1,83 +1,76 @@
-# Unified Logging in Dockerized LeadGen Application
+# LeadGen Logging — 2025-05 overhaul
 
-## Overview
+This document describes the **single-source, structured logging** used throughout the LeadGen stack after the 2025-05 consolidation.
 
-All application logs—including backend (Flask server), worker processes, and frontend browser event logs (sent to the backend)—are now written to **stdout only**. This means:
+## Quick facts
 
-- All logs are available via Docker's logging system.
-- There are no separate log files created by the application inside the containers.
-- You can view and collect logs for all services using Docker-native commands.
-- This approach unifies application and container logs, making it easier to monitor, aggregate, and forward logs.
+• Every Python process (Flask API, RQ worker, ad-hoc scripts) uses the same logging bootstrap in `server/utils/logging_config.py`.
+• Two handlers are attached to the **root logger**:
+  1. `StreamHandler` → `stdout` (picked up by Docker ‑ view with `docker compose logs`).
+  2. `RotatingFileHandler` → `logs/combined.log` (shared bind-mount across containers, 10 MiB × 5 files).
+• Log entries are JSON lines with mandatory keys:
 
----
+| key        | description                     |
+|------------|---------------------------------|
+| timestamp  | ISO-8601 in UTC                 |
+| level      | INFO, ERROR, …                  |
+| name       | `logger.name`                   |
+| message    | human-readable text             |
+| source     | same as `name` unless overridden|
+| component  | optional subsystem tag          |
 
-## How to View Logs
+• Sensitive data (emails, tokens, passwords, etc.) is **redacted automatically** by a `SanitizingFilter` before the record is serialised.
+• Noise from `werkzeug`, `flask_limiter`, `sqlalchemy.engine`, and `sqlalchemy.pool` is reduced to WARNING/ERROR.
 
-### View All Logs in Real Time
-To view logs for all services as they are generated:
+## Using the logger in code
+
+```python
+from server.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+logger.info("User logged in", extra={"component": "auth_service"})
+logger.error("Database timeout", exc_info=True)
+```
+
+Why `get_logger()`? Importing that helper guarantees that logging is **initialised once** (idempotently) before you obtain the logger.
+
+### Do **not**
+
+* call `logging.basicConfig()` — it would clobber the global configuration;
+* write your own `FileHandler` — use `extra={"component": …}` instead for categorisation;
+* litter production code with `print()`; use the logger.
+
+## Viewing logs
+
+### Tail live logs from all containers
+
 ```sh
-docker-compose logs -f
+docker compose logs -f
 ```
 
-### View Logs for a Specific Service
-To view logs for a specific service (e.g., backend):
+### View only backend (Flask) logs
+
 ```sh
-docker-compose logs -f backend
+docker compose logs -f backend
 ```
-To view worker logs:
+
+### Inspect the shared file on the host
+
 ```sh
-docker-compose logs -f worker
+tail -F logs/combined.log | jq .
 ```
 
-### Collect All Logs to a File
-To collect all logs (from all containers) into a single file on the host:
-```sh
-docker-compose logs --no-color -t > ./logs/combined.log
-```
+The file is rotated automatically once it reaches 10 MiB (`combined.log.1`, …, `combined.log.5`).
 
----
+## Environment variables
 
-## Log Format
+* `LOG_LEVEL` — overrides the default level (INFO) for all handlers, e.g. `LOG_LEVEL=DEBUG` in `docker-compose.override.yml`.
 
-- All application logs are in **JSON format** with the following fields:
-  - `timestamp`: ISO8601 timestamp of the log entry
-  - `level`: Log level (e.g., INFO, ERROR)
-  - `message`: Log message
-  - `source`: Source of the log (e.g., backend, worker, browser)
-  - `component`: Application component (e.g., auth_service, event_service)
-- Docker logs from other containers (Redis, Postgres, Nginx, etc.) are in their default format.
+## Migrating old code / docs
 
----
+Legacy references to module-specific files such as `server.log`, `worker.log`, `browser.log`, or guidance that claimed "stdout-only logging" have been removed.  If you spot such text, update it to match the above rules.
 
-## Why Use stdout-Only Logging?
+## Extending
 
-- **Unified view:** All logs (application and container) are available in one place.
-- **Easy aggregation:** You can forward or process logs using Docker-native tools or external log shippers.
-- **No need to manage log files or rotation inside containers.**
-- **Production best practice:** This approach is recommended for containerized applications and works seamlessly with log aggregation platforms (ELK, Loki, Datadog, etc.).
-
----
-
-## Example: Log Entry
-
-A typical application log entry (as seen in `docker-compose logs`):
-```json
-{"timestamp": "2025-05-20T13:16:25.897615", "level": "INFO", "name": "app", "message": "Centralized logger initialized", "source": "app", "component": "app"}
-```
-
----
-
-## Migrating from File-Based Logging
-
-- All previous references to log files like `server.log`, `worker.log`, `browser.log`, or `combined.log` are obsolete.
-- All logging is now handled via stdout and Docker's logging system.
-- If you need to collect logs into a file, use the Docker command above to redirect logs to a file on the host.
-
----
-
-## Troubleshooting
-
-- If you do not see logs, ensure your containers are running and that you are using the correct Docker Compose project.
-- For more advanced log aggregation, consider using a log shipper (e.g., Fluentd, Filebeat) to forward Docker logs to your preferred log management platform.
-
---- 
+Want to ship logs to ELK, Loki, Datadog, etc.? Point a side-car (Fluent-Bit, Vector) at **either** `stdout` **or** `logs/combined.log` — both contain the same JSON lines. 

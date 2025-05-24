@@ -23,8 +23,12 @@ except ImportError:
         RESET_ALL = ''
 
 # Constants
+# Location /app/logs is mounted in every container via docker-compose so a single file is shared.
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs'))
-MAX_BYTES = 10 * 1024 * 1024  # 10MB
+# Ensure the directory exists at import time
+os.makedirs(LOG_DIR, exist_ok=True)
+# 10 MiB per file, keep five backups
+MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 BACKUP_COUNT = 5
 
 class LogSanitizer:
@@ -200,45 +204,64 @@ class EnhancedColorFormatter(logging.Formatter):
             msg = '\n' + colorize_json(pretty_json)
         return f"{level_str} {time_str_col} {context_str} {msg}"
 
-def setup_central_logger(level=logging.INFO):
-    """Set up a centralized logger with JSON formatting and stdout output only."""
+def init_logging(level: int | None = None) -> logging.Logger:
+    """Bootstrap application-wide logging. Safe to call multiple times."""
+
+    # Resolve desired log level (env var overrides default)
+    if level is None:
+        level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
+
     formatter = CustomJsonFormatter(
-        fmt='%(timestamp)s %(level)s %(name)s %(message)s %(source)s %(component)s',
+        fmt="%(timestamp)s %(level)s %(name)s %(message)s %(source)s %(component)s",
         json_ensure_ascii=False,
-        reserved_attrs=[]
+        reserved_attrs=[],
     )
 
+    root_logger = logging.getLogger()
+
+    # Idempotency – if we already added our sentinel handler, just return
+    for h in root_logger.handlers:
+        if getattr(h, "_is_central_handler", False):
+            root_logger.setLevel(level)
+            return logging.getLogger("app")
+
+    # Console / docker-stdout
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     console_handler.setLevel(level)
+    console_handler._is_central_handler = True  # sentinel attr
 
-    logger = logging.getLogger('app')
-    logger.setLevel(level)
-    logger.handlers = []
-    logger.addFilter(SanitizingFilter())
-    logger.addHandler(console_handler)
-    logger.propagate = False
+    # Shared rotating file – one file for all containers (same volume)
+    combined_log_path = os.path.join(LOG_DIR, "combined.log")
+    file_handler = RotatingFileHandler(
+        combined_log_path,
+        maxBytes=MAX_BYTES,
+        backupCount=BACKUP_COUNT,
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(level)
+    file_handler._is_central_handler = True
 
-    # Set root logger to use the same handler
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    # Reset existing handlers (avoid duplicate logs when reloaded)
     root_logger.handlers = []
-    root_logger.addHandler(console_handler)
+    root_logger.setLevel(level)
     root_logger.addFilter(SanitizingFilter())
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
 
-    # Configure third-party loggers
-    logging.getLogger('werkzeug').setLevel(logging.ERROR)
-    logging.getLogger('flask_limiter').setLevel(logging.ERROR)
-    logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
-    logging.getLogger('sqlalchemy.pool').setLevel(logging.INFO)
+    # Quiet noisy libraries
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    logging.getLogger("flask_limiter").setLevel(logging.ERROR)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.INFO)
 
-    try:
-        logger.info(f"Centralized logger initialized", extra={'component': 'app'})
-    except Exception as e:
-        console_handler.setLevel(logging.ERROR)
-        logger.error(f"Failed to initialize centralized logger: {str(e)}", extra={'component': 'app'})
-        raise
+    app_logger = logging.getLogger("app")
+    app_logger.info("Centralised logger initialised", extra={"component": "logger"})
+    return app_logger
 
-    return logger
+# Backwards-compatibility for existing imports
+setup_central_logger = init_logging
 
-app_logger = setup_central_logger() 
+# Initialise at import time so any early imports get the logger
+app_logger = init_logging() 

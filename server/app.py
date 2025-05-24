@@ -17,9 +17,6 @@ from limits.storage import RedisStorage
 import ssl
 from server.extensions import limiter
 
-print('sys.path:', sys.path)
-print('CWD:', os.getcwd())
-
 def create_app(test_config=None):
     """Create and configure the Flask application"""
     # Load environment variables
@@ -170,7 +167,6 @@ def create_app(test_config=None):
     def serve_react_app(path):
         static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'static'))
         file_path = os.path.join(static_dir, path)
-        print(f"Serving from: {file_path}")  # Debug log
         if path and os.path.exists(file_path):
             return send_from_directory(static_dir, path)
         return send_from_directory(static_dir, 'index.html')
