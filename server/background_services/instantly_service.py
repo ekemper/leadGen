@@ -1,6 +1,18 @@
 import os
 import requests
 from server.utils.logging_config import app_logger
+from server.utils.api_integration_rate_limiter import ApiIntegrationRateLimiter
+from server.config.queue_config import get_redis_connection, get_queue
+from server.models.job_status import JobStatus
+from server.models.job import Job
+import time
+from datetime import datetime
+
+# Configurable per-API rate limits
+API_RATE_LIMITS = {
+    'Instantly': {'max_requests': 100, 'period_seconds': 60},
+    # Add other APIs here
+}
 
 class InstantlyService:
     """Service for integrating with Instantly API to create leads."""
@@ -16,14 +28,31 @@ class InstantlyService:
             "Content-Type": "application/json"
         }
 
-    def create_lead(self, campaign_id, email, first_name, personalization):
-        payload = {
-            "campaign": campaign_id,
-            "email": email,
-            "firstName": first_name,
-            "personalization": personalization
-        }
+    def create_lead(self, job_id, campaign_id, email, first_name, personalization, api_key):
+        redis_client = get_redis_connection()
+        queue = get_queue()
+        limiter_cfg = API_RATE_LIMITS['Instantly']
+        limiter = ApiIntegrationRateLimiter(redis_client, 'Instantly', limiter_cfg['max_requests'], limiter_cfg['period_seconds'])
+        job = Job.query.get(job_id)
+        if not job:
+            # handle missing job
+            return
+        # Try to acquire a rate limit slot
+        if not limiter.acquire(block=False):
+            job.status = JobStatus.DELAYED.value
+            job.delay_reason = 'Rate limit exceeded for Instantly API'
+            job.updated_at = datetime.utcnow()
+            Job.query.session.commit()
+            # Requeue after delay (e.g., 10 seconds)
+            queue.enqueue_in(time.timedelta(seconds=10), self.create_lead, job_id, campaign_id, email, first_name, personalization, api_key)
+            return
         try:
+            payload = {
+                "campaign": campaign_id,
+                "email": email,
+                "firstName": first_name,
+                "personalization": personalization
+            }
             response = requests.post(self.API_URL, json=payload, headers=self.headers, timeout=30)
             response.raise_for_status()
             app_logger.info(f"Successfully created Instantly lead for {email} in campaign {campaign_id}")

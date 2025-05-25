@@ -14,6 +14,7 @@ import json
 import traceback
 import apify_client
 from server.background_services.mock_apify_client import MockApifyClient
+from server.utils.api_integration_rate_limiter import ApiIntegrationRateLimiter
 
 """
 IMPORTANT: Apify Python client (v1.10.0 and some other versions) expects webhook payload keys in snake_case (e.g., 'event_types', 'request_url', 'payload_template', 'idempotency_key'),
@@ -170,3 +171,31 @@ class ApolloService:
                     error_message=error_msg
                 )
             raise 
+
+# Example for future API integrations:
+# from server.utils.redis_rate_limiter import RedisRateLimiter
+# from server.config.queue_config import get_redis_connection, get_queue
+# from server.models.job_status import JobStatus
+# from server.models.job import Job
+# import time
+# from datetime import datetime
+#
+# API_RATE_LIMITS = {
+#     'SomeAPI': {'max_requests': 100, 'period_seconds': 60},
+# }
+#
+# def some_api_task(self, job_id, ...):
+#     redis_client = get_redis_connection()
+#     queue = get_queue()
+#     limiter_cfg = API_RATE_LIMITS['SomeAPI']
+#     limiter = ApiIntegrationRateLimiter(redis_client, 'SomeAPI', limiter_cfg['max_requests'], limiter_cfg['period_seconds'])
+#     job = Job.query.get(job_id)
+#     if not job:
+#         return
+#     if not limiter.acquire(block=False):
+#         job.status = JobStatus.DELAYED.value
+#         job.delay_reason = 'Rate limit exceeded for SomeAPI'
+#         job.updated_at = datetime.utcnow()
+#         Job.query.session.commit()
+#         queue.enqueue_in(time.timedelta(seconds=10), self.some_api_task, job_id, ...)
+#         return 

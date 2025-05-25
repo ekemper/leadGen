@@ -35,6 +35,7 @@ class JobSchema(Schema):
     completed_at = fields.DateTime(allow_none=True)
     updated_at = fields.DateTime(allow_none=True)
     error_details = fields.Dict(allow_none=True)
+    delay_reason = fields.Str(allow_none=True)
 
 class CampaignSchema(Schema):
     """Schema for campaign data."""

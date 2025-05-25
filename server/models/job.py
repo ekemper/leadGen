@@ -26,6 +26,7 @@ class Job(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     started_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
+    delay_reason = db.Column(db.Text, nullable=True)
 
     # Define valid job statuses using the enum
     VALID_STATUSES = [status.value for status in JobStatus]
@@ -80,7 +81,8 @@ class Job(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'delay_reason': self.delay_reason
         }
 
     def __repr__(self):

@@ -7,6 +7,9 @@ Unified script for local database management: reset, migrate, and seed.
 Usage:
     python scripts/reset_and_seed.py [--fresh-migrations] [--seed-only]
 
+Docker:
+    docker compose exec backend python scripts/reset_and_seed.py [--fresh-migrations] [--seed-only]
+
 Options:
     --fresh-migrations   Delete all migration files and generate a new initial migration
     --seed-only          Only seed the database (no reset or migration)

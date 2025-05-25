@@ -7,4 +7,5 @@ class JobStatus(str, Enum):
     IN_PROGRESS = 'IN_PROGRESS'
     RUNNING = 'RUNNING'
     COMPLETED = 'COMPLETED'
-    FAILED = 'FAILED' 
+    FAILED = 'FAILED'
+    DELAYED = 'DELAYED' 

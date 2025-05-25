@@ -68,6 +68,18 @@
           "class Campaign(db.Model):\n    def update_status(self, new_status):\n        valid_statuses = ['created', 'running']  # Redefined instead of using class constant"
         ]
       }
+    },
+    {
+      "id": "signature-change-consistency",
+      "description": "If a function signature or API call signature for a class or function changes, all references and related code throughout the codebase MUST be fully reviewed and updated for consistency with the new signature and usage patterns. This includes all direct and indirect call sites, documentation, tests, and integration points.",
+      "severity": "error",
+      "rationale": "This rule ensures that breaking changes to function or class signatures do not introduce runtime errors, regressions, or inconsistent behavior across the application. It is critical for maintaining codebase integrity, reliability, and developer trust.",
+      "enforcement": [
+        "Upon detecting a signature change, perform a comprehensive search for all usages.",
+        "Update all affected code to match the new signature.",
+        "Run all relevant tests to confirm that the change is fully integrated and does not break existing functionality.",
+        "Document the change in the relevant changelogs or migration notes."
+      ]
     }
   ],
   "robust_code_suggestions": {
