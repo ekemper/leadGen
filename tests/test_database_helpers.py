@@ -157,8 +157,8 @@ def test_verify_campaign_status_in_db(db_helpers, sample_campaign_data):
     # Verify initial status
     db_helpers.verify_campaign_status_in_db(campaign.id, CampaignStatus.CREATED)
     
-    # Test with string status
-    db_helpers.verify_campaign_status_in_db(campaign.id, "created")
+    # Test with string status - use uppercase
+    db_helpers.verify_campaign_status_in_db(campaign.id, "CREATED")
     
     # Update status and verify
     campaign.status = CampaignStatus.RUNNING
@@ -171,7 +171,7 @@ def test_verify_campaign_status_in_db_wrong_status(db_helpers, sample_campaign_d
     """Test campaign status verification fails with wrong status."""
     campaign = db_helpers.create_test_campaign_in_db(sample_campaign_data)
     
-    with pytest.raises(AssertionError, match="Expected status running"):
+    with pytest.raises(AssertionError, match="Expected status RUNNING"):
         db_helpers.verify_campaign_status_in_db(campaign.id, CampaignStatus.RUNNING)
 
 
@@ -245,8 +245,8 @@ def test_verify_job_status_in_db(db_helpers, sample_campaign_data):
     found_job = db_helpers.verify_job_status_in_db(job.id, JobStatus.PENDING)
     assert found_job.id == job.id
     
-    # Test with string status
-    db_helpers.verify_job_status_in_db(job.id, "pending")
+    # Test with string status - use uppercase
+    db_helpers.verify_job_status_in_db(job.id, "PENDING")
     
     # Update and verify
     job.status = JobStatus.COMPLETED
@@ -362,8 +362,8 @@ def test_enum_handling(db_helpers, sample_campaign_data):
         "status": CampaignStatus.RUNNING.value
     })
     
-    # Should work with string
-    db_helpers.verify_campaign_status_in_db(campaign.id, "running")
+    # Should work with string - use uppercase
+    db_helpers.verify_campaign_status_in_db(campaign.id, "RUNNING")
 
 
 def test_datetime_handling(db_helpers, sample_campaign_data):

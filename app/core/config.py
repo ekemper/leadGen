@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # External API Tokens
     # Added to fix critical configuration management failure where ApolloService
     # was refactored to use settings object but this field was never added
-    APIFY_API_TOKEN: str
+    APIFY_API_TOKEN: str = "test-token"  # Default for testing
     APOLLO_ACTOR_ID: str = "code_crafter/apollo-io-scraper"
 
     @field_validator(

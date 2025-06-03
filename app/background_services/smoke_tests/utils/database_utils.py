@@ -17,7 +17,7 @@ def cleanup_test_data(test_email):
         from app.core.config import settings
         
         # Use local database with Docker port mapping
-        db_url = f"postgresql://postgres:postgres@localhost:15432/fastapi_k8_proto"
+        db_url = f"postgresql://postgres:postgres@localhost:15432/lead_gen"
         engine = sqlalchemy.create_engine(db_url, pool_pre_ping=True)
         from sqlalchemy.orm import sessionmaker
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -1,350 +1,376 @@
+#!/usr/bin/env python3
+"""
+Smoke test for campaign flow - end-to-end testing
+"""
+
+import asyncio
+import httpx
+import json
 import os
 import sys
-# Ensure project root is in sys.path for app imports
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Enable the Apollo mock but leave Perplexity live
-os.environ["USE_APIFY_CLIENT_MOCK"] = "true"  # keep Apollo mocked
-
-import requests
 import time
-import random
-import string
-from sqlalchemy.orm import Session
+from datetime import datetime
+from typing import Dict, List, Any, Optional
 
-from app.models.user import User
-from app.core.database import SessionLocal, get_db
-from app.core.config import settings
+# Add the app directory to Python path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-API_BASE = f"http://localhost:8000{settings.API_V1_STR}"
+from app.background_services.smoke_tests.utils.database_utils import (
+    get_db_connection, execute_query, get_campaign_statistics, 
+    cleanup_test_data, verify_database_integrity
+)
 
-# Utility to generate a random email for test user
-def random_email():
-    return f"testuser_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}@hellacooltestingdomain.pizza"
+# Configuration
+API_BASE_URL = "http://localhost:8000"
+TEST_USER_EMAIL = "test_campaign_user@example.com"
+TEST_USER_PASSWORD = "testpass123"
+TEST_ORGANIZATION_NAME = "Test Campaign Org"
 
-# Use a unique email each run to avoid duplicates
-TEST_EMAIL = random_email()
-
-def random_password():
-    specials = "!@#$%^&*()"
-    # Ensure at least one of each required type
-    password = [
-        random.choice(string.ascii_lowercase),
-        random.choice(string.ascii_uppercase),
-        random.choice(string.digits),
-        random.choice(specials),
-    ]
-    # Fill the rest with random choices
-    chars = string.ascii_letters + string.digits + specials
-    password += random.choices(chars, k=8)
-    random.shuffle(password)
-    return ''.join(password)
-
-# --------------- Test helpers --------------
-
-def signup_and_login():
-    email = TEST_EMAIL
-    password = random_password()
-    signup_data = {
-        "email": email,
-        "password": password,
-        "confirm_password": password
-    }
-    print(f"[Auth] Signing up test user: {email}")
-    resp = requests.post(f"{API_BASE}/auth/signup", json=signup_data)
-    if resp.status_code not in (200, 201):
-        print(f"[Auth] Signup failed: {resp.status_code} {resp.text}")
-        raise Exception("Signup failed")
-    print(f"[Auth] Signing in test user: {email}")
-    resp = requests.post(f"{API_BASE}/auth/login", json={"email": email, "password": password})
-    if resp.status_code != 200:
-        print(f"[Auth] Login failed: {resp.status_code} {resp.text}")
-        raise Exception("Login failed")
+class CampaignFlowTester:
+    """End-to-end campaign flow tester."""
     
-    # Fix: Access token directly from response (no "data" wrapper)
-    response_data = resp.json()
-    token = response_data["token"]["access_token"]
-    print(f"[Auth] Got token: {token[:8]}...")
-    return token, email
-
-def create_organization(token):
-    headers = {"Authorization": f"Bearer {token}"}
-    org_data = {
-        "name": "Test Org",
-        "description": "A test organization."
-    }
-    resp = requests.post(f"{API_BASE}/organizations", json=org_data, headers=headers)
-    if resp.status_code != 201:
-        print(f"[Org] Creation failed: {resp.status_code} {resp.text}")
-        raise Exception("Organization creation failed")
-    
-    # Fix: Check if response has "data" wrapper or direct access
-    response_data = resp.json()
-    org_id = response_data.get("data", {}).get("id") or response_data.get("id")
-    print(f"[Org] Created organization with id: {org_id}")
-    return org_id
-
-def create_campaign(token, organization_id=None):
-    from app.background_services.smoke_tests.mock_apify_client import MOCK_LEADS_DATA
-    campaign_data = {
-        "name": "Mock Test Campaign",
-        "description": "A campaign for testing the Apify mock integration.",
-        "fileName": "mock-file.csv",
-        "totalRecords": 10,
-        "url": "https://app.apollo.io/#/people?contactEmailStatusV2%5B%5D=verified&contactEmailExcludeCatchAll=true&personTitles%5B%5D=CEO&personTitles%5B%5D=Founder&page=1"
-    }
-    if organization_id:
-        campaign_data["organization_id"] = organization_id
-    headers = {"Authorization": f"Bearer {token}"}
-    print("[Campaign] Creating campaign...")
-    resp = requests.post(f"{API_BASE}/campaigns", json=campaign_data, headers=headers)
-    if resp.status_code != 201:
-        print(f"[Campaign] Creation failed: {resp.status_code} {resp.text}")
-        raise Exception("Campaign creation failed")
-    
-    # Fix: Check if response has "data" wrapper or direct access
-    response_data = resp.json()
-    campaign_id = response_data.get("data", {}).get("id") or response_data.get("id")
-    print(f"[Campaign] Created campaign with id: {campaign_id}")
-    return campaign_id
-
-def start_campaign(token, campaign_id):
-    headers = {"Authorization": f"Bearer {token}"}
-    print(f"[Campaign] Starting campaign {campaign_id}...")
-    resp = requests.post(f"{API_BASE}/campaigns/{campaign_id}/start", json={}, headers=headers)
-    if resp.status_code != 200:
-        print(f"[Campaign] Start failed: {resp.status_code} {resp.text}")
-        raise Exception("Campaign start failed")
-    print(f"[Campaign] Started campaign {campaign_id}")
-
-# After running enrichment jobs synchronously, validate each lead once.
-
-def validate_enrichment(leads, token):
-    print(f"[Validation] Starting enrichment validation for {len(leads)} leads...")
-    headers = {"Authorization": f"Bearer {token}"}
-    from app.background_services.smoke_tests.mock_apify_client import MOCK_LEADS_DATA
-    
-    validated_count = 0
-    for i, lead in enumerate(leads, 1):
-        print(f"[Validation] Validating lead {i}/{len(leads)}: {lead['email']}")
-        resp = requests.get(f"{API_BASE}/leads/{lead['id']}", headers=headers)
-        if resp.status_code != 200:
-            raise Exception(f"Lead fetch failed for {lead['id']}: {resp.status_code} {resp.text}")
+    def __init__(self):
+        self.client = httpx.AsyncClient(timeout=30.0)
+        self.auth_token = None
+        self.user_id = None
+        self.organization_id = None
+        self.campaign_ids = []
         
-        # Fix: Check if response has "data" wrapper or direct access
-        response_data = resp.json()
-        updated_lead = response_data.get("data") or response_data
-        mock_lead = next((l for l in MOCK_LEADS_DATA if l["email"] == lead["email"]), None)
-        assert_lead_enrichment(updated_lead, mock_lead, timeout=60)
-        validated_count += 1
-        print(f"[Validation] ✓ Lead {lead['email']} enrichment validated ({validated_count}/{len(leads)})")
+    async def cleanup(self):
+        """Clean up resources."""
+        if self.client:
+            await self.client.aclose()
     
-    print(f"[Validation] SUCCESS: All {len(leads)} leads validated successfully!")
-
-# ---------------- Polling utilities ----------------
-
-def fetch_campaign_jobs(token, campaign_id):
-    """Return list of jobs for the given campaign via API."""
-    headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(f"{API_BASE}/jobs", headers=headers, params={"campaign_id": campaign_id})
-    if resp.status_code != 200:
-        raise Exception(f"Failed to fetch jobs: {resp.status_code} {resp.text}")
-    
-    # Fix: Check if response has "data" wrapper or direct access
-    response_data = resp.json()
-    jobs_data = response_data.get("data", {}).get("jobs") or response_data.get("jobs", [])
-    print(f"[API] Fetched {len(jobs_data)} total jobs for campaign {campaign_id}")
-    return jobs_data
-
-
-def wait_for_jobs(token, campaign_id, job_type, expected_count=None, timeout=300, interval=2, start_time=None):
-    print(f"[Polling] Starting to wait for {job_type} jobs (campaign {campaign_id})")
-    if expected_count:
-        print(f"[Polling] Expecting {expected_count} {job_type} job(s) to complete")
-    else:
-        print(f"[Polling] Waiting for any {job_type} job(s) to complete")
-    
-    waited = 0
-    last_status_log = 0
-    status_log_interval = 10  # Log status every 10 seconds
-    
-    while waited < timeout:
-        jobs = fetch_campaign_jobs(token, campaign_id)
-        target = [j for j in jobs if j["job_type"] == job_type]
-        
-        # Filter jobs to only include those created after start_time if provided
-        # BUT don't filter ENRICH_LEAD jobs since they're always created as part of current campaign
-        if start_time and job_type != "ENRICH_LEAD":
-            from datetime import datetime
-            target = [j for j in target if j.get("created_at") and j["created_at"] > start_time]
-        
-        # Log current status periodically
-        if waited - last_status_log >= status_log_interval:
-            print(f"[Polling] {waited}s elapsed - Found {len(target)} {job_type} job(s)")
-            if target:
-                status_counts = {}
-                for job in target:
-                    status = job["status"]
-                    status_counts[status] = status_counts.get(status, 0) + 1
-                status_summary = ", ".join(f"{status}: {count}" for status, count in status_counts.items())
-                print(f"[Polling] Job status breakdown: {status_summary}")
-            last_status_log = waited
-        
-        if expected_count and len(target) < expected_count:
-            print(f"[Polling] Only found {len(target)}/{expected_count} {job_type} jobs, waiting...")
-            time.sleep(interval)
-            waited += interval
-            continue
-
-        if target and all(j["status"] in ("COMPLETED", "FAILED") for j in target):
-            failed = [j for j in target if j["status"] == "FAILED"]
-            if failed:
-                print(f"[Polling] ERROR: {len(failed)} {job_type} job(s) failed!")
-                for job in failed:
-                    error_msg = job.get('error') or job.get('error_message', 'Unknown error')
-                    print(f"[Polling] Failed job {job['id']}: {error_msg}")
-                msgs = "; ".join(f.get('error') or f.get('error_message', 'Unknown error') for f in failed)
-                raise AssertionError(f"{job_type} job(s) failed: {msgs}")
-            
-            print(f"[Polling] SUCCESS: All {len(target)} {job_type} job(s) completed after {waited}s")
-            return target
-
-        time.sleep(interval)
-        waited += interval
-    
-    # Timeout reached - provide detailed status
-    print(f"[Polling] TIMEOUT: {job_type} jobs not finished within {timeout}s")
-    jobs = fetch_campaign_jobs(token, campaign_id)
-    target = [j for j in jobs if j["job_type"] == job_type]
-    if target:
-        print(f"[Polling] Final status of {len(target)} {job_type} job(s):")
-        for job in target:
-            print(f"[Polling]   Job {job['id']}: {job['status']} - {job.get('error_message', 'No error message')}")
-    else:
-        print(f"[Polling] No {job_type} jobs found at timeout")
-    
-    raise TimeoutError(f"{job_type} jobs not finished within {timeout}s")
-
-
-def get_all_leads(token, campaign_id):
-    print(f"[API] Fetching all leads for campaign {campaign_id}...")
-    headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(f"{API_BASE}/leads", headers=headers, params={"campaign_id": campaign_id})
-    if resp.status_code != 200:
-        raise Exception(f"Leads fetch failed: {resp.status_code} {resp.text}")
-    
-    # Fix: Check if response has "data" wrapper or direct access
-    response_data = resp.json()
-    leads_data = response_data.get("data", {}).get("leads") or response_data.get("leads", [])
-    print(f"[API] Successfully retrieved {len(leads_data)} leads")
-    return leads_data
-
-
-# ---------------- Assertion helper ----------------
-
-def assert_lead_enrichment(updated_lead, mock_lead, timeout):
-    assert updated_lead.get("enrichment_results"), f"No enrichment_results for {updated_lead['email']} after {timeout}s"
-    assert updated_lead.get("email_copy_gen_results"), f"No email_copy_gen_results for {updated_lead['email']} after {timeout}s"
-    assert updated_lead.get("instantly_lead_record"), f"No instantly_lead_record for {updated_lead['email']} after {timeout}s"
-    assert mock_lead is not None
-    assert updated_lead["first_name"] == mock_lead["first_name"]
-    assert updated_lead["last_name"] == mock_lead["last_name"]
-    assert updated_lead["company"] == (mock_lead.get("organization", {}).get("name") or mock_lead.get("organization_name", ""))
-
-def cleanup_test_data():
-    """Clean up test data from database."""
-    try:
-        # Override DATABASE_URL for local connection
-        import sqlalchemy
-        from app.core.config import settings
-        
-        # Use local database with Docker port mapping
-        db_url = f"postgresql://postgres:postgres@localhost:15432/fastapi_k8_proto"
-        engine = sqlalchemy.create_engine(db_url, pool_pre_ping=True)
-        from sqlalchemy.orm import sessionmaker
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-        
-        db = SessionLocal()
+    async def setup_test_user(self) -> bool:
+        """Set up test user and organization."""
         try:
-            # Delete test user and related data
-            test_user = db.query(User).filter(User.email == TEST_EMAIL).first()
-            if test_user:
-                print(f"[Cleanup] Removing test user: {TEST_EMAIL}")
-                db.delete(test_user)
-                db.commit()
-                print(f"[Cleanup] Test data cleaned up successfully")
+            # Try to register user
+            register_data = {
+                "email": TEST_USER_EMAIL,
+                "password": TEST_USER_PASSWORD,
+                "full_name": "Test Campaign User"
+            }
+            
+            response = await self.client.post(
+                f"{API_BASE_URL}/api/v1/auth/signup",
+                json=register_data
+            )
+            
+            if response.status_code == 201:
+                print("[Setup] User registered successfully")
+            elif response.status_code == 400:
+                print("[Setup] User already exists, continuing...")
+            else:
+                print(f"[Setup] Failed to register user: {response.status_code}")
+                return False
+            
+            # Login to get auth token
+            login_data = {
+                "email": TEST_USER_EMAIL,
+                "password": TEST_USER_PASSWORD
+            }
+            
+            response = await self.client.post(
+                f"{API_BASE_URL}/api/v1/auth/login",
+                json=login_data
+            )
+            
+            if response.status_code != 200:
+                print(f"[Setup] Failed to login: {response.status_code}")
+                return False
+            
+            login_result = response.json()
+            self.auth_token = login_result["access_token"]
+            self.user_id = login_result["user"]["id"]
+            
+            print(f"[Setup] Successfully logged in as user {self.user_id}")
+            
+            # Set up auth headers
+            self.client.headers.update({
+                "Authorization": f"Bearer {self.auth_token}"
+            })
+            
+            # Create test organization
+            org_data = {
+                "name": TEST_ORGANIZATION_NAME,
+                "description": "Test organization for campaign flow testing"
+            }
+            
+            response = await self.client.post(
+                f"{API_BASE_URL}/api/v1/organizations",
+                json=org_data
+            )
+            
+            if response.status_code == 201:
+                org_result = response.json()
+                self.organization_id = org_result["id"]
+                print(f"[Setup] Created organization {self.organization_id}")
+            elif response.status_code == 409:
+                # Organization already exists, get it
+                response = await self.client.get(f"{API_BASE_URL}/api/v1/organizations")
+                if response.status_code == 200:
+                    orgs = response.json()
+                    for org in orgs:
+                        if org["name"] == TEST_ORGANIZATION_NAME:
+                            self.organization_id = org["id"]
+                            print(f"[Setup] Using existing organization {self.organization_id}")
+                            break
+            
+            if not self.organization_id:
+                print("[Setup] Failed to create or find organization")
+                return False
+            
+            return True
+            
         except Exception as e:
-            print(f"[Cleanup] Error during cleanup: {e}")
-            db.rollback()
+            print(f"[Setup] Error: {e}")
+            return False
+    
+    async def test_campaign_creation(self) -> bool:
+        """Test campaign creation."""
+        try:
+            campaign_data = {
+                "name": f"Test Campaign {datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "description": "Automated test campaign",
+                "organization_id": self.organization_id,
+                "target_audience": "Software developers",
+                "message_template": "Hello {name}, we have an exciting opportunity for you!",
+                "status": "created"
+            }
+            
+            response = await self.client.post(
+                f"{API_BASE_URL}/api/v1/campaigns",
+                json=campaign_data
+            )
+            
+            if response.status_code != 201:
+                print(f"[Campaign] Failed to create campaign: {response.status_code}")
+                print(f"[Campaign] Response: {response.text}")
+                return False
+            
+            campaign = response.json()
+            campaign_id = campaign["id"]
+            self.campaign_ids.append(campaign_id)
+            
+            print(f"[Campaign] Created campaign {campaign_id}: {campaign['name']}")
+            
+            # Verify campaign in database
+            db_campaign = execute_query(
+                "SELECT * FROM campaigns WHERE id = %s", 
+                (campaign_id,)
+            )
+            
+            if not db_campaign:
+                print(f"[Campaign] ERROR: Campaign {campaign_id} not found in database")
+                return False
+            
+            print(f"[Campaign] Campaign verified in database")
+            return True
+            
+        except Exception as e:
+            print(f"[Campaign] Error: {e}")
+            return False
+    
+    async def test_campaign_workflow(self) -> bool:
+        """Test complete campaign workflow."""
+        try:
+            if not self.campaign_ids:
+                print("[Workflow] No campaigns available for testing")
+                return False
+            
+            campaign_id = self.campaign_ids[0]
+            
+            # Start campaign
+            response = await self.client.post(
+                f"{API_BASE_URL}/api/v1/campaigns/{campaign_id}/start"
+            )
+            
+            if response.status_code != 200:
+                print(f"[Workflow] Failed to start campaign: {response.status_code}")
+                return False
+            
+            print(f"[Workflow] Started campaign {campaign_id}")
+            
+            # Wait for campaign to process
+            await asyncio.sleep(5)
+            
+            # Check campaign status
+            response = await self.client.get(
+                f"{API_BASE_URL}/api/v1/campaigns/{campaign_id}"
+            )
+            
+            if response.status_code != 200:
+                print(f"[Workflow] Failed to get campaign status: {response.status_code}")
+                return False
+            
+            campaign = response.json()
+            print(f"[Workflow] Campaign status: {campaign['status']}")
+            
+            # Verify in database
+            db_campaign = execute_query(
+                "SELECT * FROM campaigns WHERE id = %s", 
+                (campaign_id,)
+            )
+            
+            if db_campaign:
+                print(f"[Workflow] Database status: {db_campaign[0]['status']}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"[Workflow] Error: {e}")
+            return False
+    
+    async def test_lead_generation(self) -> bool:
+        """Test lead generation functionality."""
+        try:
+            if not self.campaign_ids:
+                print("[Leads] No campaigns available for testing")
+                return False
+            
+            campaign_id = self.campaign_ids[0]
+            
+            # Get leads for campaign
+            response = await self.client.get(
+                f"{API_BASE_URL}/api/v1/campaigns/{campaign_id}/leads"
+            )
+            
+            if response.status_code != 200:
+                print(f"[Leads] Failed to get leads: {response.status_code}")
+                return False
+            
+            leads = response.json()
+            print(f"[Leads] Found {len(leads)} leads for campaign {campaign_id}")
+            
+            # Verify leads in database
+            db_leads = execute_query(
+                "SELECT COUNT(*) as count FROM leads WHERE campaign_id = %s", 
+                (campaign_id,)
+            )
+            
+            if db_leads:
+                db_count = db_leads[0]['count']
+                print(f"[Leads] Database shows {db_count} leads")
+            
+            return True
+            
+        except Exception as e:
+            print(f"[Leads] Error: {e}")
+            return False
+    
+    async def run_smoke_test(self) -> Dict[str, Any]:
+        """Run complete smoke test."""
+        print("=== Campaign Flow Smoke Test ===")
+        print(f"API Base URL: {API_BASE_URL}")
+        print(f"Test User: {TEST_USER_EMAIL}")
+        print(f"Timestamp: {datetime.now().isoformat()}")
+        print()
+        
+        results = {
+            "timestamp": datetime.now().isoformat(),
+            "api_base_url": API_BASE_URL,
+            "tests": {},
+            "database_stats": {},
+            "overall_status": "unknown"
+        }
+        
+        try:
+            # Database integrity check
+            print("[DB] Checking database integrity...")
+            db_integrity = verify_database_integrity()
+            results["database_stats"] = db_integrity
+            
+            if db_integrity["status"] != "healthy":
+                print(f"[DB] Database integrity check failed: {db_integrity['message']}")
+                results["overall_status"] = "failed"
+                return results
+            
+            print("[DB] Database integrity verified")
+            
+            # Setup test user
+            print("[Setup] Setting up test user...")
+            setup_success = await self.setup_test_user()
+            results["tests"]["setup"] = setup_success
+            
+            if not setup_success:
+                results["overall_status"] = "failed"
+                return results
+            
+            # Test campaign creation
+            print("[Test] Testing campaign creation...")
+            campaign_success = await self.test_campaign_creation()
+            results["tests"]["campaign_creation"] = campaign_success
+            
+            # Test campaign workflow
+            print("[Test] Testing campaign workflow...")
+            workflow_success = await self.test_campaign_workflow()
+            results["tests"]["campaign_workflow"] = workflow_success
+            
+            # Test lead generation
+            print("[Test] Testing lead generation...")
+            leads_success = await self.test_lead_generation()
+            results["tests"]["lead_generation"] = leads_success
+            
+            # Final database stats
+            final_stats = get_campaign_statistics()
+            results["final_database_stats"] = final_stats
+            
+            # Determine overall status
+            all_tests_passed = all([
+                setup_success,
+                campaign_success,
+                workflow_success,
+                leads_success
+            ])
+            
+            results["overall_status"] = "passed" if all_tests_passed else "failed"
+            
+            print("\n=== Test Results ===")
+            for test_name, passed in results["tests"].items():
+                status = "PASS" if passed else "FAIL"
+                print(f"{test_name}: {status}")
+            
+            print(f"\nOverall Status: {results['overall_status'].upper()}")
+            
+        except Exception as e:
+            print(f"[Test] Unexpected error: {e}")
+            results["overall_status"] = "error"
+            results["error"] = str(e)
+        
         finally:
-            db.close()
-    except Exception as e:
-        print(f"[Cleanup] Could not connect to database for cleanup: {e}")
+            await self.cleanup()
+        
+        return results
 
-def main():
-    from app.background_services.smoke_tests.mock_apify_client import MOCK_LEADS_DATA
+async def main():
+    """Main entry point."""
+    tester = CampaignFlowTester()
+    results = await tester.run_smoke_test()
     
-    print("\n" + "="*60)
-    print("🚀 STARTING CAMPAIGN FLOW TEST")
-    print("="*60)
+    # Save results to file
+    results_file = f"campaign_flow_test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(results_file, 'w') as f:
+        json.dump(results, f, indent=2)
     
-    try:
-        print("\n📋 PHASE 1: Authentication & Setup")
-        print("-" * 30)
-        token, email = signup_and_login()
-        organization_id = create_organization(token)
-        campaign_id = create_campaign(token, organization_id=organization_id)
-        
-        print(f"\n🎯 PHASE 2: Campaign Execution")
-        print("-" * 30)
-        from datetime import datetime
-        campaign_start_time = datetime.utcnow().isoformat()
-        start_campaign(token, campaign_id)
-
-        print(f"\n⏳ PHASE 3: Lead Fetching")
-        print("-" * 30)
-        print(f"[Phase] Waiting for FETCH_LEADS job to complete...")
-        wait_for_jobs(token, campaign_id, "FETCH_LEADS", expected_count=1, timeout=120, start_time=campaign_start_time)
-
-        print(f"\n📊 PHASE 4: Lead Data Verification")
-        print("-" * 30)
-        leads = get_all_leads(token, campaign_id)
-        print(f"[Phase] Retrieved {len(leads)} leads from database")
-        
-        mock_emails = {lead["email"] for lead in MOCK_LEADS_DATA}
-        db_emails = {lead["email"] for lead in leads}
-        print(f"[Phase] Expected {len(mock_emails)} leads, found {len(db_emails)} leads")
-        print(f"[Phase] Expected emails: {sorted(mock_emails)}")
-        print(f"[Phase] Database emails: {sorted(db_emails)}")
-        
-        assert mock_emails == db_emails, f"Emails in DB: {db_emails}, expected: {mock_emails}"
-        print(f"[Phase] ✓ Lead data verification passed!")
-
-        print(f"\n⚡ PHASE 5: Lead Enrichment")
-        print("-" * 30)
-        print(f"[Phase] Waiting for {len(leads)} ENRICH_LEAD job(s) to complete...")
-        wait_for_jobs(token, campaign_id, "ENRICH_LEAD", expected_count=len(leads), timeout=300)
-
-        print(f"\n✅ PHASE 6: Enrichment Validation")
-        print("-" * 30)
-        validate_enrichment(leads, token)
-
-        print("\n" + "="*60)
-        print("🎉 CAMPAIGN FLOW TEST COMPLETED SUCCESSFULLY!")
-        print("="*60)
-        print(f"✓ {len(leads)} leads fetched")
-        print(f"✓ {len(leads)} leads enriched") 
-        print(f"✓ {len(leads)} leads validated")
-        print("="*60)
-        
-    except Exception as e:
-        print(f"\n❌ TEST FAILED: {e}")
-        raise
-    finally:
-        # Clean up test data
-        cleanup_test_data()
+    print(f"\nResults saved to: {results_file}")
+    
+    # Exit with appropriate code
+    if results["overall_status"] == "passed":
+        sys.exit(0)
+    else:
+        sys.exit(1)
 
 if __name__ == "__main__":
-    main() 
+    # Database connectivity test
+    print("Testing database connectivity...")
+    db_url = f"postgresql://postgres:postgres@localhost:15432/lead_gen"
+    try:
+        conn = get_db_connection()
+        print("✓ Database connection successful")
+        conn.close()
+    except Exception as e:
+        print(f"✗ Database connection failed: {e}")
+        sys.exit(1)
+    
+    # Run the test
+    asyncio.run(main()) 

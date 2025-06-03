@@ -1,7 +1,7 @@
 # Auth Business Logic Migration Guide
 
 ## Overview
-This document provides step-by-step instructions for migrating authentication business logic from the deprecated Flask application files to the current FastAPI application (`fastapi-k8-proto`). The migration preserves only the business logic while adapting to FastAPI patterns and conventions.
+This document provides step-by-step instructions for migrating authentication business logic from the deprecated Flask application files to the current FastAPI application (`lead-gen`). The migration preserves only the business logic while adapting to FastAPI patterns and conventions.
 
 ## Source Files Analysis
 - `depricated-auth-service.py` - Contains AuthService class with authentication business logic

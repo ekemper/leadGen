@@ -650,7 +650,7 @@ filebeat.inputs:
   json.keys_under_root: true
   json.add_error_key: true
   fields:
-    service: fastapi-k8-proto
+    service: lead-gen
   fields_under_root: true
 
 processors:
@@ -669,22 +669,44 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-- job_name: fastapi-k8-proto
-  static_configs:
-  - targets:
-      - localhost
-    labels:
-      job: fastapi-k8-proto
-      __path__: /app/logs/combined.log
-  pipeline_stages:
-  - json:
-      expressions:
-        level: level
-        component: component
-        correlation_id: correlation_id
-  - labels:
-      level:
-      component:
+  - job_name: 'fastapi-logs'
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    params:
+      service: ['lead-gen']
+      
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Example rule for log-based alerting
+groups:
+  - name: fastapi-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: increase(log_entries_total{level="ERROR", service="lead-gen"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected for lead-gen service"
+          
+  - name: service-health
+    rules:
+      - alert: ServiceDown
+        expr: up{job="lead-gen"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "lead-gen service is down"
 ```
 
 **Splunk**:

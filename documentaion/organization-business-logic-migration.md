@@ -1,6 +1,6 @@
 # Organization Business Logic Migration Guide
 
-This document provides step-by-step instructions for migrating the organization business logic from the Flask-based leadGen application to the FastAPI-based fastapi-k8-proto application.
+This document provides step-by-step instructions for migrating the organization business logic from the Flask-based leadGen application to the FastAPI-based lead-gen application.
 
 ## Overview
 

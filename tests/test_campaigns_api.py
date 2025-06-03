@@ -805,8 +805,9 @@ def test_get_campaign_instantly_analytics_success(authenticated_client, db_sessi
     assert data["campaign_id"] == campaign_id
     assert data["leads_count"] == authenticated_campaign_payload["totalRecords"]
     
-    # Since we have a mocked Instantly service, error should be None for successful analytics
-    assert data["error"] is None
+    # Since campaign is created in test WITH Instantly service integration (mocked),
+    # and the mock service returns successful analytics, there should be no error
+    assert data["error"] is None  # Mock service works successfully
 
 def test_get_campaign_instantly_analytics_not_found(authenticated_client, db_session):
     """Test campaign Instantly analytics retrieval for non-existent campaign."""
@@ -879,8 +880,8 @@ def test_campaign_stats_error_handling(authenticated_client, db_session, authent
     response = authenticated_client.get(f"/api/v1/campaigns/{campaign_id}/instantly/analytics")
     assert response.status_code == 200
     analytics_data = response.json()["data"]
-    # Campaign was created with mocked Instantly ID, so no error should occur
-    assert analytics_data["error"] is None
+    # Campaign created in test WITH Instantly integration (mocked), so no error expected
+    assert analytics_data["error"] is None  # Mock service works successfully
     assert analytics_data["campaign_id"] == campaign_id
 
 # ---------------------------------------------------------------------------

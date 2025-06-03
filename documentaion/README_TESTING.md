@@ -1,4 +1,4 @@
-# Testing in fastapi-k8-proto
+# Testing in lead-gen
 
 This project supports two main methods for running tests in Docker:
 

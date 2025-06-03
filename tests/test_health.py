@@ -6,7 +6,7 @@ client = TestClient(app)
 def test_health_check():
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy", "service": "fastapi-k8-proto"}
+    assert response.json() == {"status": "healthy", "service": "lead-gen"}
 
 def test_readiness_check():
     response = client.get("/api/v1/health/ready")

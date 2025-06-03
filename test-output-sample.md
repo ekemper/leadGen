@@ -22,9 +22,9 @@ Do you want to continue? (y/N): y
 [SUCCESS] Prerequisites validated
 [STEP] Validating environment and container status...
 [INFO] Found containers:
-[INFO]   API: fastapi-k8-proto-api-1
-[INFO]   PostgreSQL: fastapi-k8-proto-postgres-1
-[INFO]   Redis: fastapi-k8-proto-redis-1
+[INFO]   API: lead-gen-api-1
+[INFO]   PostgreSQL: lead-gen-postgres-1
+[INFO]   Redis: lead-gen-redis-1
 [STEP] Testing database connectivity...
 Database connection successful
 [STEP] Testing Redis connectivity...
@@ -42,25 +42,25 @@ Redis connection successful
 ===============================================
 [STEP] Performing full Docker containers rebuild...
 [INFO] Stopping and removing all containers, networks, and volumes...
-WARN[0000] /home/ek/dev/fastapi-k8-proto/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
+WARN[0000] /home/ek/dev/leadGen/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
 [+] Running 15/15
- ✔ Container fastapi-k8-proto-frontend-1  Removed                                                                                                                                                                                     0.4s 
- ✔ Container fastapi-k8-proto-flower-1    Removed                                                                                                                                                                                     0.5s 
- ✔ Container fastapi-k8-proto-worker-7    Removed                                                                                                                                                                                     2.4s 
- ✔ Container fastapi-k8-proto-worker-2    Removed                                                                                                                                                                                     2.8s 
- ✔ Container fastapi-k8-proto-worker-4    Removed                                                                                                                                                                                     2.9s 
- ✔ Container fastapi-k8-proto-worker-6    Removed                                                                                                                                                                                     2.6s 
- ✔ Container fastapi-k8-proto-worker-5    Removed                                                                                                                                                                                     3.0s 
- ✔ Container fastapi-k8-proto-worker-1    Removed                                                                                                                                                                                     2.9s 
- ✔ Container fastapi-k8-proto-worker-8    Removed                                                                                                                                                                                     3.0s 
- ✔ Container fastapi-k8-proto-worker-3    Removed                                                                                                                                                                                     3.0s 
- ✔ Container fastapi-k8-proto-api-1       Removed                                                                                                                                                                                    10.3s 
- ✔ Container fastapi-k8-proto-postgres-1  Removed                                                                                                                                                                                     0.3s 
- ✔ Container fastapi-k8-proto-redis-1     Removed                                                                                                                                                                                     0.4s 
- ✔ Volume fastapi-k8-proto_postgres_data  Removed                                                                                                                                                                                     0.0s 
- ✔ Network fastapi-k8-proto_default       Removed                                                                                                                                                                                     0.2s 
+ ✔ Container lead-gen-frontend-1  Removed                                                                                                                                                                                     0.4s 
+ ✔ Container lead-gen-flower-1    Removed                                                                                                                                                                                     0.5s 
+ ✔ Container lead-gen-worker-7    Removed                                                                                                                                                                                     2.4s 
+ ✔ Container lead-gen-worker-2    Removed                                                                                                                                                                                     2.8s 
+ ✔ Container lead-gen-worker-4    Removed                                                                                                                                                                                     2.9s 
+ ✔ Container lead-gen-worker-6    Removed                                                                                                                                                                                     2.6s 
+ ✔ Container lead-gen-worker-5    Removed                                                                                                                                                                                     3.0s 
+ ✔ Container lead-gen-worker-1    Removed                                                                                                                                                                                     2.9s 
+ ✔ Container lead-gen-worker-8    Removed                                                                                                                                                                                     3.0s 
+ ✔ Container lead-gen-worker-3    Removed                                                                                                                                                                                     3.0s 
+ ✔ Container lead-gen-api-1       Removed                                                                                                                                                                                    10.3s 
+ ✔ Container lead-gen-postgres-1  Removed                                                                                                                                                                                     0.3s 
+ ✔ Container lead-gen-redis-1     Removed                                                                                                                                                                                     0.4s 
+ ✔ Volume lead-gen_postgres_data  Removed                                                                                                                                                                                     0.0s 
+ ✔ Network lead-gen_default       Removed                                                                                                                                                                                     0.2s 
 [INFO] Building and starting containers from scratch...
-WARN[0000] /home/ek/dev/fastapi-k8-proto/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
+WARN[0000] /home/ek/dev/leadGen/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
 Compose can now delegate builds to bake for better performance.
  To do so, set COMPOSE_BAKE=true.
 [+] Building 5.6s (44/48)                                                                                                                                                                                             docker:desktop-linux
@@ -108,16 +108,16 @@ Compose can now delegate builds to bake for better performance.
  => => exporting config sha256:3b24f83f2e34ee4b5ef2656a642c1725337344b0efb13231c3b5e256a15a55cb                                                                                                                                       0.1s
  => => exporting attestation manifest sha256:688dabfbc0c50c7c426049832fb644b933a5a79d8a9088844a11712b072cc61a                                                                                                                         0.1s
  => => exporting manifest list sha256:21baa2816b7a56d6208f677441d3801256ad9e55f5a83cf7f98ec17838191f5d                                                                                                                                0.1s
- => => naming to docker.io/library/fastapi-k8-proto-worker:latest                                                                                                                                                                     0.0s
- => => unpacking to docker.io/library/fastapi-k8-proto-worker:latest                                                                                                                                                                  0.1s
+ => => naming to docker.io/library/lead-gen-worker:latest                                                                                                                                                                     0.0s
+ => => unpacking to docker.io/library/lead-gen-worker:latest                                                                                                                                                                  0.1s
  => [flower] exporting to image                                                                                                                                                                                                       0.9s
  => => exporting layers                                                                                                                                                                                                               0.3s
  => => exporting manifest sha256:35c4fb0f43f01c70cfd0e714064860598f6e514b6d935851cb88b33837a50155                                                                                                                                     0.1s
  => => exporting config sha256:9caf88fffad633fddc0c0863dcb160d51a51f86cdf2e7e4bc3bfd4c51e55ef3e                                                                                                                                       0.1s
  => => exporting attestation manifest sha256:3f64d55fe5f550d9f2e1b59a0ac39e63b3f51835205aae93481c1b2dc3fbef3b                                                                                                                         0.1s
  => => exporting manifest list sha256:6128d6ca913a8e236b854b2fd87052d37e143daa0566938e42bf1cf125b68725                                                                                                                                0.0s
- => => naming to docker.io/library/fastapi-k8-proto-flower:latest                                                                                                                                                                     0.0s
- => => unpacking to docker.io/library/fastapi-k8-proto-flower:latest                                                                                                                                                                  0.1s
+ => => naming to docker.io/library/lead-gen-flower:latest                                                                                                                                                                     0.0s
+ => => unpacking to docker.io/library/lead-gen-flower:latest                                                                                                                                                                  0.1s
  => [worker] resolving provenance for metadata file                                                                                                                                                                                   0.0s
  => [flower] resolving provenance for metadata file                                                                                                                                                                                   0.0s
  => [api] exporting to image                                                                                                                                                                                                          0.7s
@@ -126,8 +126,8 @@ Compose can now delegate builds to bake for better performance.
  => => exporting config sha256:c9da0255703744c2011139157228646d3f9a5f118d593a8ea0ba90b64e7519f8                                                                                                                                       0.0s
  => => exporting attestation manifest sha256:6b8dd5523b6fb13c524c0862dd48d87052f392800e6e8fbe1c630efe7357c360                                                                                                                         0.0s
  => => exporting manifest list sha256:eba6a1578df5f128fdbaa0aae57b5b4a4c18baa8f0e9a6e631e902d692d7f5a7                                                                                                                                0.0s
- => => naming to docker.io/library/fastapi-k8-proto-api:latest                                                                                                                                                                        0.0s
- => => unpacking to docker.io/library/fastapi-k8-proto-api:latest                                                                                                                                                                     0.2s
+ => => naming to docker.io/library/lead-gen-api:latest                                                                                                                                                                        0.0s
+ => => unpacking to docker.io/library/lead-gen-api:latest                                                                                                                                                                     0.2s
  => [api] resolving provenance for metadata file                                                                                                                                                                                      0.0s
  => [frontend internal] load build definition from Dockerfile                                                                                                                                                                         0.0s
  => => transferring dockerfile: 582B                                                                                                                                                                                                  0.0s
@@ -150,8 +150,8 @@ Compose can now delegate builds to bake for better performance.
  => => exporting config sha256:c083fa3e39e10a2512f239373880697a906de494c4a0dc716c6b723611c36b2a                                                                                                                                       0.0s
  => => exporting attestation manifest sha256:1e71d815a4900f583092ca79d86713196055bbe5b6e9253e7d7fa832f9f13ff3                                                                                                                         0.0s
  => => exporting manifest list sha256:55f1b9699a014cba7f667c4bbb46fd9eb649fbe3e3e1153b11e5389ecd54674f                                                                                                                                0.0s
- => => naming to docker.io/library/fastapi-k8-proto-frontend:latest                                                                                                                                                                   0.0s
- => => unpacking to docker.io/library/fastapi-k8-proto-frontend:latest                                                                                                                                                                0.0s
+ => => naming to docker.io/library/lead-gen-frontend:latest                                                                                                                                                                   0.0s
+ => => unpacking to docker.io/library/lead-gen-frontend:latest                                                                                                                                                                0.0s
  => [frontend] resolving provenance for metadata file                                                                                                                                                                                 0.0s
 [+] Running 6/6
  ✔ api                                      Built                                                                                                                                                                                     0.0s 
@@ -160,27 +160,27 @@ Compose can now delegate builds to bake for better performance.
  ✔ flower                                   Built                                                                                                                                                                                     0.0s 
  ✔ frontend                                 Built                                                                                                                                                                                     0.0s 
  ✔ worker                                   Built                                                                                                                                                                                     0.0s 
- ✔ Network fastapi-k8-proto_default         Created                                                                                                                                                                                   0.0s 
- ✔ Volume "fastapi-k8-proto_postgres_data"  Created                                                                                                                                                                                   0.0s 
- ✔ Container fastapi-k8-proto-redis-1       Healthy                                                                                                                                                                                  13.5s 
- ✔ Container fastapi-k8-proto-postgres-1    Healthy                                                                                                                                                                                  13.5s 
- ✔ Container fastapi-k8-proto-worker-8      Started                                                                                                                                                                                  15.6s 
- ✔ Container fastapi-k8-proto-flower-1      Started                                                                                                                                                                                   2.9s 
- ✔ Container fastapi-k8-proto-api-1         Started                                                                                                                                                                                  13.5s 
- ✔ Container fastapi-k8-proto-worker-4      Started                                                                                                                                                                                  15.3s 
- ✔ Container fastapi-k8-proto-worker-5      Started                                                                                                                                                                                  15.0s 
- ✔ Container fastapi-k8-proto-worker-1      Started                                                                                                                                                                                  13.8s 
- ✔ Container fastapi-k8-proto-worker-6      Started                                                                                                                                                                                  14.4s 
- ✔ Container fastapi-k8-proto-worker-3      Started                                                                                                                                                                                  13.9s 
- ✔ Container fastapi-k8-proto-worker-2      Started                                                                                                                                                                                  14.1s 
- ✔ Container fastapi-k8-proto-worker-7      Started                                                                                                                                                                                  13.5s 
- ✔ Container fastapi-k8-proto-frontend-1    Started                                                                                                                                                                                  13.0s 
+ ✔ Network lead-gen_default         Created                                                                                                                                                                                   0.0s 
+ ✔ Volume "lead-gen_postgres_data"  Created                                                                                                                                                                                   0.0s 
+ ✔ Container lead-gen-redis-1       Healthy                                                                                                                                                                                  13.5s 
+ ✔ Container lead-gen-postgres-1    Healthy                                                                                                                                                                                  13.5s 
+ ✔ Container lead-gen-worker-8      Started                                                                                                                                                                                  15.6s 
+ ✔ Container lead-gen-flower-1      Started                                                                                                                                                                                   2.9s 
+ ✔ Container lead-gen-api-1         Started                                                                                                                                                                                  13.5s 
+ ✔ Container lead-gen-worker-4      Started                                                                                                                                                                                  15.3s 
+ ✔ Container lead-gen-worker-5      Started                                                                                                                                                                                  15.0s 
+ ✔ Container lead-gen-worker-1      Started                                                                                                                                                                                  13.8s 
+ ✔ Container lead-gen-worker-6      Started                                                                                                                                                                                  14.4s 
+ ✔ Container lead-gen-worker-3      Started                                                                                                                                                                                  13.9s 
+ ✔ Container lead-gen-worker-2      Started                                                                                                                                                                                  14.1s 
+ ✔ Container lead-gen-worker-7      Started                                                                                                                                                                                  13.5s 
+ ✔ Container lead-gen-frontend-1    Started                                                                                                                                                                                  13.0s 
 [STEP] Waiting for services to be healthy...
-WARN[0000] /home/ek/dev/fastapi-k8-proto/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
+WARN[0000] /home/ek/dev/leadGen/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
 [INFO] Updated container names after rebuild:
-[INFO]   API: fastapi-k8-proto-api-1
-[INFO]   PostgreSQL: fastapi-k8-proto-postgres-1
-[INFO]   Redis: fastapi-k8-proto-redis-1
+[INFO]   API: lead-gen-api-1
+[INFO]   PostgreSQL: lead-gen-postgres-1
+[INFO]   Redis: lead-gen-redis-1
 [SUCCESS] Containers rebuilt and started successfully
 
 ===============================================
@@ -474,7 +474,7 @@ Redis cache is empty (verified)
 [API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
 [API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
 [API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
-[API] Fetched 9 total jobs for campaign c2831e0f-06ba-452a-b15e-4258f58373ed across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
 [Monitor CB] ✅ Campaign #7 completed all 8 jobs
 [API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
 [API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
@@ -519,10 +519,6 @@ Redis cache is empty (verified)
 [API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
 [API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
 [API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
-
-[Monitor CB] === Status Update (after 15s) ===
-[Status] Campaigns: 2 complete, 1 processing, 0 failed / 10 total
-[Status] Jobs: 22 complete, 0 failed / 87 total (25.3% complete)
 [API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
 [API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
 [API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
@@ -555,94 +551,553 @@ Redis cache is empty (verified)
 [API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
 [API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
 [API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
-
-[Monitor CB] Performing circuit breaker health check (after 31s)...
-[Monitor CB] ⚠️  CRITICAL: 1 service(s) not in 'closed' state:
-[Monitor CB]     OPENAI: half_open
-[Monitor CB]       Pause info: {'paused_at': '2025-06-03T03:19:14.994894', 'service': 'openai', 'reason': 'circuit_breaker_open'}
-[Monitor CB] ❌ STOPPING TEST: 64 jobs paused due to circuit breaker issues
-[Monitor CB] Paused jobs by service: {'perplexity': 0, 'openai': 64, 'apollo': 0, 'instantly': 0, 'millionverifier': 0}
-
-================================================================================
-❌ TEST STOPPED: CIRCUIT BREAKER TRIGGERED
-================================================================================
-
-🔍 Circuit Breaker Status:
-  ⚠️  OPENAI: half_open
-      Reason: {'paused_at': '2025-06-03T03:19:14.994894', 'service': 'openai', 'reason': 'circuit_breaker_open'}
-      Failures: 7/5
-
-📊 Campaigns Paused: 1
-  🛑 Campaign multiple_campaigns_affected_by_openai
-      Message: Jobs paused due to openai circuit breaker in half_open state
-      Reason: Circuit breaker half_open for openai: {'paused_at': '2025-06-03T03:19:14.994894', 'service': 'openai', 'reason': 'circuit_breaker_open'}
-
-💡 This indicates a real service failure occurred during testing.
-💡 Check service health and retry the test when services are restored.
-================================================================================
-
-🔍 Final Campaign Status Check (Post-Failure)
---------------------------------------------------
-
-🔍 Post-Failure Campaign Status: Campaign Status Summary
---------------------------------------------------
-📊 Status Distribution (10 campaigns):
-   🟢 RUNNING: 10
-
-================================================================================
-🛑 TEST RESULT: SERVICE FAILURE DETECTED
-================================================================================
-📋 Summary:
-  • Test execution was stopped due to circuit breaker activation
-  • This indicates real service failures occurred during test execution
-  • The test infrastructure is working correctly by detecting service issues
-  • This is NOT a test failure - it's successful service failure detection
-
-💡 Recommended Actions:
-  1. Check service health and logs to identify the root cause
-  2. Wait for services to recover and circuit breakers to close
-  3. Retry the test once services are stable
-================================================================================
-[MockApifyClient] Reset working dataset to original state: 500 records available
-[MockApifyClient] System reset for new test run
-[Cleanup] Error during cleanup: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 15432 failed: Connection refused
-        Is the server running on that host and accepting TCP/IP connections?
-connection to server at "localhost" (127.0.0.1), port 15432 failed: Connection refused
-        Is the server running on that host and accepting TCP/IP connections?
-
-(Background on this error at: https://sqlalche.me/e/20/e3q8)
-=================== TEST OUTPUT END ===================
-
-[SUCCESS] Test execution completed successfully
-
-===============================================
- PHASE 7: RESULTS VALIDATION
-===============================================
-[STEP] Validating test results...
-[STEP] Checking database for test data...
-Campaigns created: 10
-Leads created: 87
-Jobs created: 97
-Organizations created: 1
-Users created: 1
-Database validation successful
-[SUCCESS] Results validation completed
-
-===============================================
- EXECUTION SUMMARY
-===============================================
-[SUCCESS] 🎉 Concurrent campaigns test completed successfully!
-[INFO] ✅ Log file truncated
-[INFO] ✅ Containers rebuilt and started fresh
-[INFO] ✅ Database tables cleared
-[INFO] ✅ Redis cache cleared
-[INFO] ✅ Test executed successfully
-[INFO] ✅ Results validated
-
-[INFO] Next steps:
-[INFO]   - Review the test output above for detailed results
-[INFO]   - Check logs/combined.log for application logs
-[INFO]   - Use 'docker exec fastapi-k8-proto-api-1 python -c "from app.core.database import SessionLocal; ..."' to query test data
-
-[SUCCESS] Reset and test execution completed successfully! 🚀
-➜  fastapi-k8-proto git:(main) ✗ 
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b5dea9c-2538-43cd-a1b8-e81a13377cb6 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 244c6868-e09d-4731-9190-a168dfc4d1a1 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 20898252-0d5e-4e6d-a609-dc9c66017ead across 1 page(s)
+[API] Fetched 11 total jobs for campaign 75de7ae7-f97a-488e-8e8a-c10337350b98 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 2d075653-74b7-4720-8696-a8bb6191f886 across 1 page(s)
+[API] Fetched 11 total jobs for campaign 4733313a-56f1-4d02-ab12-d4e463366f50 across 1 page(s)
+[API] Fetched 11 total jobs for campaign c5b2f798-923d-4026-8601-07cb0ba3b8c9 across 1 page(s)
+[API] Fetched 10 total jobs for campaign 052711d8-0ef4-4a94-9a4c-59cecf933c42 across 1 page(s)
+[API] Fetched 9 total jobs for campaign 6b

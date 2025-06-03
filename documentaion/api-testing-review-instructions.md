@@ -1,7 +1,7 @@
 # API Testing Review and Update Instructions
 
 ## Overview
-This document provides comprehensive step-by-step instructions for an AI agent to review and update the API testing logic for the fastapi-k8-proto application. The application now has protected endpoints with JWT authentication, and all existing API tests need to be updated to handle authentication properly.
+This document provides comprehensive step-by-step instructions for an AI agent to review and update the API testing logic for the lead-gen application. The application now has protected endpoints with JWT authentication, and all existing API tests need to be updated to handle authentication properly.
 
 ## Current State Analysis
 - **Authentication System**: JWT-based authentication with middleware protection

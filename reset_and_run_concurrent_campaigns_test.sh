@@ -40,9 +40,9 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Container names (will be verified dynamically)
-API_CONTAINER="fastapi-k8-proto-api-1"
-POSTGRES_CONTAINER="fastapi-k8-proto-postgres-1"
-REDIS_CONTAINER="fastapi-k8-proto-redis-1"
+API_CONTAINER="lead-gen-api-1"
+POSTGRES_CONTAINER="lead-gen-postgres-1"
+REDIS_CONTAINER="lead-gen-redis-1"
 
 # Log file location
 LOG_FILE="./logs/combined.log"
@@ -129,16 +129,16 @@ validate_environment() {
     print_step "Validating environment and container status..."
     
     # Check if containers are running
-    if ! docker ps | grep -q "fastapi-k8-proto-api"; then
+    if ! docker ps | grep -q "lead-gen-api"; then
         print_warning "API container not running, attempting to start services..."
         docker compose up -d
         sleep 10
     fi
     
     # Get actual container names
-    API_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "fastapi-k8-proto-api" | head -1)
-    POSTGRES_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "fastapi-k8-proto-postgres" | head -1)
-    REDIS_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "fastapi-k8-proto-redis" | head -1)
+    API_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-api" | head -1)
+    POSTGRES_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-postgres" | head -1)
+    REDIS_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-redis" | head -1)
     
     if [ -z "$API_CONTAINER" ] || [ -z "$POSTGRES_CONTAINER" ] || [ -z "$REDIS_CONTAINER" ]; then
         print_error "Required containers not found or not running"
@@ -229,9 +229,9 @@ restart_containers() {
     fi
     
     # Re-fetch container names after rebuild
-    API_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "fastapi-k8-proto-api" | head -1)
-    POSTGRES_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "fastapi-k8-proto-postgres" | head -1)
-    REDIS_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "fastapi-k8-proto-redis" | head -1)
+    API_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-api" | head -1)
+    POSTGRES_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-postgres" | head -1)
+    REDIS_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-redis" | head -1)
     
     print_info "Updated container names after rebuild:"
     print_info "  API: $API_CONTAINER"

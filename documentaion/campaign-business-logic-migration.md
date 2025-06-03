@@ -1,7 +1,7 @@
 # Campaign Business Logic Migration Plan
 
 ## Overview
-This document provides detailed step-by-step instructions for migrating campaign business logic from the deprecated Flask application to the current FastAPI application (`fastapi-k8-proto`). The migration preserves only the business logic while adapting to FastAPI patterns and conventions.
+This document provides detailed step-by-step instructions for migrating campaign business logic from the deprecated Flask application to the current FastAPI application (`lead-gen`). The migration preserves only the business logic while adapting to FastAPI patterns and conventions.
 
 ## Migration Scope
 - **Source Files**: `depricated-routes.py`, `depricated-campaign-service.py`, `depricated-campaign-model.py`, `depricated-campaign-tests.py`

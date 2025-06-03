@@ -1,7 +1,7 @@
 # Leads Business Logic Migration Plan
 
 ## Overview
-This document provides detailed step-by-step instructions for migrating the leads business logic from the Flask leadGen project to this FastAPI application (fastapi-k8-proto). The migration will preserve only the business logic while adapting to the current FastAPI patterns, conventions, and configurations.
+This document provides detailed step-by-step instructions for migrating the leads business logic from the deprecated Flask-based leadGen project to this FastAPI application (lead-gen). The migration will preserve only the business logic while adapting to the current FastAPI patterns, conventions, and configurations.
 
 ## Source Files to Migrate
 - `/Users/ek/dev/leadGen/server/api/services/lead_service.py` - Lead service business logic

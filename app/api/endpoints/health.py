@@ -4,7 +4,7 @@ router = APIRouter()
 
 @router.get("/", status_code=status.HTTP_200_OK)
 async def health_check():
-    return {"status": "healthy", "service": "fastapi-k8-proto"}
+    return {"status": "healthy", "service": "lead-gen"}
 
 @router.get("/ready", status_code=status.HTTP_200_OK)
 async def readiness_check():

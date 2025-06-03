@@ -14,6 +14,8 @@ from app.main import app
 from app.core.database import Base, get_db
 from tests.helpers.database_helpers import DatabaseHelpers
 from tests.helpers.instantly_mock import mock_instantly_service
+from app.models.campaign_status import CampaignStatus
+from app.models.job import JobType, JobStatus
 
 # Test database
 # SQLALCHEMY_DATABASE_URL = "sqlite:///./test_helpers_integration.db"
@@ -90,7 +92,7 @@ def test_campaign_api_with_database_verification(db_helpers, organization, authe
         "totalRecords": campaign_data["totalRecords"],
         "url": campaign_data["url"],
         "organization_id": campaign_data["organization_id"],
-        "status": "created"
+        "status": "CREATED"
     })
     
     # Verify timestamps are properly set
@@ -140,23 +142,23 @@ def test_campaign_creation_with_job_verification(db_helpers, organization):
     # Create campaign directly in database for testing
     campaign = db_helpers.create_test_campaign_in_db({
         "name": "Job Test Campaign",
-        "status": "created",
+        "status": CampaignStatus.CREATED,
         "organization_id": organization.id
     })
     
     # Create a background job for the campaign
     job = db_helpers.create_test_job_in_db(campaign.id, {
         "name": "Test Background Job",
-        "job_type": "FETCH_LEADS",
-        "status": "PENDING"
+        "job_type": JobType.FETCH_LEADS,
+        "status": JobStatus.PENDING
     })
     
     # Verify job was created for campaign
-    found_job = db_helpers.verify_job_created_for_campaign(campaign.id, "FETCH_LEADS")
+    found_job = db_helpers.verify_job_created_for_campaign(campaign.id, JobType.FETCH_LEADS)
     assert found_job.id == job.id
     
     # Verify job status
-    db_helpers.verify_job_status_in_db(job.id, "PENDING")
+    db_helpers.verify_job_status_in_db(job.id, JobStatus.PENDING)
     
     # Get all jobs for campaign
     jobs = db_helpers.get_campaign_jobs_from_db(campaign.id)
@@ -164,11 +166,11 @@ def test_campaign_creation_with_job_verification(db_helpers, organization):
     assert jobs[0].id == job.id
     
     # Update job status
-    job.status = "COMPLETED"
+    job.status = JobStatus.COMPLETED
     db_helpers.db_session.commit()
     
     # Verify status update
-    db_helpers.verify_job_status_in_db(job.id, "COMPLETED")
+    db_helpers.verify_job_status_in_db(job.id, JobStatus.COMPLETED)
 
 def test_multiple_campaigns_database_state(db_helpers, organization, authenticated_client):
     """Test managing multiple campaigns and verifying database state."""

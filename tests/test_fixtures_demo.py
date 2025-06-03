@@ -36,7 +36,7 @@ def test_create_campaign_with_sample_data(api_client, sample_campaign_data, db_h
     # Use database helpers to verify creation
     db_helpers.verify_campaign_in_db(campaign_data["id"], {
         "name": sample_campaign_data["name"],
-        "status": "created"
+        "status": "CREATED"
     })
 
 
@@ -277,7 +277,7 @@ def test_complete_campaign_lifecycle(
     # Verify creation in database
     db_helpers.verify_campaign_in_db(campaign_id, {
         "name": sample_campaign_data["name"],
-        "status": "created"
+        "status": "CREATED"
     })
     
     # 2. Update campaign
