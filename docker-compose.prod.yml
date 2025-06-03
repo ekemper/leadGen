@@ -1,59 +1,94 @@
 version: '3.8'
+
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend.prod
+  postgres:
+    image: postgres:15-alpine
     environment:
-      - FLASK_ENV=production
-      - PORT=5001
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - SECRET_KEY=${SECRET_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fastapi_k8_proto
     ports:
-      - "5001:5001"
-    restart: unless-stopped
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/api/health"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fastapi_k8_proto
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ../logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000"
 
   worker:
     build:
-      context: .
-      dockerfile: Dockerfile.worker.prod
+      context: ..
+      dockerfile: docker/Dockerfile.worker
     environment:
-      - FLASK_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - SECRET_KEY=${SECRET_KEY}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fastapi_k8_proto
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ../logs:/app/logs
     depends_on:
-      - backend
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "run_worker.py"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
 
-  frontend:
+  flower:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
+      context: ..
+      dockerfile: docker/Dockerfile.worker
     ports:
-      - "80:80"
+      - "5555:5555"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - FLOWER_UNAUTHENTICATED_API=1
+    volumes:
+      - ../logs:/app/logs
     depends_on:
-      - backend
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s 
+      - redis
+    command: celery -A app.workers.celery_app flower --port=5555
+
+volumes:
+  postgres_data:
+  logs:
+    driver: local 

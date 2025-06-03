@@ -1,11 +1,12 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
+import { EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 import Button from "../ui/button/Button";
-import { api } from '../../config/api';
+import { useAuth } from '../../context/AuthContext';
+import { toast } from 'react-toastify';
 
 export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -13,28 +14,22 @@ export default function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { login, isLoading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setIsLoading(true);
     
     try {
-      const response = await api.post('/api/auth/login', { email, password });
-      if (response && response.status === 'success' && response.data?.token) {
-        localStorage.setItem('token', response.data.token);
-        const from = (location.state as any)?.from?.pathname || '/dashboard';
-        navigate(from, { replace: true });
-      } else {
-        setError(response?.error?.message || response?.data?.message || 'Invalid login response from server');
-      }
+      await login(email, password);
+      toast.success('Successfully signed in!');
+      const from = (location.state as any)?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Login failed');
-    } finally {
-      setIsLoading(false);
+      toast.error(err.message || 'Login failed');
     }
   };
 
@@ -55,7 +50,12 @@ export default function SignInForm() {
                 <Label>
                   Email <span className="text-error-500">*</span>{" "}
                 </Label>
-                <Input placeholder="info@gmail.com" value={email} onChange={e => setEmail(e.target.value)} />
+                <Input 
+                  placeholder="info@gmail.com" 
+                  value={email} 
+                  onChange={e => setEmail(e.target.value)}
+                  disabled={isLoading}
+                />
               </div>
               <div>
                 <Label>
@@ -67,6 +67,7 @@ export default function SignInForm() {
                     placeholder="Enter your password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
+                    disabled={isLoading}
                   />
                   <span
                     onClick={() => setShowPassword(!showPassword)}
@@ -95,7 +96,7 @@ export default function SignInForm() {
                 </Link>
               </div>
               <div>
-                <Button className="w-full" size="sm" disabled={isLoading}>
+                <Button className="w-full" size="sm" disabled={isLoading || !email || !password}>
                   {isLoading ? 'Signing in...' : 'Sign in'}
                 </Button>
               </div>

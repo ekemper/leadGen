@@ -1,20 +1,23 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-ENV PYTHONPATH=/app
-# Install system dependencies if needed (uncomment if required)
-# RUN apt-get update && apt-get install -y build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install dependencies using BuildKit cache for pip
-COPY requirements.txt ./
-RUN --mount=type=cache,target=/root/.cache/pip pip install --upgrade pip && pip install -r requirements.txt
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements/ ./requirements/
+RUN pip install --no-cache-dir -r requirements/prod.txt
 
 # Copy application code
-COPY server/ ./server/
-COPY config/ ./config/
+COPY app/ ./app/
 
-# Copy example.env as a template, but expect .env to be mounted or passed at runtime
-COPY example.env .env.example
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
-# Entrypoint for the worker
-CMD ["python", "server/run_worker.py"] 
+# Run Celery worker
+CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"] 

@@ -1,27 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
-import { Link } from "react-router-dom";
-import { api } from "../../config/api";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState("");
-
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const response = await api.get('/api/auth/me');
-        if (response && response.data && response.data.email) {
-          setUserEmail(response.data.email);
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-      }
-    };
-
-    fetchUserData();
-  }, []);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
@@ -31,13 +17,21 @@ export default function UserDropdown() {
     setIsOpen(false);
   }
 
+  const handleLogout = () => {
+    logout();
+    closeDropdown();
+    navigate('/signin');
+  };
+
   return (
     <div className="relative">
       <button
         onClick={toggleDropdown}
         className="flex items-center gap-2 px-3 py-2 text-gray-700 rounded-lg hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
       >
-        <span className="block font-medium text-theme-sm text-gray-800 dark:text-white/90">{userEmail}</span>
+        <span className="block font-medium text-theme-sm text-gray-800 dark:text-white/90">
+          {user?.email || user?.name || 'User'}
+        </span>
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
@@ -63,12 +57,6 @@ export default function UserDropdown() {
         onClose={closeDropdown}
         className="absolute right-0 mt-[17px] flex w-[260px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark"
       >
-        {/* <div className="pl-0">
-          <span className="block font-medium text-theme-sm text-gray-800 dark:text-white/90 pl-0">
-            {userEmail}
-          </span>
-        </div> */}
-
         <ul className="flex flex-col gap-1 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800 pl-0">
           <li>
             <DropdownItem
@@ -121,12 +109,9 @@ export default function UserDropdown() {
             </DropdownItem>
           </li>
         </ul>
-        <Link
-          to="/signin"
-          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-          onClick={() => {
-            localStorage.removeItem('token');
-          }}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300 w-full text-left"
         >
           <svg
             className="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
@@ -144,7 +129,7 @@ export default function UserDropdown() {
             />
           </svg>
           Sign out
-        </Link>
+        </button>
       </Dropdown>
     </div>
   );

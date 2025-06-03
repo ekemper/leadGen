@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { api } from '../config/api';
+import { useParams, useNavigate } from 'react-router-dom';
+import { OrganizationService } from '../services/organizationService';
+import { OrganizationResponse } from '../types/organization';
+import { toast } from 'react-toastify';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
@@ -9,14 +11,6 @@ import Input from '../components/form/input/InputField';
 import TextArea from '../components/form/input/TextArea';
 import Label from '../components/form/Label';
 
-interface Organization {
-  id: string;
-  name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-}
-
 interface FormErrors {
   name?: string;
   description?: string;
@@ -24,23 +18,32 @@ interface FormErrors {
 
 const OrganizationDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [org, setOrg] = useState<Organization | null>(null);
+  const navigate = useNavigate();
+  const [org, setOrg] = useState<OrganizationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editField, setEditField] = useState<null | 'name' | 'description'>(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
   useEffect(() => {
     const fetchOrg = async () => {
+      if (!id) {
+        setError('Organization ID is required');
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        const data = await api.get(`/api/organizations/${id}`);
-        setOrg(data.data);
+        const data = await OrganizationService.getOrganization(id);
+        setOrg(data);
       } catch (err: any) {
         setError(err.message);
+        toast.error(`Failed to load organization: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -89,9 +92,9 @@ const OrganizationDetail: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const response = await api.put(`/api/organizations/${org.id}`, { [editField]: trimmedValue });
-      if (response.data) {
-        setOrg(response.data);
+      const response = await OrganizationService.updateOrganization(org.id, { [editField]: trimmedValue });
+      if (response) {
+        setOrg(response);
         setEditField(null);
         setEditValue('');
         setFormErrors({});
@@ -111,6 +114,24 @@ const OrganizationDetail: React.FC = () => {
       saveEdit();
     } else if (e.key === 'Escape') {
       cancelEdit();
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!org) return;
+    
+    const confirmed = window.confirm(`Are you sure you want to delete the organization "${org.name}"? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await OrganizationService.deleteOrganization(org.id);
+      toast.success('Organization deleted successfully!');
+      navigate('/organizations');
+    } catch (err: any) {
+      toast.error(`Failed to delete organization: ${err.message}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -236,6 +257,24 @@ const OrganizationDetail: React.FC = () => {
                     {new Date(org.updated_at).toLocaleString()}
                   </div>
                 </div>
+                <div>
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Campaign Count</div>
+                  <div className="mt-1 text-sm text-gray-800 dark:text-white/90">
+                    {org.campaign_count || 0}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Delete Button */}
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800">
+                <Button
+                  variant="outline"
+                  onClick={handleDelete}
+                  disabled={deleting || saving}
+                  className="bg-red-500 hover:bg-red-600 text-white border-red-500 hover:border-red-600"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Organization'}
+                </Button>
               </div>
             </div>
           </div>

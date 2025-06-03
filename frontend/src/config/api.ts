@@ -1,4 +1,4 @@
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/api/v1';
 import { getRequestId } from '../utils/requestId';
 
 function handleAuthError(response: Response) {
@@ -151,6 +151,27 @@ export const api = {
             headers,
         });
         handleAuthError(response);
+        const responseData = await response.json();
+        if (!response.ok) {
+            const errorMessage = responseData.error?.message || responseData.message || `HTTP error! status: ${response.status}`;
+            throw new Error(errorMessage);
+        }
+        return responseData;
+    },
+
+    delete: async (endpoint: string) => {
+        const headers = withRequestId(getAuthHeaders());
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            ...defaultOptions,
+            method: 'DELETE',
+            headers,
+        });
+        handleAuthError(response);
+        
+        if (response.status === 204) {
+            return null; // No content response
+        }
+        
         const responseData = await response.json();
         if (!response.ok) {
             const errorMessage = responseData.error?.message || responseData.message || `HTTP error! status: ${response.status}`;

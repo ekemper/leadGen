@@ -22,91 +22,86 @@ import CampaignsList from "./pages/CampaignsList";
 import CampaignDetail from "./pages/CampaignDetail";
 import OrganizationsList from "./pages/OrganizationsList";
 import OrganizationDetail from "./pages/OrganizationDetail";
-import OrganizationCreate from "./pages/OrganizationCreate";
+import OrganizationCreatePage from "./pages/OrganizationCreate";
+import QueueMonitoring from "./pages/QueueMonitoring";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import { AuthProvider } from "./context/AuthContext";
+import { ErrorProvider } from "./context/ErrorContext";
+import { NetworkProvider } from "./context/NetworkContext";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import ErrorDisplay from "./components/common/ErrorDisplay";
+import NetworkStatus from "./components/common/NetworkStatus";
 import { logger } from './utils/logger';
-import { Component, ErrorInfo, ReactNode } from 'react';
 
 // Initialize logger
 logger;
 
-// Error Boundary component to catch React errors
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(_: Error) {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    logger.logError(error, { errorInfo });
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return <h1>Something went wrong. Please check the console for details.</h1>;
-    }
-
-    return this.props.children;
-  }
-}
-
 export default function App() {
   return (
-    <ErrorBoundary>
-      <Router>
-        <ScrollToTop />
-        <Routes>
-          {/* Auth Routes - Not Protected */}
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
+    <ErrorBoundary context="App Root" showDetails={process.env.NODE_ENV === 'development'}>
+      <ErrorProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <Router>
+              <ScrollToTop />
+              <Routes>
+                {/* Auth Routes - Not Protected */}
+                <Route path="/signin" element={<SignIn />} />
+                <Route path="/signup" element={<SignUp />} />
 
-          {/* Protected Routes */}
-          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            {/* Redirect root to dashboard */}
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Home />} />
+                {/* Protected Routes */}
+                <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+                  {/* Redirect root to dashboard */}
+                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={<Home />} />
 
-            {/* Others Page */}
-            <Route path="/profile" element={<UserProfiles />} />
-            <Route path="/calendar" element={<Calendar />} />
-            <Route path="/blank" element={<Blank />} />
+                  {/* Others Page */}
+                  <Route path="/profile" element={<UserProfiles />} />
+                  <Route path="/calendar" element={<Calendar />} />
+                  <Route path="/blank" element={<Blank />} />
 
-            {/* Forms */}
-            <Route path="/form-elements" element={<FormElements />} />
+                  {/* Forms */}
+                  <Route path="/form-elements" element={<FormElements />} />
 
-            {/* Tables */}
-            <Route path="/basic-tables" element={<BasicTables />} />
+                  {/* Tables */}
+                  <Route path="/basic-tables" element={<BasicTables />} />
 
-            {/* Ui Elements */}
-            <Route path="/alerts" element={<Alerts />} />
-            <Route path="/avatars" element={<Avatars />} />
-            <Route path="/badge" element={<Badges />} />
-            <Route path="/buttons" element={<Buttons />} />
-            <Route path="/images" element={<Images />} />
-            <Route path="/videos" element={<Videos />} />
+                  {/* Ui Elements */}
+                  <Route path="/alerts" element={<Alerts />} />
+                  <Route path="/avatars" element={<Avatars />} />
+                  <Route path="/badge" element={<Badges />} />
+                  <Route path="/buttons" element={<Buttons />} />
+                  <Route path="/images" element={<Images />} />
+                  <Route path="/videos" element={<Videos />} />
 
-            {/* Charts */}
-            <Route path="/line-chart" element={<LineChart />} />
-            <Route path="/bar-chart" element={<BarChart />} />
+                  {/* Charts */}
+                  <Route path="/line-chart" element={<LineChart />} />
+                  <Route path="/bar-chart" element={<BarChart />} />
 
-            {/* Campaigns */}
-            <Route path="/campaigns" element={<CampaignsList />} />
-            <Route path="/campaigns/:id" element={<CampaignDetail />} />
+                  {/* Campaigns */}
+                  <Route path="/campaigns" element={<CampaignsList />} />
+                  <Route path="/campaigns/:id" element={<CampaignDetail />} />
 
-            {/* Organizations */}
-            <Route path="/organizations" element={<OrganizationsList />} />
-            <Route path="/organizations/create" element={<OrganizationCreate />} />
-            <Route path="/organizations/:id" element={<OrganizationDetail />} />
-          </Route>
+                  {/* Organizations */}
+                  <Route path="/organizations" element={<OrganizationsList />} />
+                  <Route path="/organizations/create" element={<OrganizationCreatePage />} />
+                  <Route path="/organizations/:id" element={<OrganizationDetail />} />
 
-          {/* Fallback Route */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Router>
+                  {/* Queue Monitoring */}
+                  <Route path="/queue-monitoring" element={<QueueMonitoring />} />
+                </Route>
+
+                {/* Fallback Route */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+              
+              {/* Global UI Components */}
+              <ErrorDisplay />
+              <NetworkStatus />
+            </Router>
+          </AuthProvider>
+        </NetworkProvider>
+      </ErrorProvider>
     </ErrorBoundary>
   );
 }

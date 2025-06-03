@@ -1,128 +1,141 @@
 version: '3.8'
+
 services:
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-    env_file: .env
-    depends_on:
-      db:
-        condition: service_healthy
-    command: >
-      sh -c "flask --app server.app:create_app db upgrade"
-    restart: "no"
-    healthcheck:
-      test: ["CMD", "true"]
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-    env_file: .env
+  postgres:
+    image: postgres:15-alpine
+    env_file:
+      - .env
     environment:
-      - FLASK_DEBUG=1
-      - FLASK_ENV=development
-    depends_on:
-      redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5001:5001"
-    restart: unless-stopped
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/api/health"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    volumes:
-      - ./server:/app/server
-      - ./config:/app/config
-      - ./scripts:/app/scripts
-      - ./migrations:/app/migrations
-      - ./logs:/app/logs
-    command: flask --app server.app:create_app run --host=0.0.0.0 --port=5001 --reload
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    environment:
-      - USE_APIFY_CLIENT_MOCK=true
-    env_file: .env
-    depends_on:
-      redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "run_worker.py"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    working_dir: /app
-    command: python server/run_worker.py
-    volumes:
-      - ./logs:/app/logs
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: development
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5173"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - NODE_ENV=development
-    command: ["npm", "run", "dev", "--", "--host", "--port", "5173"]
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
+    env_file:
+      - .env
     ports:
-      - "6379:6379"
-    restart: unless-stopped
+      - "16379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 5s
 
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydb
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
     ports:
-      - "5432:5432"
-    restart: unless-stopped
+      - "8000:8000"
+    environment:
+      - POSTGRES_SERVER=${POSTGRES_SERVER}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - ./logs:/app/logs
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+      - ./tests:/app/tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_SERVER=${POSTGRES_SERVER}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - USE_APIFY_CLIENT_MOCK=${USE_APIFY_CLIENT_MOCK}
+    volumes:
+      - ./logs:/app/logs
+      - ./app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 8
+
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+    environment:
+      - POSTGRES_SERVER=${POSTGRES_SERVER}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - FLOWER_UNAUTHENTICATED_API=1
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+    command: celery -A app.workers.celery_app flower --port=5555
+
+  frontend:
+      build:
+        context: ./frontend
+        dockerfile: Dockerfile
+        target: development
+      env_file:
+        - .env
+      ports:
+        - "5173:5173"
+      depends_on:
+        - api
+      restart: unless-stopped
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:5173"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 15s
+      volumes:
+        - ./frontend:/app
+        - /app/node_modules
+      environment:
+        - NODE_ENV=development
+        - VITE_API_URL=http://localhost:8000
+      command: ["npm", "run", "dev", "--", "--host", "--port", "5173"]
+      
 volumes:
-  pgdata: 
+  postgres_data:
+  logs:
+    driver: local 

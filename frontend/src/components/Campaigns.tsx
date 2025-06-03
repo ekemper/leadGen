@@ -27,7 +27,7 @@ const Campaigns: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await api.post('/api/campaigns', formData);
+      const response = await api.post('/campaigns', formData);
       if (response.status === 'success') {
         toast.success(response.message || 'Campaign started successfully!');
       } else {

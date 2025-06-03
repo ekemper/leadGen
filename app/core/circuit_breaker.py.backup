@@ -1,0 +1,299 @@
+import time
+import json
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List
+from enum import Enum
+from redis import Redis
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
+
+class CircuitState(str, Enum):
+    CLOSED = "closed"    # Normal operation
+    OPEN = "open"       # Failing, requests blocked
+    HALF_OPEN = "half_open"  # Testing if service recovered
+
+class ThirdPartyService(str, Enum):
+    PERPLEXITY = "perplexity"
+    OPENAI = "openai" 
+    APOLLO = "apollo"
+    INSTANTLY = "instantly"
+    MILLIONVERIFIER = "millionverifier"
+
+class CircuitBreakerService:
+    """
+    Circuit breaker for third-party API services with automatic queue pausing.
+    
+    Features:
+    - Tracks failure rates for each service
+    - Automatically opens circuit when failure threshold is reached
+    - Pauses related queues when circuit opens
+    - Provides recovery mechanism with exponential backoff
+    - Integrates with existing job system
+    """
+    
+    def __init__(self, redis_client: Redis):
+        self.redis = redis_client
+        self.failure_threshold = 5  # Number of failures before opening circuit
+        self.failure_window = 300  # 5 minutes window for failure tracking
+        self.recovery_timeout = 60  # 1 minute before trying half-open
+        self.success_threshold = 3  # Successful calls needed to close circuit
+        
+    def _get_circuit_key(self, service: ThirdPartyService) -> str:
+        return f"circuit_breaker:{service.value}"
+    
+    def _get_failures_key(self, service: ThirdPartyService) -> str:
+        return f"circuit_failures:{service.value}"
+    
+    def _get_queue_pause_key(self, service: ThirdPartyService) -> str:
+        return f"queue_paused:{service.value}"
+    
+    def get_circuit_state(self, service: ThirdPartyService) -> CircuitState:
+        """Get current circuit state for a service."""
+        try:
+            circuit_data = self.redis.get(self._get_circuit_key(service))
+            if not circuit_data:
+                return CircuitState.CLOSED
+            
+            data = json.loads(circuit_data)
+            state = CircuitState(data.get('state', CircuitState.CLOSED))
+            
+            # Check if we should transition from OPEN to HALF_OPEN
+            if state == CircuitState.OPEN:
+                open_time = datetime.fromisoformat(data.get('opened_at'))
+                if datetime.utcnow() > open_time + timedelta(seconds=self.recovery_timeout):
+                    self._set_circuit_state(service, CircuitState.HALF_OPEN)
+                    return CircuitState.HALF_OPEN
+            
+            return state
+        except Exception as e:
+            logger.error(f"Error getting circuit state for {service}: {e}")
+            return CircuitState.CLOSED
+    
+    def _set_circuit_state(self, service: ThirdPartyService, state: CircuitState, metadata: Optional[Dict] = None):
+        """Set circuit breaker state with optional metadata."""
+        try:
+            circuit_data = {
+                'state': state.value,
+                'opened_at': datetime.utcnow().isoformat() if state == CircuitState.OPEN else None,
+                'metadata': metadata or {}
+            }
+            
+            circuit_key = self._get_circuit_key(service)
+            self.redis.setex(circuit_key, self.failure_window * 2, json.dumps(circuit_data))
+            
+            # Update the old state tracking for alerts
+            self._update_circuit_state(service, state)
+            
+            # Handle queue management based on state
+            if state == CircuitState.OPEN:
+                self._pause_service_queues(service)
+            elif state == CircuitState.CLOSED:
+                self._resume_service_queues(service)
+                
+        except Exception as e:
+            logger.error(f"Error setting circuit state for {service}: {e}")
+    
+    def _get_circuit_state(self, service: ThirdPartyService) -> CircuitState:
+        """Backward compatibility method for tests. Use get_circuit_state instead."""
+        return self.get_circuit_state(service)
+    
+    def record_success(self, service: ThirdPartyService):
+        """Record a successful API call."""
+        try:
+            state = self.get_circuit_state(service)
+            
+            if state == CircuitState.HALF_OPEN:
+                # Track consecutive successes in half-open state
+                success_key = f"circuit_success:{service.value}"
+                successes = self.redis.incr(success_key)
+                self.redis.expire(success_key, self.recovery_timeout)
+                
+                if successes >= self.success_threshold:
+                    self._set_circuit_state(service, CircuitState.CLOSED)
+                    self.redis.delete(success_key)
+                    self.redis.delete(self._get_failures_key(service))
+                    logger.info(f"Circuit breaker for {service} closed after recovery")
+            
+            elif state == CircuitState.CLOSED:
+                # Reset failure count on success
+                self.redis.delete(self._get_failures_key(service))
+                
+        except Exception as e:
+            logger.error(f"Error recording success for {service}: {e}")
+    
+    def record_failure(self, service: ThirdPartyService, error: str, 
+                      error_type: str = "unknown") -> bool:
+        """
+        Record a failed API call. Returns True if circuit should open.
+        """
+        try:
+            state = self.get_circuit_state(service)
+            
+            if state == CircuitState.OPEN:
+                return True  # Already open
+            
+            # Add failure to sliding window
+            failure_key = self._get_failures_key(service)
+            now = time.time()
+            
+            # Use sorted set to track failures in time window
+            self.redis.zadd(failure_key, {f"{now}:{error_type}": now})
+            
+            # Remove old failures outside window
+            cutoff = now - self.failure_window
+            self.redis.zremrangebyscore(failure_key, 0, cutoff)
+            
+            # Count current failures in window
+            failure_count = self.redis.zcard(failure_key)
+            
+            self.redis.expire(failure_key, self.failure_window)
+            
+            logger.warning(f"API failure for {service}: {error} (count: {failure_count})")
+            
+            # Open circuit if threshold exceeded
+            if failure_count >= self.failure_threshold:
+                self._set_circuit_state(service, CircuitState.OPEN, {
+                    'last_error': error,
+                    'error_type': error_type,
+                    'failure_count': failure_count
+                })
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error recording failure for {service}: {e}")
+            return False
+    
+    def should_allow_request(self, service: ThirdPartyService) -> tuple[bool, str]:
+        """
+        Check if request should be allowed. Returns (allowed, reason).
+        """
+        try:
+            state = self.get_circuit_state(service)
+            
+            if state == CircuitState.OPEN:
+                return False, f"Circuit breaker OPEN for {service} - service unavailable"
+            elif state == CircuitState.HALF_OPEN:
+                return True, f"Circuit breaker HALF_OPEN for {service} - testing recovery"
+            else:
+                return True, f"Circuit breaker CLOSED for {service} - normal operation"
+                
+        except Exception as e:
+            logger.error(f"Error checking circuit breaker for {service}: {e}")
+            return True, "Circuit breaker check failed - allowing request"
+    
+    def _pause_service_queues(self, service: ThirdPartyService):
+        """Pause queues related to a service."""
+        try:
+            pause_key = self._get_queue_pause_key(service)
+            pause_data = {
+                'paused_at': datetime.utcnow().isoformat(),
+                'service': service.value,
+                'reason': 'circuit_breaker_open'
+            }
+            self.redis.setex(pause_key, 3600, json.dumps(pause_data))  # 1 hour
+            
+            logger.warning(f"Paused queues for service {service} due to circuit breaker")
+            
+        except Exception as e:
+            logger.error(f"Error pausing queues for {service}: {e}")
+    
+    def _resume_service_queues(self, service: ThirdPartyService):
+        """Resume queues for a service."""
+        try:
+            pause_key = self._get_queue_pause_key(service)
+            self.redis.delete(pause_key)
+            
+            logger.info(f"Resumed queues for service {service}")
+            
+        except Exception as e:
+            logger.error(f"Error resuming queues for {service}: {e}")
+    
+    def is_service_queue_paused(self, service: ThirdPartyService) -> tuple[bool, Optional[Dict]]:
+        """Check if queues for a service are paused."""
+        try:
+            pause_key = self._get_queue_pause_key(service)
+            pause_data = self.redis.get(pause_key)
+            
+            if pause_data:
+                data = json.loads(pause_data)
+                return True, data
+            return False, None
+            
+        except Exception as e:
+            logger.error(f"Error checking queue pause status for {service}: {e}")
+            return False, None
+    
+    def get_circuit_status(self) -> Dict[str, Any]:
+        """Get status of all circuit breakers."""
+        status = {}
+        
+        for service in ThirdPartyService:
+            try:
+                state = self.get_circuit_state(service)
+                is_paused, pause_info = self.is_service_queue_paused(service)
+                
+                # Get failure count
+                failure_key = self._get_failures_key(service)
+                failure_count = self.redis.zcard(failure_key) if self.redis.exists(failure_key) else 0
+                
+                status[service.value] = {
+                    'circuit_state': state.value,
+                    'queue_paused': is_paused,
+                    'pause_info': pause_info,
+                    'failure_count': failure_count,
+                    'failure_threshold': self.failure_threshold
+                }
+                
+            except Exception as e:
+                logger.error(f"Error getting status for {service}: {e}")
+                status[service.value] = {'error': str(e)}
+        
+        return status
+    
+    def manually_pause_service(self, service: ThirdPartyService, reason: str = "manual"):
+        """Manually pause a service (e.g., for maintenance)."""
+        self._set_circuit_state(service, CircuitState.OPEN, {
+            'manual_pause': True,
+            'reason': reason
+        })
+    
+    def manually_resume_service(self, service: ThirdPartyService):
+        """Manually resume a service."""
+        self._set_circuit_state(service, CircuitState.CLOSED)
+        self.redis.delete(self._get_failures_key(service))
+    
+    def _update_circuit_state(self, service: ThirdPartyService, new_state: CircuitState):
+        """Update circuit state and send alerts if state changes."""
+        current_state_str = self.redis.get(f"circuit_breaker:{service.value}:state")
+        current_state = CircuitState(current_state_str.decode()) if current_state_str else CircuitState.CLOSED
+        
+        if current_state != new_state:
+            # Import here to avoid circular imports
+            from app.core.alert_service import get_alert_service
+            
+            # Get current failure info for alert
+            failure_count = int(self.redis.get(f"circuit_breaker:{service.value}:failures") or 0)
+            last_failure_reason = self.redis.get(f"circuit_breaker:{service.value}:last_failure_reason")
+            last_failure_reason = last_failure_reason.decode() if last_failure_reason else ""
+            
+            # Send alert about state change
+            alert_service = get_alert_service()
+            alert_service.send_circuit_breaker_alert(
+                service=service,
+                old_state=current_state,
+                new_state=new_state,
+                failure_reason=last_failure_reason,
+                failure_count=failure_count
+            )
+            
+            logger.warning(f"Circuit breaker state change for {service.value}: {current_state.value} -> {new_state.value}")
+        
+        # Update state in Redis
+        self.redis.setex(
+            f"circuit_breaker:{service.value}:state",
+            self.failure_window * 2,  # Keep circuit data longer than failure window
+            new_state.value
+        ) 

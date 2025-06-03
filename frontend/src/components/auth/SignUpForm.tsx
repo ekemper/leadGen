@@ -1,10 +1,11 @@
-import { useState } from "react";
+import React, { useState } from 'react';
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
+import { EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
-import { api } from '../../config/api';
+import { useAuth } from '../../context/AuthContext';
+import { toast } from 'react-toastify';
 
 export default function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -13,43 +14,25 @@ export default function SignUpForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { signup, isLoading } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setIsLoading(true);
+    
     if (password !== confirmPassword) {
       setError('Passwords do not match');
-      setIsLoading(false);
       return;
     }
+    
     try {
-      const signupResponse = await api.post('/api/auth/signup', {
-        email,
-        password,
-        confirm_password: confirmPassword
-      });
-      if (signupResponse && signupResponse.status === 'success') {
-        // Auto-login after signup
-        const loginResponse = await api.post('/api/auth/login', { email, password });
-        if (loginResponse && loginResponse.status === 'success' && loginResponse.data?.token) {
-          localStorage.setItem('token', loginResponse.data.token);
-          navigate('/');
-        } else {
-          setError(
-            loginResponse?.error?.message ||
-            (loginResponse?.data?.message ? `Signup successful, but automatic login failed: ${loginResponse.data.message}` : 'Signup successful, but automatic login failed. Please log in manually.')
-          );
-        }
-      } else {
-        setError(signupResponse?.error?.message || signupResponse?.data?.message || 'Invalid signup response from server');
-      }
+      await signup(email, password, confirmPassword);
+      toast.success('Successfully signed up and logged in!');
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Signup failed');
-    } finally {
-      setIsLoading(false);
+      toast.error(err.message || 'Signup failed');
     }
   };
 

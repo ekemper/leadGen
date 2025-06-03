@@ -8,6 +8,7 @@ import {
   HorizontaLDots,
   GroupIcon,
   BoxIcon,
+  ListIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import SidebarWidget from "./SidebarWidget";
@@ -34,6 +35,11 @@ const navItems: NavItem[] = [
     icon: <BoxIcon />,
     name: "Campaigns",
     path: "/campaigns"
+  },
+  {
+    icon: <ListIcon />,
+    name: "Queue Monitoring",
+    path: "/queue-monitoring"
   }
 ];
 

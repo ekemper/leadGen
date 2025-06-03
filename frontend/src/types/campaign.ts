@@ -1,35 +1,82 @@
+// Campaign Types based on backend schemas
+
 export enum CampaignStatus {
-  CREATED = 'CREATED',
-  FETCHING_LEADS = 'FETCHING_LEADS',
-  VERIFYING_EMAILS = 'VERIFYING_EMAILS',
-  ENRICHING_LEADS = 'ENRICHING_LEADS',
-  GENERATING_EMAILS = 'GENERATING_EMAILS',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED'
+  CREATED = "created",
+  RUNNING = "running", 
+  COMPLETED = "completed",
+  FAILED = "failed"
 }
 
-export interface Campaign {
-  id: string;
+export interface CampaignBase {
   name: string;
-  status: CampaignStatus;
-  status_error?: string;
-  created_at: string;
-  updated_at: string;
-  job_ids?: {
-    fetch_leads?: string;
-    email_verification?: string;
-    enrich_leads?: string;
-    email_copy_generation?: string;
-  };
+  description?: string;
+  organization_id: string;
   fileName: string;
   totalRecords: number;
   url: string;
-  status_message?: string;
-  description?: string;
 }
 
+export interface CampaignCreate extends CampaignBase {}
+
+export interface CampaignUpdate {
+  name?: string;
+  description?: string;
+  status?: CampaignStatus;
+  status_message?: string;
+  status_error?: string;
+  organization_id?: string;
+  fileName?: string;
+  totalRecords?: number;
+  url?: string;
+  instantly_campaign_id?: string;
+}
+
+export interface CampaignInDB extends CampaignBase {
+  id: string;
+  status: CampaignStatus;
+  status_message?: string;
+  status_error?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+  failed_at?: string;
+  instantly_campaign_id?: string;
+}
+
+export interface CampaignResponse extends CampaignInDB {
+  valid_transitions: CampaignStatus[];
+}
+
+export interface CampaignStart {
+  status_message?: string;
+}
+
+export interface CampaignStatusUpdate {
+  status: CampaignStatus;
+  status_message?: string;
+  status_error?: string;
+  instantly_campaign_id?: string;
+}
+
+export interface CampaignStatusResponse {
+  campaign_id: string;
+  campaign_name: string;
+  campaign_status: CampaignStatus;
+}
+
+// Legacy interface for backward compatibility
+export interface Campaign extends CampaignResponse {
+  job_ids?: {
+    fetch_leads?: string;
+    email_verification?: string;
+    enrich_lead?: string;
+    email_copy_generation?: string;
+  };
+}
+
+// Legacy interfaces for backward compatibility
 export interface CampaignStartParams {
-  count: number; // 1-1000
+  count: number;
   searchUrl: string;
 }
 

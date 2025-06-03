@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../config/api';
 import { toast } from 'react-toastify';
-import { CampaignStatus, Campaign, CampaignLeadStats, InstantlyAnalytics } from '../types/campaign';
+import { campaignService } from '../services/campaignService';
+import { CampaignStatus, CampaignResponse, CampaignLeadStats, InstantlyAnalytics, CampaignUpdate } from '../types/campaign';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
@@ -22,10 +22,7 @@ const getStatusColor = (status: string) => {
       return 'success';
     case 'created':
       return 'info';
-    case 'fetching_leads':
-    case 'enriching':
-    case 'verifying_emails':
-    case 'generating_emails':
+    case 'running':
       return 'warning';
     case 'failed':
       return 'error';
@@ -38,20 +35,8 @@ const getStatusLabel = (status: string) => {
   switch (status?.toLowerCase()) {
     case 'created':
       return 'Created';
-    case 'fetching_leads':
-      return 'Fetching Leads';
-    case 'leads_fetched':
-      return 'Leads Fetched';
-    case 'enriching':
-      return 'Enriching Leads';
-    case 'enriched':
-      return 'Leads Enriched';
-    case 'verifying_emails':
-      return 'Verifying Emails';
-    case 'emails_verified':
-      return 'Emails Verified';
-    case 'generating_emails':
-      return 'Generating Emails';
+    case 'running':
+      return 'Running';
     case 'completed':
       return 'Completed';
     case 'failed':
@@ -79,29 +64,25 @@ const formatUrlForDisplay = (url: string) => {
 const CampaignDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [campaign, setCampaign] = useState<CampaignResponse | null>(null);
   const [leadStats, setLeadStats] = useState<CampaignLeadStats | null>(null);
   const [instantlyAnalytics, setInstantlyAnalytics] = useState<InstantlyAnalytics | null>(null);
   const [campaignLoading, setCampaignLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<Record<EditableCampaignFields, boolean>>({} as Record<EditableCampaignFields, boolean>);
   const [editedFields, setEditedFields] = useState<Partial<Record<EditableCampaignFields, string | number>>>({});
   const [saveLoading, setSaveLoading] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [startLoading, setStartLoading] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const isInitialStatsLoad = useRef(true); // Track if this is the first stats load
+  const statsPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialStatsLoad = useRef(true);
 
   // Helper to determine if campaign is in progress
   const isCampaignInProgress = (status: CampaignStatus | string | undefined) => {
-    return [
-      CampaignStatus.FETCHING_LEADS,
-      CampaignStatus.VERIFYING_EMAILS,
-      CampaignStatus.ENRICHING_LEADS,
-      CampaignStatus.GENERATING_EMAILS
-    ].includes(status as CampaignStatus);
+    return status === CampaignStatus.RUNNING;
   };
 
   // Helper to determine if campaign is past CREATED
@@ -109,85 +90,75 @@ const CampaignDetail: React.FC = () => {
     return status && status !== CampaignStatus.CREATED;
   };
 
-  useEffect(() => {
-    fetchCampaign();
-    fetchLeadStats();
-    // Only start polling if campaign is in an active state
-    if (campaign && isCampaignInProgress(campaign.status)) {
-      startLeadStatsPolling();
-    } else {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    }
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, campaign?.status]);
-
-  // Stop polling if campaign transitions out of active state
-  useEffect(() => {
-    if (campaign && !isCampaignInProgress(campaign.status)) {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    }
-  }, [campaign?.status]);
-
-  useEffect(() => {
-    if (error || (!campaign && !campaignLoading)) {
-      toast.error(error || 'Campaign not found');
-      navigate('/campaigns');
-    }
-  }, [error, campaign, campaignLoading, navigate]);
-
-  const startLeadStatsPolling = () => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
-    pollingRef.current = setInterval(() => {
-      fetchLeadStats();
-    }, 30000);
+  // Helper to determine if campaign can be started
+  const canStartCampaign = (status: CampaignStatus | string | undefined) => {
+    return status === CampaignStatus.CREATED;
   };
 
+  // Helper to determine if campaign can be edited
+  const canEditCampaign = (status: CampaignStatus | string | undefined) => {
+    return status === CampaignStatus.CREATED || status === CampaignStatus.FAILED;
+  };
+
+  useEffect(() => {
+    if (!id) {
+      navigate('/campaigns');
+      return;
+    }
+    
+    fetchCampaign();
+    fetchLeadStats();
+  }, [id, navigate]);
+
+  useEffect(() => {
+    // Start polling if campaign is running
+    if (campaign && isCampaignInProgress(campaign.status)) {
+      startStatusPolling();
+      startStatsPolling();
+    } else {
+      stopPolling();
+    }
+
+    return () => stopPolling();
+  }, [campaign?.status]);
+
   const fetchCampaign = async () => {
+    if (!id) return;
+    
     setCampaignLoading(true);
     setError(null);
     try {
-      const response = await api.get(`/api/campaigns/${id}`);
-      if (response.status === 'error') {
-        toast.error(response.message);
-        return;
-      }
+      const response = await campaignService.getCampaign(id);
       setCampaign(response.data);
-      setEditMode({} as Record<EditableCampaignFields, boolean>);
-      setEditedFields({});
     } catch (err: any) {
+      console.error('Error fetching campaign:', err);
       setError(err.message);
+      if (err.message?.toLowerCase().includes('not found')) {
+        toast.error('Campaign not found');
+        navigate('/campaigns');
+      }
     } finally {
       setCampaignLoading(false);
     }
   };
 
   const fetchLeadStats = async () => {
+    if (!id) return;
+    
+    // Only show loading on initial load, not during polling
     if (isInitialStatsLoad.current) {
       setStatsLoading(true);
     }
+    
     try {
-      const response = await api.get(`/api/campaigns/${id}/details`);
-      if (response.status === 'success') {
-        if (response.data.lead_stats) {
-          setLeadStats(response.data.lead_stats);
-        } else {
-          setLeadStats(null);
-        }
-        if (response.data.instantly_analytics) {
-          setInstantlyAnalytics(response.data.instantly_analytics);
-        } else {
-          setInstantlyAnalytics(null);
-        }
-      } else {
-        setLeadStats(null);
-        setInstantlyAnalytics(null);
-      }
+      const response = await campaignService.getCampaignStats(id);
+      setLeadStats(response.data);
     } catch (err: any) {
-      setLeadStats(null);
-      setInstantlyAnalytics(null);
+      console.error('Error fetching lead stats:', err);
+      // Don't set error state during polling to avoid UI flicker
+      if (isInitialStatsLoad.current) {
+        setError(err.message);
+      }
     } finally {
       if (isInitialStatsLoad.current) {
         setStatsLoading(false);
@@ -196,67 +167,154 @@ const CampaignDetail: React.FC = () => {
     }
   };
 
-  // Helper to start editing a field
-  const handleEdit = (field: EditableCampaignFields) => {
-    setEditMode(prev => ({ ...prev, [field]: true }));
-    setEditedFields(prev => ({ ...prev, [field]: campaign ? (campaign as any)[field] : undefined }));
-  };
-
-  // Helper to change a field value
-  const handleFieldChange = (field: EditableCampaignFields, value: string | number) => {
-    setEditedFields(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Helper to save edits
-  const handleSave = async () => {
-    setSaveLoading(true);
-    setSaveError(null);
+  const fetchInstantlyAnalytics = async () => {
+    if (!id) return;
+    
+    setAnalyticsLoading(true);
     try {
-      const response = await api.patch(`/api/campaigns/${id}`, editedFields);
-      if (response.status === 'success') {
-        toast.success('Campaign updated!');
-        setEditMode({} as Record<EditableCampaignFields, boolean>);
-        setEditedFields({});
-        fetchCampaign();
-      } else {
-        setSaveError(response.message || 'Failed to update campaign.');
-      }
+      const response = await campaignService.getInstantlyAnalytics(id);
+      setInstantlyAnalytics(response.data);
     } catch (err: any) {
-      setSaveError(err.message || 'Failed to update campaign.');
+      console.error('Error fetching Instantly analytics:', err);
+      toast.error('Failed to load Instantly analytics');
     } finally {
-      setSaveLoading(false);
+      setAnalyticsLoading(false);
     }
   };
 
-  // Helper to cancel edits
-  const handleCancelEdit = () => {
-    setEditMode({} as Record<EditableCampaignFields, boolean>);
-    setEditedFields({});
-    setSaveError(null);
+  const startStatusPolling = () => {
+    if (pollingRef.current) return; // Already polling
+    
+    pollingRef.current = setInterval(async () => {
+      try {
+        if (!id) return;
+        const response = await campaignService.getCampaign(id);
+        setCampaign(response.data);
+        
+        // Stop polling if campaign is no longer running
+        if (!isCampaignInProgress(response.data.status)) {
+          stopPolling();
+        }
+      } catch (err) {
+        console.error('Error polling campaign status:', err);
+      }
+    }, 5000);
   };
 
-  // Helper to start the campaign
-  const handleStartCampaign = async () => {
-    setStartLoading(true);
-    setStartError(null);
-    try {
-      const response = await api.post(`/api/campaigns/${id}/start`);
-      if (response.status === 'success') {
-        toast.success('Campaign started!');
-        fetchCampaign();
-      } else {
-        setStartError(response.message || 'Failed to start campaign.');
-        toast.error(response.message || 'Failed to start campaign.');
+  const startStatsPolling = () => {
+    if (statsPollingRef.current) return; // Already polling
+    
+    statsPollingRef.current = setInterval(async () => {
+      try {
+        if (!id) return;
+        const response = await campaignService.getCampaignStats(id);
+        setLeadStats(response.data);
+      } catch (err) {
+        console.error('Error polling campaign stats:', err);
       }
+    }, 10000);
+  };
+
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    if (statsPollingRef.current) {
+      clearInterval(statsPollingRef.current);
+      statsPollingRef.current = null;
+    }
+  };
+
+  const handleStartCampaign = async () => {
+    if (!id || !campaign) return;
+    
+    setStartLoading(true);
+    try {
+      const response = await campaignService.startCampaign(id);
+      setCampaign(response.data);
+      toast.success('Campaign started successfully!');
     } catch (err: any) {
-      setStartError(err.message || 'Failed to start campaign.');
-      toast.error(err.message || 'Failed to start campaign.');
+      console.error('Error starting campaign:', err);
+      toast.error(err.message || 'Failed to start campaign');
     } finally {
       setStartLoading(false);
     }
   };
 
-  const loading = campaignLoading || statsLoading;
+  const handleDeleteCampaign = async () => {
+    if (!id || !campaign) return;
+    
+    if (!confirm(`Are you sure you want to delete campaign "${campaign.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    setDeleteLoading(true);
+    try {
+      await campaignService.deleteCampaign(id);
+      toast.success('Campaign deleted successfully!');
+      navigate('/campaigns');
+    } catch (err: any) {
+      console.error('Error deleting campaign:', err);
+      toast.error(err.message || 'Failed to delete campaign');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleEditField = (field: EditableCampaignFields) => {
+    if (!campaign || !canEditCampaign(campaign.status)) return;
+    
+    setEditMode(prev => ({ ...prev, [field]: true }));
+    setEditedFields(prev => ({ 
+      ...prev, 
+      [field]: field === 'totalRecords' ? campaign.totalRecords : campaign[field] 
+    }));
+  };
+
+  const handleCancelEdit = (field: EditableCampaignFields) => {
+    setEditMode(prev => ({ ...prev, [field]: false }));
+    setEditedFields(prev => {
+      const newFields = { ...prev };
+      delete newFields[field];
+      return newFields;
+    });
+  };
+
+  const handleSaveField = async (field: EditableCampaignFields) => {
+    if (!id || !campaign) return;
+    
+    const value = editedFields[field];
+    if (value === undefined || value === null) return;
+    
+    setSaveLoading(true);
+    try {
+      const updateData: CampaignUpdate = {
+        [field]: value
+      };
+      
+      const response = await campaignService.updateCampaign(id, updateData);
+      setCampaign(response.data);
+      setEditMode(prev => ({ ...prev, [field]: false }));
+      setEditedFields(prev => {
+        const newFields = { ...prev };
+        delete newFields[field];
+        return newFields;
+      });
+      toast.success(`${field} updated successfully!`);
+    } catch (err: any) {
+      console.error(`Error updating ${field}:`, err);
+      toast.error(err.message || `Failed to update ${field}`);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleFieldChange = (field: EditableCampaignFields, value: string | number) => {
+    setEditedFields(prev => ({ ...prev, [field]: value }));
+  };
+
+  const loading = campaignLoading || statsLoading || analyticsLoading;
 
   if (error || !campaign) {
     return null;
@@ -434,7 +492,7 @@ const CampaignDetail: React.FC = () => {
                     />
                   ) : (
                     (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEdit('fileName')}>{campaign.fileName}</span>
+                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEditField('fileName')}>{campaign.fileName}</span>
                       : <span className="ml-2 text-gray-800 dark:text-white/90">{campaign.fileName}</span>
                   )}
                 </div>
@@ -451,7 +509,7 @@ const CampaignDetail: React.FC = () => {
                     />
                   ) : (
                     (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEdit('totalRecords')}>{campaign.totalRecords}</span>
+                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEditField('totalRecords')}>{campaign.totalRecords}</span>
                       : <span className="ml-2 text-gray-800 dark:text-white/90">{campaign.totalRecords}</span>
                   )}
                 </div>
@@ -466,7 +524,7 @@ const CampaignDetail: React.FC = () => {
                     />
                   ) : (
                     (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
-                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90 whitespace-pre-line" onClick={() => handleEdit('url')} dangerouslySetInnerHTML={{__html: formatUrlForDisplay(campaign.url)}} />
+                      ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90 whitespace-pre-line" onClick={() => handleEditField('url')} dangerouslySetInnerHTML={{__html: formatUrlForDisplay(campaign.url)}} />
                       : <span className="ml-2 text-gray-800 dark:text-white/90 whitespace-pre-line" dangerouslySetInnerHTML={{__html: formatUrlForDisplay(campaign.url)}} />
                   )}
                 </div>
@@ -475,23 +533,41 @@ const CampaignDetail: React.FC = () => {
             {/* Save/Cancel or Start Campaign Button */}
             {Object.keys(editedFields).length > 0 ? (
               <div className="mt-6 flex gap-2 items-center">
-                <Button variant="primary" onClick={handleSave} disabled={saveLoading}>
+                <Button variant="primary" onClick={() => {
+                  // Save all fields that have been edited
+                  Object.keys(editedFields).forEach(field => {
+                    handleSaveField(field as EditableCampaignFields);
+                  });
+                }} disabled={saveLoading}>
                   {saveLoading ? 'Saving...' : 'Save'}
                 </Button>
-                <Button variant="outline" onClick={handleCancelEdit} disabled={saveLoading}>
+                <Button variant="outline" onClick={() => {
+                  // Cancel all edits
+                  Object.keys(editedFields).forEach(field => {
+                    handleCancelEdit(field as EditableCampaignFields);
+                  });
+                }} disabled={saveLoading}>
                   Cancel
                 </Button>
-                {saveError && <span className="text-red-500 ml-2">{saveError}</span>}
               </div>
             ) : (
-              campaign.status === CampaignStatus.CREATED && (
-                <div className="mt-6 flex gap-2 items-center">
+              <div className="mt-6 flex gap-2 items-center">
+                {canStartCampaign(campaign.status) && (
                   <Button variant="primary" onClick={handleStartCampaign} disabled={startLoading}>
                     {startLoading ? 'Starting...' : 'Start Campaign'}
                   </Button>
-                  {startError && <span className="text-red-500 ml-2">{startError}</span>}
-                </div>
-              )
+                )}
+                {canEditCampaign(campaign.status) && (
+                  <Button variant="outline" onClick={handleDeleteCampaign} disabled={deleteLoading}>
+                    {deleteLoading ? 'Deleting...' : 'Delete Campaign'}
+                  </Button>
+                )}
+                {isPastCreated(campaign.status) && (
+                  <Button variant="outline" onClick={fetchInstantlyAnalytics} disabled={analyticsLoading}>
+                    {analyticsLoading ? 'Loading...' : 'Load Instantly Analytics'}
+                  </Button>
+                )}
+              </div>
             )}
           </ComponentCard>
         </div>

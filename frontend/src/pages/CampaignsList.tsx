@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../config/api';
+import { toast } from 'react-toastify';
+import { campaignService, CampaignListParams } from '../services/campaignService';
+import { OrganizationService } from '../services/organizationService';
+import { CampaignResponse, CampaignCreate, CampaignStatus } from '../types/campaign';
+import { OrganizationResponse } from '../types/organization';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import ComponentCard from '../components/common/ComponentCard';
 import PageMeta from '../components/common/PageMeta';
@@ -15,32 +19,10 @@ import TableCell from '../components/tables/TableCell';
 import Badge from '../components/ui/badge/Badge';
 import Select from '../components/form/Select';
 import TextArea from '../components/form/input/TextArea';
-import { toast } from 'react-toastify';
-
-interface Campaign {
-  id: string;
-  created_at: string;
-  organization_id: string | null;
-  status: string;
-  name: string;
-  description: string;
-  status_message?: string;
-  last_error?: string;
-  job_status?: Record<string, any>;
-  job_ids?: Record<string, string>;
-}
-
-interface Organization {
-  id: string;
-  name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-}
 
 interface FormErrors {
   fileName?: string;
-  count?: string;
+  totalRecords?: string;
   name?: string;
   description?: string;
   organization_id?: string;
@@ -53,15 +35,10 @@ const getStatusColor = (status: string) => {
       return 'success';
     case 'created':
       return 'info';
-    case 'fetching_leads':
-    case 'verifying_emails':
-    case 'enriching_leads':
-    case 'generating_emails':
+    case 'running':
       return 'warning';
     case 'failed':
       return 'error';
-    case 'leads_fetched':
-      return 'success';
     default:
       return 'info';
   }
@@ -71,16 +48,8 @@ const getStatusLabel = (status: string) => {
   switch (status?.toLowerCase()) {
     case 'created':
       return 'Created';
-    case 'fetching_leads':
-      return 'Fetching Leads';
-    case 'leads_fetched':
-      return 'Leads Fetched';
-    case 'verifying_emails':
-      return 'Verifying Emails';
-    case 'enriching_leads':
-      return 'Enriching Leads';
-    case 'generating_emails':
-      return 'Generating Emails';
+    case 'running':
+      return 'Running';
     case 'completed':
       return 'Completed';
     case 'failed':
@@ -92,14 +61,20 @@ const getStatusLabel = (status: string) => {
 
 const CampaignsList: React.FC = () => {
   const navigate = useNavigate();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignResponse[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [formData, setFormData] = useState({
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedOrganization, setSelectedOrganization] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalCampaigns, setTotalCampaigns] = useState(0);
+  const [formData, setFormData] = useState<CampaignCreate>({
     name: '',
     description: '',
     organization_id: '',
@@ -109,33 +84,18 @@ const CampaignsList: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCampaigns();
     fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (error && error.toLowerCase().includes('not found')) {
-      toast.error(error);
-      navigate('/campaigns');
-    }
-  }, [error, navigate]);
+  }, [currentPage, selectedOrganization, selectedStatus]);
 
   const fetchOrganizations = async () => {
     setOrgsLoading(true);
     setOrgsError(null);
     try {
-      const response = await api.get('/api/organizations');
-      console.log('Organizations API response:', response);
-      if (response && response.data && Array.isArray(response.data.organizations)) {
-        setOrganizations(response.data.organizations);
-      } else {
-        console.error('Unexpected API response structure:', response);
-        setOrganizations([]);
-        setOrgsError('Failed to load organizations: Unexpected response format');
-      }
+      const response = await OrganizationService.getOrganizations();
+      setOrganizations(response.data);
     } catch (err: any) {
       console.error('Error fetching organizations:', err);
       setOrgsError(err.message || 'Failed to load organizations');
@@ -151,15 +111,15 @@ const CampaignsList: React.FC = () => {
       errors.fileName = 'File Name is required';
     }
     if (!formData.totalRecords || formData.totalRecords < 1) {
-      errors.count = 'Total Records must be at least 1';
+      errors.totalRecords = 'Total Records must be at least 1';
     }
     if (formData.totalRecords > 1000) {
-      errors.count = 'Total Records cannot exceed 1000';
+      errors.totalRecords = 'Total Records cannot exceed 1000';
     }
     if (!formData.name.trim()) {
       errors.name = 'Name is required';
     }
-    if (!formData.description.trim()) {
+    if (!formData.description?.trim()) {
       errors.description = 'Description is required';
     }
     if (!formData.organization_id) {
@@ -176,17 +136,28 @@ const CampaignsList: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get('/api/campaigns');
-      if (response && response.status === 'success' && response.data && Array.isArray(response.data.campaigns)) {
-        setCampaigns(response.data.campaigns);
-        setShowCreateForm(response.data.campaigns.length === 0);
-      } else {
-        setCampaigns([]);
-        setShowCreateForm(true);
-        setError(response?.error?.message || 'Failed to load campaigns');
+      const params: CampaignListParams = {
+        page: currentPage,
+        per_page: 10,
+      };
+
+      if (selectedOrganization) {
+        params.organization_id = selectedOrganization;
       }
+      if (selectedStatus) {
+        params.status = selectedStatus;
+      }
+
+      const response = await campaignService.getCampaigns(params);
+      setCampaigns(response.data.campaigns);
+      setTotalPages(response.data.pages);
+      setTotalCampaigns(response.data.total);
+      setShowCreateForm(response.data.campaigns.length === 0 && currentPage === 1);
     } catch (err: any) {
+      console.error('Error fetching campaigns:', err);
       setError(err.message);
+      setCampaigns([]);
+      setShowCreateForm(true);
     } finally {
       setLoading(false);
     }
@@ -195,10 +166,12 @@ const CampaignsList: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = 'checked' in e.target ? e.target.checked : undefined;
+    
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : (name === 'totalRecords' ? Number(value) : value)
     }));
+    
     // Clear error when user starts typing
     if (formErrors[name as keyof FormErrors]) {
       setFormErrors(prev => ({ ...prev, [name]: undefined }));
@@ -210,17 +183,81 @@ const CampaignsList: React.FC = () => {
     if (!validateForm()) {
       return;
     }
-    setCreateError(null);
+
     setCreateLoading(true);
     try {
-      const response = await api.post('/api/campaigns', formData);
+      const response = await campaignService.createCampaign(formData);
+      toast.success('Campaign created successfully!');
       // Redirect to the campaign detail page
       navigate(`/campaigns/${response.data.id}`);
     } catch (err: any) {
-      setCreateError(err.message);
+      console.error('Error creating campaign:', err);
+      toast.error(err.message || 'Failed to create campaign');
     } finally {
       setCreateLoading(false);
     }
+  };
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1); // Reset to first page when searching
+  };
+
+  const handleOrganizationFilter = (value: string) => {
+    setSelectedOrganization(value);
+    setCurrentPage(1); // Reset to first page when filtering
+  };
+
+  const handleStatusFilter = (value: string) => {
+    setSelectedStatus(value);
+    setCurrentPage(1); // Reset to first page when filtering
+  };
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setSelectedOrganization('');
+    setSelectedStatus('');
+    setCurrentPage(1);
+  };
+
+  const filteredCampaigns = campaigns.filter(campaign => {
+    const matchesSearch = !searchTerm || 
+      campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (campaign.description?.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSearch;
+  });
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="flex items-center justify-between mt-6">
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          Showing {((currentPage - 1) * 10) + 1} to {Math.min(currentPage * 10, totalCampaigns)} of {totalCampaigns} campaigns
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   const renderCreateForm = () => (
@@ -266,7 +303,7 @@ const CampaignsList: React.FC = () => {
         <div>
           <Label htmlFor="description">Description</Label>
           <TextArea
-            value={formData.description}
+            value={formData.description || ''}
             onChange={(value: string) => handleChange({ target: { name: 'description', value } } as any)}
             disabled={createLoading}
             error={!!formErrors.description}
@@ -298,8 +335,8 @@ const CampaignsList: React.FC = () => {
             min="1"
             max="1000"
             disabled={createLoading}
-            error={!!formErrors.count}
-            hint={formErrors.count}
+            error={!!formErrors.totalRecords}
+            hint={formErrors.totalRecords}
           />
         </div>
         <div>
@@ -313,10 +350,9 @@ const CampaignsList: React.FC = () => {
             rows={3}
           />
         </div>
-        {createError && <div className="text-error-500">{createError}</div>}
         <Button
           variant="primary"
-          disabled={createLoading || !formData.name.trim() || !formData.description.trim() || !formData.organization_id || !formData.fileName.trim() || !formData.totalRecords || !formData.url.trim()}
+          disabled={createLoading || !formData.name.trim() || !formData.description?.trim() || !formData.organization_id || !formData.fileName.trim() || !formData.totalRecords || !formData.url.trim()}
           className="w-full"
         >
           {createLoading ? 'Creating...' : 'Create Campaign'}
@@ -346,9 +382,60 @@ const CampaignsList: React.FC = () => {
             )}
           </div>
 
+          {/* Search and Filter Controls */}
+          {campaigns.length > 0 && (
+            <div className="mb-6 space-y-4 md:space-y-0 md:flex md:items-end md:space-x-4">
+              <div className="flex-1">
+                <Label htmlFor="search">Search Campaigns</Label>
+                <Input
+                  id="search"
+                  type="text"
+                  placeholder="Search by name or description..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                />
+              </div>
+              <div className="w-full md:w-48">
+                <Label htmlFor="org-filter">Filter by Organization</Label>
+                <Select
+                  options={[
+                    { value: '', label: 'All Organizations' },
+                    ...organizations.map(org => ({ value: org.id, label: org.name }))
+                  ]}
+                  defaultValue={selectedOrganization}
+                  onChange={handleOrganizationFilter}
+                  placeholder="All Organizations"
+                />
+              </div>
+              <div className="w-full md:w-48">
+                <Label htmlFor="status-filter">Filter by Status</Label>
+                <Select
+                  options={[
+                    { value: '', label: 'All Statuses' },
+                    { value: CampaignStatus.CREATED, label: 'Created' },
+                    { value: CampaignStatus.RUNNING, label: 'Running' },
+                    { value: CampaignStatus.COMPLETED, label: 'Completed' },
+                    { value: CampaignStatus.FAILED, label: 'Failed' },
+                  ]}
+                  defaultValue={selectedStatus}
+                  onChange={handleStatusFilter}
+                  placeholder="All Statuses"
+                />
+              </div>
+              {(searchTerm || selectedOrganization || selectedStatus) && (
+                <Button
+                  variant="outline"
+                  onClick={resetFilters}
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+          )}
+
           {loading ? (
             <div className="text-gray-400">Loading campaigns...</div>
-          ) : error && !error.toLowerCase().includes('not found') ? (
+          ) : error ? (
             <div className="text-red-500">{error}</div>
           ) : (
             <>
@@ -381,6 +468,12 @@ const CampaignsList: React.FC = () => {
                               isHeader
                               className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                             >
+                              Organization
+                            </TableCell>
+                            <TableCell
+                              isHeader
+                              className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                            >
                               Status
                             </TableCell>
                             <TableCell
@@ -398,54 +491,61 @@ const CampaignsList: React.FC = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                          {campaigns.map((campaign) => (
-                            <TableRow key={campaign.id}>
-                              <TableCell className="px-5 py-4 sm:px-6 text-start">
-                                <Link
-                                  to={`/campaigns/${campaign.id}`}
-                                  className="text-blue-400 hover:text-blue-300 hover:underline"
-                                >
-                                  {campaign.name || `Campaign ${campaign.id}`}
-                                </Link>
-                              </TableCell>
-                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                                {campaign.description || '-'}
-                              </TableCell>
-                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                                <Badge
-                                  size="sm"
-                                  color={getStatusColor(campaign.status)}
-                                >
-                                  {getStatusLabel(campaign.status)}
-                                </Badge>
-                                {campaign.status_message && (
-                                  <div className="text-xs text-gray-400 mt-1">
-                                    {campaign.status_message}
-                                  </div>
-                                )}
-                                {campaign.last_error && (
-                                  <div className="text-xs text-red-400 mt-1">
-                                    {campaign.last_error}
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                                {new Date(campaign.created_at).toLocaleString()}
-                              </TableCell>
-                              <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
-                                <Link
-                                  to={`/campaigns/${campaign.id}`}
-                                  className="text-blue-400 hover:text-blue-300 hover:underline"
-                                >
-                                  View
-                                </Link>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {filteredCampaigns.map((campaign) => {
+                            const organization = organizations.find(org => org.id === campaign.organization_id);
+                            return (
+                              <TableRow key={campaign.id}>
+                                <TableCell className="px-5 py-4 sm:px-6 text-start">
+                                  <Link
+                                    to={`/campaigns/${campaign.id}`}
+                                    className="text-blue-400 hover:text-blue-300 hover:underline font-medium"
+                                  >
+                                    {campaign.name}
+                                  </Link>
+                                </TableCell>
+                                <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                  {campaign.description || '-'}
+                                </TableCell>
+                                <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                  {organization?.name || 'Unknown'}
+                                </TableCell>
+                                <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                  <Badge
+                                    size="sm"
+                                    color={getStatusColor(campaign.status)}
+                                  >
+                                    {getStatusLabel(campaign.status)}
+                                  </Badge>
+                                  {campaign.status_message && (
+                                    <div className="text-xs text-gray-400 mt-1">
+                                      {campaign.status_message}
+                                    </div>
+                                  )}
+                                  {campaign.status_error && (
+                                    <div className="text-xs text-red-400 mt-1">
+                                      {campaign.status_error}
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                  {new Date(campaign.created_at).toLocaleString()}
+                                </TableCell>
+                                <TableCell className="px-4 py-3 text-gray-500 text-start text-theme-sm dark:text-gray-400">
+                                  <Link
+                                    to={`/campaigns/${campaign.id}`}
+                                    className="text-blue-400 hover:text-blue-300 hover:underline"
+                                  >
+                                    View
+                                  </Link>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
                   </div>
+                  {renderPagination()}
                 </>
               )}
             </>
