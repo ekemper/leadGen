@@ -491,7 +491,7 @@ const CampaignDetail: React.FC = () => {
                       onChange={e => handleFieldChange('fileName', e.target.value)}
                     />
                   ) : (
-                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                    (campaign.status === CampaignStatus.CREATED)
                       ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEditField('fileName')}>{campaign.fileName}</span>
                       : <span className="ml-2 text-gray-800 dark:text-white/90">{campaign.fileName}</span>
                   )}
@@ -508,7 +508,7 @@ const CampaignDetail: React.FC = () => {
                       onChange={e => handleFieldChange('totalRecords', Number(e.target.value))}
                     />
                   ) : (
-                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                    (campaign.status === CampaignStatus.CREATED)
                       ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90" onClick={() => handleEditField('totalRecords')}>{campaign.totalRecords}</span>
                       : <span className="ml-2 text-gray-800 dark:text-white/90">{campaign.totalRecords}</span>
                   )}
@@ -523,7 +523,7 @@ const CampaignDetail: React.FC = () => {
                       rows={3}
                     />
                   ) : (
-                    (campaign.status?.toUpperCase() === CampaignStatus.CREATED)
+                    (campaign.status === CampaignStatus.CREATED)
                       ? <span className="ml-2 cursor-pointer hover:underline text-gray-800 dark:text-white/90 whitespace-pre-line" onClick={() => handleEditField('url')} dangerouslySetInnerHTML={{__html: formatUrlForDisplay(campaign.url)}} />
                       : <span className="ml-2 text-gray-800 dark:text-white/90 whitespace-pre-line" dangerouslySetInnerHTML={{__html: formatUrlForDisplay(campaign.url)}} />
                   )}
@@ -557,11 +557,12 @@ const CampaignDetail: React.FC = () => {
                     {startLoading ? 'Starting...' : 'Start Campaign'}
                   </Button>
                 )}
-                {canEditCampaign(campaign.status) && (
+                {/* Temporarily commenting out delete button until backend DELETE endpoint is implemented */}
+                {/* {canEditCampaign(campaign.status) && (
                   <Button variant="outline" onClick={handleDeleteCampaign} disabled={deleteLoading}>
                     {deleteLoading ? 'Deleting...' : 'Delete Campaign'}
                   </Button>
-                )}
+                )} */}
                 {isPastCreated(campaign.status) && (
                   <Button variant="outline" onClick={fetchInstantlyAnalytics} disabled={analyticsLoading}>
                     {analyticsLoading ? 'Loading...' : 'Load Instantly Analytics'}

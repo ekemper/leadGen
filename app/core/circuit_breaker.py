@@ -34,7 +34,7 @@ class CircuitBreakerService:
     
     def __init__(self, redis_client: Redis):
         self.redis = redis_client
-        self.failure_threshold = 5  # Number of failures before opening circuit
+        self.failure_threshold = 2  # Number of failures before opening circuit
         self.failure_window = 300  # 5 minutes window for failure tracking
         self.recovery_timeout = 60  # 1 minute before trying half-open
         self.success_threshold = 3  # Successful calls needed to close circuit

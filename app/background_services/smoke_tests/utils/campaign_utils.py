@@ -6,23 +6,20 @@ import requests
 from app.core.config import settings
 
 
-def create_campaign(token, campaign_index, organization_id=None, leads_per_campaign=20, api_base=None):
+def create_campaign(token, campaign_index, organization_id, leads_per_campaign, api_base):
     """
     Create a new campaign.
     
     Args:
         token: Authentication token
         campaign_index: Index number for campaign naming
-        organization_id: Optional organization ID
+        organization_id: Organization ID
         leads_per_campaign: Number of leads per campaign
-        api_base: API base URL, defaults to settings-based URL
+        api_base: API base URL (required)
         
     Returns:
         str: Campaign ID
     """
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-    
     # No longer need to set campaign index for mock client - pop-based approach handles this automatically
     
     campaign_data = {
@@ -51,7 +48,7 @@ def create_campaign(token, campaign_index, organization_id=None, leads_per_campa
     return campaign_id
 
 
-def start_campaign(token, campaign_id, campaign_index, api_base=None):
+def start_campaign(token, campaign_id, campaign_index, api_base):
     """
     Start a campaign.
     
@@ -59,11 +56,8 @@ def start_campaign(token, campaign_id, campaign_index, api_base=None):
         token: Authentication token
         campaign_id: Campaign ID to start
         campaign_index: Index number for logging
-        api_base: API base URL, defaults to settings-based URL
+        api_base: API base URL (required)
     """
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-        
     headers = {"Authorization": f"Bearer {token}"}
     print(f"[Campaign #{campaign_index}] Starting campaign {campaign_id}...")
     resp = requests.post(f"{api_base}/campaigns/{campaign_id}/start", json={}, headers=headers)
@@ -73,7 +67,7 @@ def start_campaign(token, campaign_id, campaign_index, api_base=None):
     print(f"[Campaign #{campaign_index}] Started campaign {campaign_id}")
 
 
-def get_all_leads(token, campaign_id, campaign_index, api_base=None):
+def get_all_leads(token, campaign_id, campaign_index, api_base):
     """
     Fetch all leads for a campaign.
     
@@ -81,14 +75,11 @@ def get_all_leads(token, campaign_id, campaign_index, api_base=None):
         token: Authentication token
         campaign_id: Campaign ID
         campaign_index: Index number for logging
-        api_base: API base URL, defaults to settings-based URL
+        api_base: API base URL (required)
         
     Returns:
         list: List of lead objects
     """
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-        
     print(f"[API #{campaign_index}] Fetching all leads for campaign {campaign_id}...")
     headers = {"Authorization": f"Bearer {token}"}
     resp = requests.get(f"{api_base}/leads", headers=headers, params={"campaign_id": campaign_id})
@@ -102,11 +93,8 @@ def get_all_leads(token, campaign_id, campaign_index, api_base=None):
     return leads_data
 
 
-def create_campaigns_sequentially(token, organization_id, num_campaigns, leads_per_campaign, wait_for_jobs_func, validate_no_duplicate_emails_func, api_base=None):
+def create_campaigns_sequentially(token, organization_id, num_campaigns, leads_per_campaign, wait_for_jobs_func, validate_no_duplicate_emails_func, api_base):
     """Create and start campaigns one by one, focusing on process validation rather than content prediction."""
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-        
     campaigns_data = {}
     
     print(f"[Setup] Creating {num_campaigns} campaigns sequentially...")

@@ -129,19 +129,20 @@ validate_environment() {
     print_step "Validating environment and container status..."
     
     # Check if containers are running
-    if ! docker ps | grep -q "lead-gen-api"; then
+    if ! docker ps | grep -q "api"; then
         print_warning "API container not running, attempting to start services..."
         docker compose up -d
         sleep 10
     fi
     
     # Get actual container names
-    API_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-api" | head -1)
-    POSTGRES_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-postgres" | head -1)
-    REDIS_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "lead-gen-redis" | head -1)
+    API_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "api" | head -1)
+    POSTGRES_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "postgres" | head -1)
+    REDIS_CONTAINER=$(docker ps --format "table {{.Names}}" | grep "redis" | head -1)
     
     if [ -z "$API_CONTAINER" ] || [ -z "$POSTGRES_CONTAINER" ] || [ -z "$REDIS_CONTAINER" ]; then
         print_error "Required containers not found or not running"
+        print_info f`found these containers: {API_CONTAINER}, {POSTGRES_CONTAINER}, {REDIS_CONTAINER}`
         print_info "Expected containers: API, PostgreSQL, Redis"
         print_info "Run 'docker compose up -d' to start services"
         exit 1
@@ -462,16 +463,16 @@ main() {
     fi
     
     # Execute all phases
-    print_section "PHASE 1: ENVIRONMENT VALIDATION"
-    validate_prerequisites
-    validate_environment
-    
-    print_section "PHASE 2: LOG FILE MANAGEMENT"
+    print_section "PHASE 1: LOG FILE MANAGEMENT"
     truncate_log_file
     
-    print_section "PHASE 3: CONTAINER REBUILD"
+    print_section "PHASE 2: CONTAINER REBUILD"
     restart_containers
     
+     print_section "PHASE 3: ENVIRONMENT VALIDATION"
+    validate_prerequisites
+    validate_environment
+
     print_section "PHASE 4: DATABASE TABLE TRUNCATION"
     truncate_database_tables
     

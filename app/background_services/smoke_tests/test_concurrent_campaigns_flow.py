@@ -48,7 +48,7 @@ from app.background_services.smoke_tests.utils import (
 )
 
 # Configuration for concurrent testing
-API_BASE = f"http://localhost:8000{settings.API_V1_STR}"
+API_BASE = f"http://api:8000{settings.API_V1_STR}"
 NUM_CAMPAIGNS = 10  # Number of campaigns to run concurrently
 CAMPAIGN_TIMEOUT = 1000  # Increased timeout for concurrent operations
 LEADS_PER_CAMPAIGN = 20  # Number of leads per campaign

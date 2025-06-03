@@ -47,11 +47,8 @@ def _check_job_completion(target_jobs, expected_count, campaign_index, job_type,
         return ('wait_more', None)
 
 
-def _report_timeout_status(token, campaign_id, job_type, campaign_index, timeout, api_base=None):
+def _report_timeout_status(token, campaign_id, job_type, campaign_index, timeout, api_base):
     """Report detailed status when timeout is reached and raise TimeoutError."""
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-        
     print(f"[Polling #{campaign_index}] TIMEOUT: {job_type} jobs not finished within {timeout}s")
     jobs = fetch_campaign_jobs(token, campaign_id, api_base)
     target = [j for j in jobs if j["job_type"] == job_type]
@@ -65,11 +62,8 @@ def _report_timeout_status(token, campaign_id, job_type, campaign_index, timeout
     raise TimeoutError(f"Campaign #{campaign_index} {job_type} jobs not finished within {timeout}s")
 
 
-def fetch_campaign_jobs(token, campaign_id, api_base=None):
+def fetch_campaign_jobs(token, campaign_id, api_base):
     """Return list of jobs for the given campaign via API, handling pagination."""
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-        
     headers = {"Authorization": f"Bearer {token}"}
     all_jobs = []
     page = 1
@@ -115,7 +109,7 @@ def fetch_campaign_jobs(token, campaign_id, api_base=None):
 def wait_for_jobs(token, campaign_id, job_type, campaign_index, expected_count=None, timeout=300, interval=10, api_base=None):
     """Wait for specific job type to complete for a campaign."""
     if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
+        raise ValueError("api_base is required")
         
     print(f"[Polling #{campaign_index}] Starting to wait for {job_type} jobs (campaign {campaign_id})")
     if expected_count:
@@ -178,7 +172,7 @@ def print_consolidated_status(job_tracker):
 def monitor_all_campaigns_jobs(token, campaigns_data, timeout=600, api_base=None):
     """Monitor ENRICH_LEAD jobs across all campaigns concurrently"""
     if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
+        raise ValueError("api_base is required")
     
     print(f"\n[Monitor] Starting to monitor ENRICH_LEAD jobs across {len(campaigns_data)} campaigns")
     
@@ -264,25 +258,10 @@ def monitor_all_campaigns_jobs(token, campaigns_data, timeout=600, api_base=None
     return job_tracker
 
 
-def monitor_all_campaigns_jobs_with_cb_awareness(token, campaigns_data, timeout=600, 
-                                                check_circuit_breaker_status_func=None, 
-                                                check_campaigns_paused_by_circuit_breaker_func=None,
-                                                report_circuit_breaker_failure_func=None,
-                                                validate_no_unexpected_pauses_func=None,
-                                                check_campaign_status_summary_func=None,
-                                                api_base=None):
-    """
-    Enhanced job monitoring with circuit breaker awareness.
-    
-    This function monitors ENRICH_LEAD jobs across all campaigns while also
-    checking for circuit breaker events that could cause service failures.
-    
-    Returns:
-        None: If circuit breaker triggered and test should stop
-        dict: Job results if completed successfully or timeout reached
-    """
+def monitor_all_campaigns_jobs_with_cb_awareness(token, campaigns_data, timeout, check_circuit_breaker_status_func, check_campaigns_paused_by_circuit_breaker_func, report_circuit_breaker_failure_func, validate_no_unexpected_pauses_func, check_campaign_status_summary_func, api_base=None):
+    """Enhanced monitoring with circuit breaker awareness and graceful failure handling."""
     if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
+        raise ValueError("api_base is required")
     
     print(f"\n[Monitor CB] Starting circuit breaker-aware monitoring for {len(campaigns_data)} campaigns")
     

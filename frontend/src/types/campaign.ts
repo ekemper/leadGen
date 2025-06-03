@@ -1,10 +1,10 @@
 // Campaign Types based on backend schemas
 
 export enum CampaignStatus {
-  CREATED = "created",
-  RUNNING = "running", 
-  COMPLETED = "completed",
-  FAILED = "failed"
+  CREATED = "CREATED",
+  RUNNING = "RUNNING", 
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED"
 }
 
 export interface CampaignBase {

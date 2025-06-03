@@ -81,26 +81,26 @@ class Settings(BaseSettings):
 
     # Rate Limiter Configuration
     # MillionVerifier API Rate Limits
-    MILLIONVERIFIER_RATE_LIMIT_REQUESTS: int = 60
-    MILLIONVERIFIER_RATE_LIMIT_PERIOD: int = 60
+    MILLIONVERIFIER_RATE_LIMIT_REQUESTS: int = 1
+    MILLIONVERIFIER_RATE_LIMIT_PERIOD: int = 5
     
     # Apollo API Rate Limits
     APOLLO_RATE_LIMIT_REQUESTS: int = 30
     APOLLO_RATE_LIMIT_PERIOD: int = 60
     
     # Instantly API Rate Limits
-    INSTANTLY_RATE_LIMIT_REQUESTS: int = 100
-    INSTANTLY_RATE_LIMIT_PERIOD: int = 60
+    INSTANTLY_RATE_LIMIT_REQUESTS: int = 1
+    INSTANTLY_RATE_LIMIT_PERIOD: int = 5
     
     # OpenAI API Rate Limits
     # Reduced from 60 to 15 requests per minute to stay within OpenAI's 10,000 TPM limit
     # With average ~500 tokens per request, 15 requests ≈ 7,500 tokens, leaving safety margin
-    OPENAI_RATE_LIMIT_REQUESTS: int = 15
-    OPENAI_RATE_LIMIT_PERIOD: int = 60
+    OPENAI_RATE_LIMIT_REQUESTS: int = 1
+    OPENAI_RATE_LIMIT_PERIOD: int = 5
     
     # Perplexity API Rate Limits
-    PERPLEXITY_RATE_LIMIT_REQUESTS: int = 50
-    PERPLEXITY_RATE_LIMIT_PERIOD: int = 60
+    PERPLEXITY_RATE_LIMIT_REQUESTS: int = 1
+    PERPLEXITY_RATE_LIMIT_PERIOD: int = 5
 
     # External API Tokens
     # Added to fix critical configuration management failure where ApolloService

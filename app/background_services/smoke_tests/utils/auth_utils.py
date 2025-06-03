@@ -27,19 +27,16 @@ def random_password():
     random.shuffle(password)
     return ''.join(password)
 
-def signup_and_login(api_base=None):
+def signup_and_login(api_base):
     """
     Create a new test user and authenticate.
     
     Args:
-        api_base: API base URL, defaults to settings-based URL
+        api_base: API base URL (required)
         
     Returns:
         tuple: (token, email) for authenticated user
     """
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-        
     email = random_email()
     password = random_password()
     signup_data = {
@@ -64,20 +61,17 @@ def signup_and_login(api_base=None):
     print(f"[Auth] Got token: {token[:8]}...")
     return token, email
 
-def create_organization(token, api_base=None):
+def create_organization(token, api_base):
     """
     Create a test organization.
     
     Args:
         token: Authentication token
-        api_base: API base URL, defaults to settings-based URL
+        api_base: API base URL (required)
         
     Returns:
         str: Organization ID
     """
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
-        
     headers = {"Authorization": f"Bearer {token}"}
     org_data = {
         "name": "Test Org",

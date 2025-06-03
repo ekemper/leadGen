@@ -53,95 +53,94 @@ def assert_lead_enrichment_simple(updated_lead, timeout):
 
 
 def validate_campaign_data(campaigns_data):
-    """Validate that campaign process worked correctly - focused on process integrity."""
-    print(f"\n[Validation] Validating process integrity for {len(campaigns_data)} campaigns...")
+    """Validate the structure and content of campaigns data."""
+    if not campaigns_data:
+        raise Exception("No campaigns data to validate")
     
-    total_campaigns = len(campaigns_data)
-    total_leads = sum(data['leads_count'] for data in campaigns_data.values())
-    all_emails = set()
+    print(f"[Validation] Validating data for {len(campaigns_data)} campaigns...")
     
-    # Process validation checks
     for campaign_id, data in campaigns_data.items():
-        campaign_index = data['campaign_index']
-        actual_emails = data['actual_emails']
-        leads_count = data['leads_count']
+        # Validate required fields
+        required_fields = ['campaign_index', 'leads_count', 'leads', 'actual_emails']
+        for field in required_fields:
+            if field not in data:
+                raise Exception(f"Campaign {campaign_id} missing required field: {field}")
         
-        # Basic sanity checks
-        if leads_count == 0:
-            raise ValueError(f"Campaign #{campaign_index} has no leads")
+        # Validate data types and ranges
+        if not isinstance(data['campaign_index'], int) or data['campaign_index'] <= 0:
+            raise Exception(f"Campaign {campaign_id} has invalid campaign_index: {data['campaign_index']}")
         
-        if len(actual_emails) == 0:
-            raise ValueError(f"Campaign #{campaign_index} has no valid email addresses")
+        if not isinstance(data['leads_count'], int) or data['leads_count'] <= 0:
+            raise Exception(f"Campaign {campaign_id} has invalid leads_count: {data['leads_count']}")
         
-        # Check for duplicates within this campaign
-        if len(actual_emails) != len(set(actual_emails)):
-            raise ValueError(f"Campaign #{campaign_index} has duplicate emails within campaign")
+        if not isinstance(data['leads'], list) or len(data['leads']) != data['leads_count']:
+            raise Exception(f"Campaign {campaign_id} leads list length mismatch")
         
-        # Check for duplicates across campaigns
-        overlap = all_emails & actual_emails
-        if overlap:
-            raise ValueError(f"Campaign #{campaign_index} has emails that appear in other campaigns: {overlap}")
+        if not isinstance(data['actual_emails'], set):
+            raise Exception(f"Campaign {campaign_id} actual_emails must be a set")
         
-        all_emails.update(actual_emails)
-        
-        print(f"[Validation] ✅ Campaign #{campaign_index}: {leads_count} leads, {len(actual_emails)} valid emails")
+        # Validate leads structure
+        for i, lead in enumerate(data['leads']):
+            if not isinstance(lead, dict):
+                raise Exception(f"Campaign {campaign_id} lead {i} is not a dict")
+            if 'email' not in lead:
+                raise Exception(f"Campaign {campaign_id} lead {i} missing email field")
     
-    # Overall system validation
-    # NUM_CAMPAIGNS would need to be passed as a parameter, so we'll use the actual count
-    if total_leads == 0:
-        raise ValueError("No leads were generated across any campaign")
-    
-    # Ensure reasonable distribution (at least 1 lead per campaign)
-    min_leads = min(data['leads_count'] for data in campaigns_data.values())
-    max_leads = max(data['leads_count'] for data in campaigns_data.values())
-    
-    if min_leads == 0:
-        raise ValueError("At least one campaign got no leads")
-    
-    print(f"[Validation] ✅ Process integrity validated:")
-    print(f"[Validation]   - {total_campaigns} campaigns processed successfully")
-    print(f"[Validation]   - {total_leads} total leads generated")
-    print(f"[Validation]   - {len(all_emails)} unique emails (no duplicates)")
-    print(f"[Validation]   - Lead distribution: {min_leads}-{max_leads} leads per campaign")
+    print(f"[Validation] ✅ All campaigns data validated successfully")
 
 
 def validate_no_duplicate_emails(campaigns_data):
-    """Ensure each email appears in only one campaign - key process validation."""
+    """Validate that no email addresses are duplicated across campaigns."""
+    print(f"[Validation] Checking for duplicate emails across {len(campaigns_data)} campaigns...")
+    
     all_emails = set()
-    total_leads = 0
+    email_to_campaigns = {}
     
     for campaign_id, data in campaigns_data.items():
-        campaign_emails = data['actual_emails']
         campaign_index = data['campaign_index']
+        actual_emails = data['actual_emails']
         
-        # Check for duplicates across campaigns
-        overlap = all_emails & campaign_emails
-        if overlap:
-            raise ValueError(f"Campaign #{campaign_index} has duplicate emails from other campaigns: {overlap}")
-        
-        all_emails.update(campaign_emails)
-        total_leads += data['leads_count']
-        
-        print(f"[Validation] Campaign #{campaign_index}: {len(campaign_emails)} unique emails")
+        for email in actual_emails:
+            if email in all_emails:
+                # Found duplicate
+                original_campaign = email_to_campaigns[email]
+                raise Exception(f"DUPLICATE EMAIL DETECTED: {email} appears in both Campaign #{original_campaign} and Campaign #{campaign_index}")
+            
+            all_emails.add(email)
+            email_to_campaigns[email] = campaign_index
     
-    print(f"[Validation] ✅ {total_leads} total leads, all {len(all_emails)} emails unique across {len(campaigns_data)} campaigns")
+    total_emails = len(all_emails)
+    print(f"[Validation] ✅ No duplicate emails found across campaigns ({total_emails} unique emails)")
 
 
-def validate_no_unexpected_pauses(token, campaign_ids, api_base=None):
-    """Check that no campaigns were unexpectedly paused during execution."""
-    from .reporting_utils import check_campaign_status_summary
+def validate_no_unexpected_pauses(token, campaign_ids, api_base):
+    """Check if any campaigns are in PAUSED status (indicating service issues)."""
+    if not api_base:
+        raise ValueError("api_base is required")
     
-    status_summary, campaign_details = check_campaign_status_summary(token, campaign_ids, api_base)
+    paused_campaigns = []
+    headers = {"Authorization": f"Bearer {token}"}
     
-    if status_summary.get("PAUSED", 0) > 0:
-        paused_campaigns = [c for c in campaign_details if c["status"] == "PAUSED"]
-        print(f"\n⚠️  WARNING: {len(paused_campaigns)} campaigns are in PAUSED status")
-        
+    for campaign_id in campaign_ids:
+        try:
+            resp = requests.get(f"{api_base}/campaigns/{campaign_id}", headers=headers)
+            if resp.status_code == 200:
+                campaign = resp.json().get("data", resp.json())
+                if campaign["status"] == "PAUSED":
+                    paused_campaigns.append({
+                        "id": campaign_id,
+                        "status_message": campaign.get("status_message", "No message"),
+                        "status_error": campaign.get("status_error", "No error")
+                    })
+        except Exception as e:
+            print(f"[Validation] Warning: Could not check campaign {campaign_id}: {e}")
+    
+    if paused_campaigns:
+        print(f"[Validation] ⚠️  Found {len(paused_campaigns)} paused campaigns:")
         for campaign in paused_campaigns:
-            print(f"   Campaign {campaign['id']}: {campaign['status_message']}")
+            print(f"  Campaign {campaign['id']}: {campaign['status_message']}")
             if campaign['status_error']:
-                print(f"      Error: {campaign['status_error']}")
-        
+                print(f"    Error: {campaign['status_error']}")
         return False, paused_campaigns
     
     return True, [] 

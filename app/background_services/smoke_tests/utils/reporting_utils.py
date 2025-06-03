@@ -6,10 +6,10 @@ import requests
 from app.core.config import settings
 
 
-def check_campaign_status_summary(token, campaign_ids, api_base=None):
+def check_campaign_status_summary(token, campaign_ids, api_base):
     """Get summary of campaign statuses for reporting."""
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
+    if not api_base:
+        raise ValueError("api_base is required")
         
     headers = {"Authorization": f"Bearer {token}"}
     status_summary = {

@@ -6,28 +6,29 @@ import requests
 from app.core.config import settings
 
 
-def check_circuit_breaker_status(token, api_base=None):
-    """Check current circuit breaker status for all services."""
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
+def check_circuit_breaker_status(token, api_base):
+    """Check the current status of all circuit breakers."""
+    if not api_base:
+        raise ValueError("api_base is required")
         
     headers = {"Authorization": f"Bearer {token}"}
+    
     try:
-        resp = requests.get(f"{api_base}/queue-management/status", headers=headers)
+        resp = requests.get(f"{api_base}/circuit-breaker/status", headers=headers)
         if resp.status_code == 200:
             return resp.json()
         else:
-            print(f"[Circuit Breaker] Warning: Could not get status: {resp.status_code}")
+            print(f"[Circuit Breaker] Status check failed: {resp.status_code}")
             return None
     except Exception as e:
-        print(f"[Circuit Breaker] Warning: Status check failed: {e}")
+        print(f"[Circuit Breaker] Status check error: {e}")
         return None
 
 
-def check_campaigns_paused_by_circuit_breaker(token, campaign_ids, api_base=None):
-    """Check if any campaigns have been paused due to circuit breaker events."""
-    if api_base is None:
-        api_base = f"http://localhost:8000{settings.API_V1_STR}"
+def check_campaigns_paused_by_circuit_breaker(token, campaign_ids, api_base):
+    """Check if any campaigns were paused due to circuit breaker triggers."""
+    if not api_base:
+        raise ValueError("api_base is required")
         
     headers = {"Authorization": f"Bearer {token}"}
     paused_campaigns = []
@@ -37,11 +38,11 @@ def check_campaigns_paused_by_circuit_breaker(token, campaign_ids, api_base=None
             resp = requests.get(f"{api_base}/campaigns/{campaign_id}", headers=headers)
             if resp.status_code == 200:
                 campaign = resp.json().get("data", resp.json())
-                if campaign["status"] == "PAUSED":
+                if campaign["status"] == "PAUSED" and "circuit breaker" in campaign.get("status_message", "").lower():
                     paused_campaigns.append({
                         "id": campaign_id,
                         "status_message": campaign.get("status_message", ""),
-                        "paused_reason": campaign.get("status_error", "")
+                        "status_error": campaign.get("status_error", "")
                     })
         except Exception as e:
             print(f"[Circuit Breaker] Warning: Could not check campaign {campaign_id}: {e}")
@@ -50,41 +51,28 @@ def check_campaigns_paused_by_circuit_breaker(token, campaign_ids, api_base=None
 
 
 def report_circuit_breaker_failure(cb_status, paused_campaigns):
-    """Generate clear report when circuit breaker causes test failure."""
-    print("\n" + "="*80)
-    print("❌ TEST STOPPED: CIRCUIT BREAKER TRIGGERED")
-    print("="*80)
+    """Report detailed circuit breaker failure information."""
+    print("\n🔴 CIRCUIT BREAKER TRIGGERED - SERVICE FAILURE DETECTED")
+    print("=" * 60)
     
     if cb_status and cb_status.get("data", {}).get("circuit_breakers"):
-        print("\n🔍 Circuit Breaker Status:")
         circuit_breakers = cb_status["data"]["circuit_breakers"]
+        print(f"Circuit Breaker Status:")
         
-        # Show services that are not in normal 'closed' state
-        unhealthy_services = []
         for service, status in circuit_breakers.items():
             if isinstance(status, dict):
                 state = status.get("circuit_state", "unknown")
-                if state != "closed":
-                    unhealthy_services.append((service, status))
-                    print(f"  ⚠️  {service.upper()}: {state}")
-                    if status.get("pause_info"):
-                        print(f"      Reason: {status['pause_info']}")
-                    if status.get("failure_count", 0) > 0:
-                        print(f"      Failures: {status['failure_count']}/{status.get('failure_threshold', 'unknown')}")
-        
-        if not unhealthy_services:
-            print("  ℹ️  All circuit breakers show 'closed' state")
-            print("  ℹ️  Campaigns may have been paused by previous failures or manual intervention")
+                print(f"  🔴 {service.upper()}: {state}")
+                if status.get("pause_info"):
+                    print(f"    Reason: {status['pause_info']}")
+                if status.get("failure_count", 0) > 0:
+                    print(f"    Failures: {status['failure_count']}/{status.get('failure_threshold', 'unknown')}")
     
     if paused_campaigns:
-        print(f"\n📊 Campaigns Paused: {len(paused_campaigns)}")
+        print(f"\nCampaigns Paused: {len(paused_campaigns)}")
         for campaign in paused_campaigns:
-            print(f"  🛑 Campaign {campaign['id']}")
-            if campaign["status_message"]:
-                print(f"      Message: {campaign['status_message']}")
-            if campaign["paused_reason"]:
-                print(f"      Reason: {campaign['paused_reason']}")
+            print(f"  - Campaign {campaign['id']}: {campaign['status_message']}")
     
-    print("\n💡 This indicates a real service failure occurred during testing.")
-    print("💡 Check service health and retry the test when services are restored.")
-    print("="*80) 
+    print("\n💡 This indicates legitimate service failures were detected")
+    print("💡 The test infrastructure correctly identified and responded to service issues")
+    print("=" * 60) 
