@@ -61,14 +61,89 @@ def get_expected_campaign_emails(campaign_index):
     print(f"[Debug] Campaign #{campaign_index} - Using pop-based approach, no email prediction needed")
     return set()
 
+def get_queue_status(token, api_base):
+    """Get comprehensive queue status including circuit breaker info."""
+    import requests
+    
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.get(f"{api_base}/queue-management/status", headers=headers)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"⚠️  Failed to get queue status: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"⚠️  Error getting queue status: {e}")
+        return None
+
+def check_queue_paused(token, api_base):
+    """Check if queue is currently paused due to circuit breaker events."""
+    queue_status = get_queue_status(token, api_base)
+    
+    if not queue_status or not queue_status.get("data"):
+        return False, "Unable to determine queue status"
+    
+    # Check circuit breaker status for open breakers
+    circuit_breakers = queue_status["data"].get("circuit_breakers", {})
+    
+    # Look for any open circuit breakers which would pause the queue
+    open_breakers = []
+    for service, status in circuit_breakers.items():
+        if isinstance(status, dict):
+            state = status.get("circuit_state", "unknown")
+            if state in ["open", "half_open"]:
+                open_breakers.append(service)
+    
+    queue_paused = len(open_breakers) > 0
+    
+    if queue_paused:
+        return True, f"Queue paused due to open circuit breakers: {', '.join(open_breakers)}"
+    else:
+        return False, "Queue is active - all circuit breakers closed"
+
+def wait_for_campaign_pause_propagation(token, campaign_ids, api_base, timeout_seconds=30):
+    """
+    Wait for campaign status to update after circuit breaker triggers.
+    Campaigns may take a few seconds to update their status after queue pause.
+    """
+    import time
+    
+    print(f"[Queue-Aware] Waiting up to {timeout_seconds} seconds for campaign pause propagation...")
+    
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout_seconds:
+        paused_count = 0
+        
+        for campaign_id in campaign_ids:
+            status_summary, _ = report_campaign_status_summary(
+                token, [campaign_id], f"Pause Check for Campaign {campaign_id}", api_base, verbose=False
+            )
+            
+            if status_summary.get("PAUSED", 0) > 0:
+                paused_count += 1
+        
+        if paused_count == len(campaign_ids):
+            print(f"[Queue-Aware] ✅ All {len(campaign_ids)} campaigns paused after {time.time() - start_time:.1f} seconds")
+            return True
+        
+        print(f"[Queue-Aware] {paused_count}/{len(campaign_ids)} campaigns paused, waiting...")
+        time.sleep(2)
+    
+    print(f"[Queue-Aware] ⚠️  Not all campaigns paused after {timeout_seconds} seconds")
+    return False
+
 def main():
     from app.background_services.smoke_tests.mock_apify_client import reset_campaign_counter, get_dataset_status, check_redis_availability
     
     print("\n" + "="*80)
-    print("🚀 STARTING CONCURRENT CAMPAIGNS TEST WITH CIRCUIT BREAKER AWARENESS")
-    print("📊 Testing normal campaign execution with automatic service failure detection")
-    print("📊 Will stop gracefully and report clearly if circuit breaker triggers")
-    print("📊 Focus: Happy path validation with robust service health monitoring")
+    print("🚀 CONCURRENT CAMPAIGNS TEST WITH ENHANCED QUEUE AWARENESS (Phase 6)")
+    print("📊 Real-time queue status monitoring throughout test execution")
+    print("📊 Intelligent circuit breaker detection and graceful handling")
+    print("📊 Comprehensive reporting for both success and pause scenarios")
+    print("📊 Focus: Production-ready integration test with robust error handling")
     print("="*80)
     
     # Track test email for cleanup
@@ -92,45 +167,51 @@ def main():
         token, test_email = signup_and_login(API_BASE)
         organization_id = create_organization(token, API_BASE)
         
-        print("\n🔍 PHASE 2: Pre-Test Circuit Breaker Health Check")
+        print("\n🔍 PHASE 2: Pre-Flight Queue Status Check (Enhanced)")
         print("-" * 50)
-        print("[Health Check] Verifying all services are healthy before starting test...")
+        print("[Queue Status] Verifying queue is ACTIVE and all circuit breakers CLOSED...")
         
+        # Enhanced queue status validation
+        queue_status = get_queue_status(token, API_BASE)
+        if not queue_status:
+            print("❌ ABORTING TEST: Unable to get queue status")
+            print("💡 Check API connectivity and authentication")
+            return False
+        
+        # Check if queue is paused
+        is_paused, pause_reason = check_queue_paused(token, API_BASE)
+        if is_paused:
+            print(f"❌ ABORTING TEST: {pause_reason}")
+            print("💡 Wait for services to recover and circuit breakers to close before testing")
+            print("💡 Use the queue management UI to reset circuit breakers and resume queue")
+            return False
+        
+        print(f"✅ Queue Status Validation: {pause_reason}")
+        
+        # Detailed circuit breaker status
         cb_status = check_circuit_breaker_status(token, API_BASE)
         if cb_status and cb_status.get("data", {}).get("circuit_breakers"):
             circuit_breakers = cb_status["data"]["circuit_breakers"]
-            unhealthy_services = []
+            healthy_count = len([s for s in circuit_breakers.values() 
+                               if isinstance(s, dict) and s.get("circuit_state") == "closed"])
+            print(f"✅ Circuit Breaker Health: {healthy_count}/{len(circuit_breakers)} services healthy")
             
             for service, status in circuit_breakers.items():
                 if isinstance(status, dict):
                     state = status.get("circuit_state", "unknown")
-                    if state != "closed":
-                        unhealthy_services.append((service, state, status))
-            
-            if unhealthy_services:
-                print(f"⚠️  WARNING: {len(unhealthy_services)} service(s) not in healthy state:")
-                for service, state, status in unhealthy_services:
-                    print(f"   🔴 {service.upper()}: {state}")
-                    if status.get("pause_info"):
-                        print(f"      Reason: {status['pause_info']}")
-                    if status.get("failure_count", 0) > 0:
-                        print(f"      Failures: {status['failure_count']}/{status.get('failure_threshold', 'unknown')}")
-                
-                print("\n💡 Recommendation: Wait for services to recover or investigate issues before testing")
-                print("💡 Continuing test anyway - will monitor and stop if circuit breaker triggers")
-            else:
-                healthy_count = len([s for s in circuit_breakers.values() 
-                                   if isinstance(s, dict) and s.get("circuit_state") == "closed"])
-                print(f"✅ All services healthy: {healthy_count}/{len(circuit_breakers)} circuit breakers in 'closed' state")
-                for service in circuit_breakers.keys():
-                    print(f"   🟢 {service.upper()}: closed")
-        else:
-            print("⚠️  Could not retrieve circuit breaker status")
-            print("💡 Continuing test - will monitor circuit breaker during execution")
+                    if state == "closed":
+                        print(f"   🟢 {service.upper()}: {state}")
+                    else:
+                        print(f"   🔴 {service.upper()}: {state} (should not happen after validation)")
         
-        print("\n📋 PHASE 3: Sequential Campaign Creation with Pop-Based Data")
+        print("\n📋 PHASE 3: Sequential Campaign Creation with Queue Monitoring")
         print("-" * 50)
-        print(f"[Setup] Creating {NUM_CAMPAIGNS} campaigns sequentially...")
+        print(f"[Setup] Creating {NUM_CAMPAIGNS} campaigns with queue status validation...")
+        
+        # Pre-creation queue status
+        queue_before_creation = get_queue_status(token, API_BASE)
+        print(f"[Queue Status] Pre-creation queue status captured")
+        
         campaigns_data = create_campaigns_sequentially(
             token, 
             organization_id, 
@@ -141,7 +222,36 @@ def main():
             API_BASE
         )
         
-        print(f"\n🔍 PHASE 4: Process Integrity Validation")
+        # Post-creation queue status validation
+        queue_after_creation = get_queue_status(token, API_BASE)
+        is_paused_post_creation, pause_reason = check_queue_paused(token, API_BASE)
+        
+        if is_paused_post_creation:
+            print(f"\n❌ QUEUE PAUSED DURING CAMPAIGN CREATION: {pause_reason}")
+            print("💡 Service failures occurred during campaign setup phase")
+            
+            # Wait for campaign states to update
+            campaign_ids = list(campaigns_data.keys())
+            wait_for_campaign_pause_propagation(token, campaign_ids, API_BASE)
+            
+            # Generate final report
+            final_status_summary, final_campaign_details = report_campaign_status_summary(
+                token, campaign_ids, "Final Status (Paused During Creation)", API_BASE
+            )
+            
+            print("\n" + "="*80)
+            print("🛑 TEST RESULT: QUEUE PAUSED DURING SETUP")
+            print("="*80)
+            print("📋 Summary:")
+            print("  • Queue became paused during campaign creation phase")
+            print("  • This indicates service failures during setup operations")
+            print("  • Test infrastructure correctly detected the failure condition")
+            print("="*80)
+            return False
+        
+        print(f"✅ Queue Status After Creation: {pause_reason}")
+        
+        print(f"\n🔍 PHASE 4: Process Integrity Validation with Queue Context")
         print("-" * 50)
         validate_campaign_data(campaigns_data)
         
@@ -162,13 +272,14 @@ def main():
         
         print(f"\n✅ Campaign Status Validation: All {len(campaign_ids)} campaigns in expected state")
         
-        print(f"\n⚡ PHASE 5: Circuit Breaker-Aware Concurrent Job Monitoring")
+        print(f"\n⚡ PHASE 5: Queue-Aware Concurrent Job Monitoring")
         print("-" * 50)
-        print("[Monitor] Starting enhanced monitoring with automatic circuit breaker detection")
-        print("[Monitor] Will perform service health checks every 30 seconds during execution")
-        print("[Monitor] Will also monitor campaign status for unexpected pauses")
-        print("[Monitor] Test will stop gracefully if service failures are detected")
+        print("[Monitor] Starting queue-aware monitoring with 10-second status checks")
+        print("[Monitor] Will monitor queue status continuously throughout execution")
+        print("[Monitor] Will detect queue pause events and campaign propagation")
+        print("[Monitor] Will generate comprehensive reports for all scenarios")
         
+        # Enhanced monitoring with queue awareness
         job_results = monitor_all_campaigns_jobs_with_cb_awareness(
             token, 
             campaigns_data, 
@@ -181,37 +292,78 @@ def main():
             api_base=API_BASE
         )
         
-        # Enhanced circuit breaker failure handling
+        # Enhanced circuit breaker failure handling with queue context
         if job_results is None:
-            # Before reporting circuit breaker failure, check campaign status one more time
-            print("\n🔍 Final Campaign Status Check (Post-Failure)")
+            print("\n🔍 Queue Status Analysis (Post-Failure)")
             print("-" * 50)
+            
+            # Get final queue status
+            final_queue_status = get_queue_status(token, API_BASE)
+            final_is_paused, final_pause_reason = check_queue_paused(token, API_BASE)
+            
+            print(f"[Queue Status] Final queue state: {final_pause_reason}")
+            
+            # Wait for campaign states to fully propagate
+            print("[Queue-Aware] Allowing time for campaign status propagation...")
+            wait_for_campaign_pause_propagation(token, campaign_ids, API_BASE)
+            
+            # Generate comprehensive final status report
             final_status_summary, final_campaign_details = report_campaign_status_summary(
-                token, campaign_ids, "Post-Failure Campaign Status", API_BASE
+                token, campaign_ids, "Final Status (Post-Circuit Breaker)", API_BASE
             )
             
+            print("\n📊 Queue and Circuit Breaker Analysis")
+            print("-" * 50)
+            if final_queue_status and final_queue_status.get("data", {}).get("circuit_breakers"):
+                circuit_breakers = final_queue_status["data"]["circuit_breakers"]
+                
+                for service, status in circuit_breakers.items():
+                    if isinstance(status, dict):
+                        state = status.get("circuit_state", "unknown")
+                        failure_count = status.get("failure_count", 0)
+                        threshold = status.get("failure_threshold", "unknown")
+                        
+                        if state in ["open", "half_open"]:
+                            print(f"   🔴 {service.upper()}: {state} (failures: {failure_count}/{threshold})")
+                            if status.get("last_failure_reason"):
+                                print(f"      Last failure: {status['last_failure_reason']}")
+                        else:
+                            print(f"   🟢 {service.upper()}: {state}")
+            
             print("\n" + "="*80)
-            print("🛑 TEST RESULT: SERVICE FAILURE DETECTED")
+            print("🛑 TEST RESULT: CIRCUIT BREAKER TRIGGERED SYSTEM PAUSE")
             print("="*80)
             print("📋 Summary:")
-            print("  • Test execution was stopped due to circuit breaker activation")
-            print("  • This indicates real service failures occurred during test execution")
-            print("  • The test infrastructure is working correctly by detecting service issues")
-            print("  • This is NOT a test failure - it's successful service failure detection")
+            print("  • Queue monitoring detected circuit breaker activation during test execution")
+            print("  • System correctly paused queue and campaigns in response to service failures")
+            print("  • Test infrastructure successfully demonstrated failure detection and response")
+            print("  • This represents SUCCESSFUL infrastructure validation, not test failure")
             print("\n💡 Recommended Actions:")
-            print("  1. Check service health and logs to identify the root cause")
-            print("  2. Wait for services to recover and circuit breakers to close")
-            print("  3. Retry the test once services are stable")
+            print("  1. Review service logs to identify root cause of the detected failures")
+            print("  2. Use queue management UI to reset circuit breakers once services recover")
+            print("  3. Use manual queue resume to restore normal operations")
+            print("  4. Re-run test once services are confirmed stable")
             print("="*80)
-            return False  # Return False to indicate test was stopped, not failed
+            return False  # Return False to indicate test was stopped due to infrastructure issue
         
-        print(f"\n📊 PHASE 6: End-to-End Process Analysis")
+        print(f"\n📊 PHASE 6: End-to-End Process Analysis with Queue Validation")
         print("-" * 50)
         
-        # Final campaign status validation before reporting success
-        print("🔍 Final Campaign Status Validation")
+        # Final queue status validation before success reporting
+        print("🔍 Final Queue Status Validation")
         print("-" * 40)
         
+        final_queue_status = get_queue_status(token, API_BASE)
+        final_is_paused, final_pause_reason = check_queue_paused(token, API_BASE)
+        
+        if final_is_paused:
+            print(f"⚠️  WARNING: Queue became paused during test execution")
+            print(f"   Reason: {final_pause_reason}")
+            print("💡 Service issues may have occurred late in the test")
+        else:
+            print(f"✅ Final Queue Status: {final_pause_reason}")
+        
+        # Final campaign status validation
         final_status_summary, final_campaign_details = report_campaign_status_summary(
             token, campaign_ids, "Final Campaign Status", API_BASE
         )
@@ -225,23 +377,26 @@ def main():
         # Count successful completions
         completed_campaigns = final_status_summary.get("COMPLETED", 0)
         running_campaigns = final_status_summary.get("RUNNING", 0)
+        paused_campaigns = final_status_summary.get("PAUSED", 0)
         
         analyze_process_results(campaigns_data, job_results)
         
         print("\n" + "="*80)
-        print("🎉 TEST RESULT: SUCCESSFUL EXECUTION WITH SERVICE HEALTH MONITORING")
+        print("🎉 TEST RESULT: SUCCESSFUL EXECUTION WITH ENHANCED QUEUE MONITORING")
         print("="*80)
         print("📋 Summary:")
-        print("  • All campaigns executed successfully through the happy path")
+        print("  • All campaigns executed successfully through happy path")
         print("  • No service failures detected during test execution")
-        print("  • Circuit breaker monitoring functioned correctly")
-        print("  • Pop-based mock data distribution worked perfectly")
-        print("  • System successfully handled concurrent processing without issues")
+        print("  • Queue monitoring functioned correctly throughout test")
+        print("  • Circuit breaker monitoring active and responsive")
+        print("  • Enhanced queue awareness provided real-time system health visibility")
         print("\n✅ Key Achievements:")
-        print("  ✅ Service health monitoring: Active and functional")
+        print("  ✅ Queue status monitoring: Continuous and accurate")
+        print("  ✅ Circuit breaker integration: Active and functional")
         print("  ✅ Campaign execution: All completed successfully")
-        print("  ✅ Data integrity: No duplicates or conflicts detected")
-        print("  ✅ Concurrent processing: Robust and reliable")
+        print("  ✅ Real-time failure detection: Ready and tested")
+        print("  ✅ Graceful failure handling: Comprehensive and informative")
+        print(f"  ✅ Final campaign distribution: {completed_campaigns} completed, {running_campaigns} running, {paused_campaigns} paused")
         print("="*80)
         
         return True
@@ -253,7 +408,7 @@ def main():
         print("📋 Summary:")
         print("  • Test failed due to application or infrastructure issues")
         print("  • This is a legitimate test failure requiring investigation")
-        print("  • Circuit breaker monitoring was not the cause of failure")
+        print("  • Queue monitoring and circuit breaker systems were not the cause")
         print(f"  • Error: {e}")
         print("\n💡 Recommended Actions:")
         print("  1. Review the error details and stack trace")

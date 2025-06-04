@@ -214,6 +214,34 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
         lead.enrichment_job_id = enrichment_job.id
         db.commit()
         
+        # Check campaign status before processing
+        campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+        if not campaign:
+            logger.error(f"Campaign {campaign_id} not found for job {enrichment_job.id}")
+            enrichment_job.status = JobStatus.FAILED
+            enrichment_job.error = f"Campaign {campaign_id} not found"
+            enrichment_job.completed_at = datetime.utcnow()
+            db.commit()
+            return {
+                "lead_id": lead_id,
+                "job_id": enrichment_job.id,
+                "status": "failed",
+                "reason": "Campaign not found"
+            }
+        
+        if campaign.status == CampaignStatus.PAUSED:
+            logger.warning(f"Pausing job {enrichment_job.id} for lead {lead_id}: Campaign {campaign_id} is paused")
+            enrichment_job.status = JobStatus.PAUSED
+            enrichment_job.error = f"Job paused: Campaign {campaign_id} is paused"
+            enrichment_job.completed_at = datetime.utcnow()
+            db.commit()
+            return {
+                "lead_id": lead_id,
+                "job_id": enrichment_job.id,
+                "status": "paused",
+                "reason": f"Campaign {campaign_id} is paused"
+            }
+        
         # Check if job should be processed based on circuit breaker status
         queue_manager = get_queue_manager(db)
         circuit_breaker = queue_manager.circuit_breaker

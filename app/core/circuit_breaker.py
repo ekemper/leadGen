@@ -1,5 +1,13 @@
-import time
+"""
+Circuit Breaker Service
+
+This module provides circuit breaker functionality for third-party services
+to handle failures gracefully and prevent cascading failures.
+"""
+
+import asyncio
 import json
+import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from enum import Enum
@@ -13,6 +21,7 @@ class CircuitState(str, Enum):
     OPEN = "open"       # Failing, requests blocked
     HALF_OPEN = "half_open"  # Testing if service recovered
 
+#TODO: simplify the circuit breaker to not be responsible for the state of individual services. It should only have open and closed states
 class ThirdPartyService(str, Enum):
     PERPLEXITY = "perplexity"
     OPENAI = "openai" 
@@ -70,6 +79,8 @@ class CircuitBreakerService:
             logger.error(f"Error getting circuit state for {service}: {e}")
             return CircuitState.CLOSED
     
+
+    #TODO: setting the circuit state should only occur from two specific events: 1) an error from any of the third party api integrations, or an api  call from the front end to close the breaker to resume service
     def _set_circuit_state(self, service: ThirdPartyService, state: CircuitState, metadata: Optional[Dict] = None):
         """Set circuit breaker state with optional metadata."""
         try:
@@ -91,6 +102,7 @@ class CircuitBreakerService:
         except Exception as e:
             logger.error(f"Error setting circuit state for {service}: {e}")
 
+#TODO we need to remove the concept of half open state. it is not needed. only open and closed states are needed. 
     def _transition_circuit_state(self, service: ThirdPartyService, new_state: CircuitState, metadata: Optional[Dict] = None):
         """Transition circuit state and handle alerts/notifications."""
         try:
@@ -100,8 +112,19 @@ class CircuitBreakerService:
             # Set the new state first
             self._set_circuit_state(service, new_state, metadata)
             
-            # Then handle alerts and notifications if state changed
+            # Handle queue pausing/resuming based on state transitions
             if current_state != new_state:
+                if new_state == CircuitState.OPEN:
+                    # Circuit opened - pause queues
+                    self._pause_service_queues(service)
+                elif new_state == CircuitState.CLOSED and current_state == CircuitState.OPEN:
+                    # Circuit closed from open - resume queues
+                    self._resume_service_queues(service)
+                elif new_state == CircuitState.CLOSED and current_state == CircuitState.HALF_OPEN:
+                    # Circuit closed from half-open - ensure queues are resumed
+                    self._resume_service_queues(service)
+                
+                # Then handle alerts and notifications
                 self._send_state_change_alert(service, current_state, new_state, metadata)
                 
         except Exception as e:
@@ -141,7 +164,6 @@ class CircuitBreakerService:
         try:
             # Import here to avoid circular imports
             from app.core.campaign_event_handler import get_campaign_event_handler
-            import asyncio
             
             campaign_handler = get_campaign_event_handler()
             
@@ -317,8 +339,65 @@ class CircuitBreakerService:
             
             logger.info(f"Resumed queues for service {service}")
             
+            # Also resume paused jobs for this service
+            self._resume_paused_jobs_for_service(service)
+            
         except Exception as e:
             logger.error(f"Error resuming queues for {service}: {e}")
+    
+    def _resume_paused_jobs_for_service(self, service: ThirdPartyService):
+        """Resume jobs that were paused due to this service being unavailable."""
+        try:
+            # Import here to avoid circular imports
+            from app.core.database import get_db
+            from app.models.job import Job, JobStatus, JobType
+            
+            db = next(get_db())
+            
+            try:
+                # Define service job dependencies
+                service_job_mapping = {
+                    ThirdPartyService.APOLLO: [JobType.FETCH_LEADS],
+                    ThirdPartyService.PERPLEXITY: [JobType.ENRICH_LEAD],
+                    ThirdPartyService.OPENAI: [JobType.ENRICH_LEAD],
+                    ThirdPartyService.MILLIONVERIFIER: [JobType.ENRICH_LEAD],
+                    ThirdPartyService.INSTANTLY: [JobType.ENRICH_LEAD]
+                }
+                
+                dependent_job_types = service_job_mapping.get(service, [])
+                if not dependent_job_types:
+                    return
+                
+                # Find paused jobs that depend on this service and were paused due to circuit breaker
+                paused_jobs = (
+                    db.query(Job)
+                    .filter(
+                        Job.status == JobStatus.PAUSED,
+                        Job.job_type.in_(dependent_job_types),
+                        Job.error.contains(f"Circuit breaker OPEN for ThirdPartyService.{service.value.upper()}")
+                    )
+                    .all()
+                )
+                
+                resumed_count = 0
+                for job in paused_jobs:
+                    # Resume the job by setting it back to PENDING
+                    job.status = JobStatus.PENDING
+                    job.error = None
+                    job.updated_at = datetime.utcnow()
+                    resumed_count += 1
+                
+                if resumed_count > 0:
+                    db.commit()
+                    logger.info(f"Resumed {resumed_count} paused jobs for service {service}")
+                else:
+                    logger.debug(f"No paused jobs found to resume for service {service}")
+                    
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error resuming paused jobs for {service}: {e}")
     
     def is_service_queue_paused(self, service: ThirdPartyService) -> tuple[bool, Optional[Dict]]:
         """Check if queues for a service are paused."""

@@ -165,6 +165,8 @@ async def get_job_status(
         data=response_data
     )
 
+
+#TODO : the cancel job post endpoint is redundant - please refactor usages of this endpoin to use the delete endpoint instead
 @router.post("/{job_id}/cancel", response_model=JobCancelResponse)
 async def cancel_job_post(
     job_id: int,

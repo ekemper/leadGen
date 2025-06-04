@@ -1,9 +1,10 @@
 """
 Campaign Event Handler for Circuit Breaker Integration
 
-This module handles automatic campaign pausing and resumption based on 
-circuit breaker state changes. It integrates with the existing circuit 
-breaker system to provide graceful degradation for campaign execution.
+This module handles automatic campaign pausing based on circuit breaker state changes.
+ALL RESUME OPERATIONS ARE MANUAL ONLY through queue management.
+
+REFACTORED: Removed all automatic resume logic per simplified business rules.
 """
 
 import asyncio
@@ -18,25 +19,28 @@ from app.models.campaign_status import CampaignStatus
 
 logger = get_logger(__name__)
 
-
+# TODO: COMPLETELY REMOVE THIS DEPRICATED CLASS. all pauseing will be at the job level
 class CampaignEventHandler:
     """
-    Handles automatic campaign pausing and resumption based on circuit breaker events.
+    Handles automatic campaign pausing based on circuit breaker events.
     
-    This handler:
+    SIMPLIFIED Handler (Post-Refactor):
     1. Listens for circuit breaker state changes
     2. Automatically pauses running campaigns when services fail
-    3. Automatically resumes paused campaigns when services recover
+    3. NO automatic resume logic - campaigns resume ONLY through manual queue management
     4. Provides event logging and monitoring
     """
     
     def __init__(self):
-        """Initialize the campaign event handler."""
+        """Initialize the campaign event handler with pause-only logic."""
         self.circuit_breaker = get_circuit_breaker()
+        logger.info("CampaignEventHandler initialized with simplified pause-only logic")
         
     async def handle_circuit_breaker_opened(self, service: ThirdPartyService, reason: str, metadata: Optional[Dict] = None) -> int:
         """
-        Handle circuit breaker opening by pausing all running campaigns.
+        Handle circuit breaker opening by evaluating which campaigns should be paused.
+        
+        Uses the CampaignStatusMonitor to pause dependent campaigns immediately.
         
         Args:
             service: The service that failed
@@ -50,19 +54,22 @@ class CampaignEventHandler:
             logger.warning(f"Circuit breaker opened for {service.value}: {reason}")
             
             # Import here to avoid circular imports
-            from app.services.campaign import CampaignService
+            from app.services.campaign_status_monitor import get_campaign_status_monitor
             
             db = SessionLocal()
-            campaign_service = CampaignService()
+            campaign_monitor = get_campaign_status_monitor()
             
             try:
-                # Pause all running campaigns dependent on this service
-                detailed_reason = self._build_detailed_reason(service, reason, metadata)
-                paused_count = await campaign_service.pause_campaigns_for_service(
-                    service, detailed_reason, db
-                )
+                # Use the monitoring service to evaluate and pause campaigns
+                result = await campaign_monitor.evaluate_campaign_status_for_service(service, db)
                 
-                logger.info(f"Circuit breaker event: Paused {paused_count} campaigns due to {service.value} failure")
+                paused_count = result["campaigns_paused"]
+                eligible_count = result["campaigns_eligible"]
+                
+                logger.info(f"Circuit breaker event: Evaluated {eligible_count} campaigns, paused {paused_count} due to {service.value} failure")
+                
+                # Build detailed reason for logging
+                detailed_reason = self._build_detailed_reason(service, reason, metadata)
                 
                 # Log the event for monitoring
                 await self._log_campaign_event(
@@ -70,7 +77,12 @@ class CampaignEventHandler:
                     service=service,
                     campaigns_affected=paused_count,
                     reason=detailed_reason,
-                    metadata=metadata
+                    metadata={
+                        **(metadata or {}),
+                        "campaigns_evaluated": eligible_count,
+                        "campaigns_paused": paused_count,
+                        "immediate_pause": "simplified logic applied"
+                    }
                 )
                 
                 return paused_count
@@ -82,61 +94,56 @@ class CampaignEventHandler:
             logger.error(f"Error handling circuit breaker opened event for {service.value}: {str(e)}", exc_info=True)
             return 0
     
+
+    #TODO: refactor how we handle the manual resume of the queue. the state of the campaign should only be created, running, or completed
+    #TODO: nothing should have to happen to the campaign when the breaker is manually closed , no state change will be needed. It will be the jobs that will be updated to a pending state and resumed with new celery task instantiation
     async def handle_circuit_breaker_closed(self, service: ThirdPartyService, metadata: Optional[Dict] = None) -> int:
         """
-        Handle circuit breaker closing by checking if campaigns can be resumed.
+        Handle circuit breaker closing (LOG ONLY - no automatic resume).
+        
+        Circuit breaker closing does NOT automatically resume campaigns.
+        Campaigns require manual resume through queue management API.
         
         Args:
             service: The service that recovered
             metadata: Additional recovery information
             
         Returns:
-            Number of campaigns eligible for resumption
+            Always 0 (no campaigns automatically resumed)
         """
         try:
-            logger.info(f"Circuit breaker closed for {service.value} - service recovered")
+            logger.info(f"Circuit breaker closed for {service.value} - NO automatic campaign resume (new logic)")
             
-            db = SessionLocal()
-            try:
-                # Get all paused campaigns that were paused due to this service
-                paused_campaigns = await self._get_campaigns_paused_by_service(service, db)
-                
-                resumable_count = 0
-                for campaign in paused_campaigns:
-                    # Check if all required services are now available
-                    if await self._can_resume_campaign_safely(campaign, db):
-                        await self._resume_campaign_if_safe(campaign, db)
-                        resumable_count += 1
-                
-                logger.info(f"Circuit breaker event: {resumable_count} campaigns eligible for resumption after {service.value} recovery")
-                
-                # Log the event for monitoring
-                await self._log_campaign_event(
-                    event_type="circuit_breaker_closed",
-                    service=service,
-                    campaigns_affected=resumable_count,
-                    reason=f"{service.value} service recovered",
-                    metadata=metadata
-                )
-                
-                return resumable_count
-                
-            finally:
-                db.close()
+            # Log the event for monitoring (no automatic actions)
+            await self._log_campaign_event(
+                event_type="circuit_breaker_closed",
+                service=service,
+                campaigns_affected=0,
+                reason=f"{service.value} service recovered - manual resume required",
+                metadata={
+                    **(metadata or {}),
+                    "automatic_resume": "disabled",
+                    "manual_resume_required": True,
+                    "resume_method": "queue_management_api"
+                }
+            )
+            
+            # Return 0 - no campaigns automatically resumed
+            return 0
                 
         except Exception as e:
             logger.error(f"Error handling circuit breaker closed event for {service.value}: {str(e)}", exc_info=True)
             return 0
-    
+    #TODO: completely remove the concept of a half open breaker
     async def handle_circuit_breaker_half_open(self, service: ThirdPartyService, metadata: Optional[Dict] = None):
         """
-        Handle circuit breaker entering half-open state.
+        Handle circuit breaker entering half-open state (LOG ONLY).
         
-        In half-open state, we don't automatically resume campaigns yet,
-        but we log the event for monitoring.
+        In half-open state, we only log the event for monitoring.
+        No automatic campaign actions are taken.
         """
         try:
-            logger.info(f"Circuit breaker half-open for {service.value} - testing recovery")
+            logger.info(f"Circuit breaker half-open for {service.value} - testing recovery (log only)")
             
             # Log the event for monitoring
             await self._log_campaign_event(
@@ -144,14 +151,23 @@ class CampaignEventHandler:
                 service=service,
                 campaigns_affected=0,
                 reason=f"{service.value} service testing recovery",
-                metadata=metadata
+                metadata={
+                    **(metadata or {}),
+                    "automatic_actions": "none",
+                    "status": "monitoring_only"
+                }
             )
             
         except Exception as e:
             logger.error(f"Error handling circuit breaker half-open event for {service.value}: {str(e)}", exc_info=True)
     
+    # TODO this will likely be deprecated because we wont need to pause campaigns
     async def _get_campaigns_paused_by_service(self, service: ThirdPartyService, db) -> List[Campaign]:
-        """Get campaigns that were paused due to a specific service failure."""
+        """
+        Get campaigns that were paused due to a specific service failure.
+        
+        NOTE: This method retained for potential manual resume logic integration.
+        """
         try:
             paused_campaigns = (
                 db.query(Campaign)
@@ -173,55 +189,8 @@ class CampaignEventHandler:
             logger.error(f"Error getting campaigns paused by {service.value}: {str(e)}")
             return []
     
-    async def _can_resume_campaign_safely(self, campaign: Campaign, db) -> bool:
-        """Check if a campaign can be safely resumed by checking all required services."""
-        try:
-            # Import here to avoid circular imports
-            from app.services.campaign import CampaignService
-            
-            campaign_service = CampaignService()
-            can_start, reason = campaign_service.can_start_campaign(campaign)
-            
-            # For paused campaigns, we need to check if resume is possible
-            # The can_start_campaign checks circuit breaker status
-            if campaign.status == CampaignStatus.PAUSED:
-                # Check if all required services are available
-                required_services = [
-                    ThirdPartyService.APOLLO,
-                    ThirdPartyService.PERPLEXITY,
-                    ThirdPartyService.OPENAI,
-                    ThirdPartyService.INSTANTLY,
-                    ThirdPartyService.MILLIONVERIFIER
-                ]
-                
-                for service in required_services:
-                    allowed, service_reason = self.circuit_breaker.should_allow_request(service)
-                    if not allowed:
-                        return False
-                
-                return True
-            
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error checking if campaign {campaign.id} can be resumed: {str(e)}")
-            return False
-    
-    async def _resume_campaign_if_safe(self, campaign: Campaign, db):
-        """Resume a campaign if it's safe to do so."""
-        try:
-            # Import here to avoid circular imports
-            from app.services.campaign import CampaignService
-            
-            campaign_service = CampaignService()
-            
-            # Resume the campaign
-            result = await campaign_service.resume_campaign(campaign.id, db)
-            logger.info(f"Auto-resumed campaign {campaign.id}: {result.get('message', 'resumed')}")
-            
-        except Exception as e:
-            logger.error(f"Error auto-resuming campaign {campaign.id}: {str(e)}")
-    
+    # TODO: we will want to know why the queue has been stopped but we wont keep the paused state on the campaigns anymore
+    # TODO the reason for the breaker triggering will be stored on the breaker class
     def _build_detailed_reason(self, service: ThirdPartyService, reason: str, metadata: Optional[Dict] = None) -> str:
         """Build a detailed reason string for campaign pausing."""
         base_reason = f"Circuit breaker opened for {service.value}: {reason}"
@@ -243,33 +212,24 @@ class CampaignEventHandler:
         """Log campaign events for monitoring and analytics."""
         try:
             event_data = {
-                'timestamp': datetime.utcnow().isoformat(),
-                'event_type': event_type,
-                'service': service.value,
-                'campaigns_affected': campaigns_affected,
-                'reason': reason,
-                'metadata': metadata or {}
+                "timestamp": datetime.utcnow().isoformat(),
+                "event_type": event_type,
+                "service": service.value,
+                "campaigns_affected": campaigns_affected,
+                "reason": reason,
+                "metadata": metadata or {}
             }
             
-            # Log at appropriate level based on event type
-            if event_type == "circuit_breaker_opened":
-                logger.warning(f"Campaign Event: {event_type} - {campaigns_affected} campaigns affected by {service.value} failure")
-            else:
-                logger.info(f"Campaign Event: {event_type} - {campaigns_affected} campaigns affected by {service.value} recovery")
+            # Log for monitoring systems
+            logger.info(f"Campaign event logged: {event_data}")
             
-            # You could also store this in Redis or a database for analytics
-            # For now, we just log it
+            # Future: Send to monitoring/analytics system
+            # await monitoring_service.log_campaign_event(event_data)
             
         except Exception as e:
             logger.error(f"Error logging campaign event: {str(e)}")
 
 
-# Global event handler instance
-_campaign_event_handler = None
-
 def get_campaign_event_handler() -> CampaignEventHandler:
-    """Get the global campaign event handler instance."""
-    global _campaign_event_handler
-    if _campaign_event_handler is None:
-        _campaign_event_handler = CampaignEventHandler()
-    return _campaign_event_handler 
+    """Get singleton instance of CampaignEventHandler."""
+    return CampaignEventHandler() 

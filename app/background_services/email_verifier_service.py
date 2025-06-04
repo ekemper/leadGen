@@ -65,6 +65,8 @@ class EmailVerifierService:
                 'error': f'Invalid email parameter: {email}'
             }
         
+# TODO : even with the stubbed out call to millionverifier lets bring the rate limiting back so it can be tested
+
         # Check rate limiting if enabled
         # if self.rate_limiter:
         #     try:

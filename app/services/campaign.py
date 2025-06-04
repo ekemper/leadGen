@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from app.models.campaign import Campaign
 from app.models.campaign_status import CampaignStatus
 from app.models.job import Job, JobStatus, JobType
+from app.models.lead import Lead
 from app.schemas.campaign import CampaignCreate, CampaignUpdate, CampaignStart
 from app.core.logger import get_logger
 from app.core.config import get_redis_connection
@@ -30,6 +31,15 @@ logger = get_logger(__name__)
 
 class CampaignService:
     """Service for managing campaign business logic."""
+    
+    # Required services for campaign operations - all are critical
+    REQUIRED_SERVICES = [
+        ThirdPartyService.APOLLO,         # Lead fetching (FETCH_LEADS jobs)
+        ThirdPartyService.PERPLEXITY,     # Lead enrichment (ENRICH_LEAD jobs)
+        ThirdPartyService.OPENAI,         # Email copy generation (ENRICH_LEAD jobs)
+        ThirdPartyService.INSTANTLY,      # Lead creation (ENRICH_LEAD jobs)
+        ThirdPartyService.MILLIONVERIFIER # Email verification (ENRICH_LEAD jobs)
+    ]
     
     def __init__(self):
         """
@@ -89,7 +99,7 @@ class CampaignService:
             logger.info(f'Found {len(campaigns)} campaigns')
             
             campaign_list = []
-            for campaign in campaigns:
+            for campaign in campaigns: #TODO: EK, why are we not doing a join beween jobs and campaigns, this should be done in sql 
                 try:
                     campaign_dict = campaign.to_dict()
                     
@@ -177,14 +187,12 @@ class CampaignService:
             
             # Check global pause state - warn about service availability but allow creation
             circuit_breaker = get_circuit_breaker()
-            required_services = [
-                ThirdPartyService.APOLLO,
-                ThirdPartyService.PERPLEXITY,
-                ThirdPartyService.OPENAI,
-                ThirdPartyService.INSTANTLY,
-                ThirdPartyService.MILLIONVERIFIER
-            ]
+
+            # TODO: the circuit breaker states should be independent of the service states, any of the api integrations can trigger  the circuit breaker to open.
+            required_services = self.REQUIRED_SERVICES
             
+
+            #TODO: we should not have to check the services. just the open or closed state of the circuit breaker. the state of the circuit breaker is the source of truth 
             unavailable_services = []
             for service in required_services:
                 allowed, reason = circuit_breaker.should_allow_request(service)
@@ -202,6 +210,8 @@ class CampaignService:
                 url=campaign_data.url
             )
             
+
+            #TODO: remove this, we dont need to know which service is available. 
             # Add status message if services are unavailable
             if unavailable_services:
                 warning_msg = f"Campaign created successfully. Note: Some services are currently unavailable: {', '.join(unavailable_services)}. The campaign can be started once services recover."
@@ -214,6 +224,9 @@ class CampaignService:
             db.commit()
             db.refresh(campaign)
 
+
+#TODO: create a helper for this logic, this method id pretty big. 
+#TODO: the state of the circuit breaker should be the source of truth for the conditional to create the instantly lead . not unavailable services
             # Create Instantly campaign only if service is available
             if self.instantly_service and not any("instantly" in svc.lower() for svc in unavailable_services):
                 try:
@@ -334,7 +347,8 @@ class CampaignService:
                     detail=error_details
                 )
 
-            # Log warnings if any (but allow campaign to start)
+            # Log warnings if any - warnings don't prevent campaign start
+            # (errors would have already prevented reaching this point)
             if validation_results["warnings"]:
                 logger.warning(f"Campaign {campaign_id} starting with warnings: {validation_results['warnings']}")
 
@@ -759,13 +773,7 @@ class CampaignService:
             circuit_breaker = get_circuit_breaker()
             
             # Check all services that this campaign might depend on
-            required_services = [
-                ThirdPartyService.APOLLO,      # For lead fetching
-                ThirdPartyService.PERPLEXITY,  # For enrichment
-                ThirdPartyService.OPENAI,      # For email copy
-                ThirdPartyService.INSTANTLY,   # For lead creation
-                ThirdPartyService.MILLIONVERIFIER  # For email verification
-            ]
+            required_services = self.REQUIRED_SERVICES
             
             blocked_services = []
             for service in required_services:
@@ -791,14 +799,79 @@ class CampaignService:
                     detail="Failed to resume campaign due to invalid state transition"
                 )
             
+            # STEP 8: Job Status Cascade - Resume all paused jobs in this campaign
+            from datetime import datetime
+            
+            paused_jobs = db.query(Job).filter(
+                Job.campaign_id == campaign_id,
+                Job.status == JobStatus.PAUSED
+            ).all()
+            
+            jobs_resumed = 0
+            jobs_requeued = 0
+            resume_errors = []
+            
+            for job in paused_jobs:
+                try:
+                    # Reset job status to pending
+                    job.status = JobStatus.PENDING
+                    job.error = None  # Clear pause error message
+                    job.updated_at = datetime.utcnow()
+                    job.task_id = None  # Clear old task ID since we'll create a new one
+                    
+                    # Re-queue the appropriate Celery task based on job type
+                    task = None
+                    if job.job_type == JobType.FETCH_LEADS:
+                        # Re-queue fetch leads task
+                        job_params = {
+                            'fileName': campaign.fileName,
+                            'totalRecords': campaign.totalRecords,
+                            'url': campaign.url
+                        }
+                        from app.workers.campaign_tasks import fetch_and_save_leads_task
+                        task = fetch_and_save_leads_task.delay(job_params, campaign_id, job.id)
+                        
+                    elif job.job_type == JobType.ENRICH_LEAD:
+                        # Re-queue enrichment task - need to find the associated lead
+                        lead = db.query(Lead).filter(Lead.enrichment_job_id == job.id).first()
+                        if lead:
+                            from app.workers.campaign_tasks import enrich_lead_task
+                            task = enrich_lead_task.delay(lead.id, campaign_id)
+                        else:
+                            logger.warning(f"No lead found for enrichment job {job.id} - cannot re-queue")
+                            
+                    # Update job with new task ID if task was created
+                    if task:
+                        job.task_id = task.id
+                        jobs_requeued += 1
+                        logger.info(f"Re-queued job {job.id} ({job.job_type}) with new task {task.id}")
+                    else:
+                        logger.warning(f"Could not re-queue job {job.id} ({job.job_type}) - no task created")
+                    
+                    jobs_resumed += 1
+                    logger.info(f"Resumed job {job.id} from campaign {campaign_id}")
+                    
+                except Exception as e:
+                    error_msg = f"Job {job.id}: {str(e)}"
+                    resume_errors.append(error_msg)
+                    logger.error(f"Error resuming job {job.id} from campaign {campaign_id}: {str(e)}")
+                    # Continue with other jobs even if one fails
+            
             db.commit()
-            logger.info(f"Successfully resumed campaign {campaign_id}")
+            
+            logger.info(f"Successfully resumed campaign {campaign_id} with {jobs_resumed} jobs ({jobs_requeued} re-queued as Celery tasks)")
+            
+            if resume_errors:
+                logger.warning(f"Some job resume errors in campaign {campaign_id}: {resume_errors}")
             
             return {
                 "id": campaign.id,
                 "status": campaign.status.value,
                 "status_message": campaign.status_message,
-                "message": f"Campaign {campaign_id} has been resumed"
+                "jobs_resumed": jobs_resumed,
+                "jobs_requeued": jobs_requeued,
+                "resume_errors": resume_errors,
+                "message": f"Campaign {campaign_id} has been resumed with {jobs_resumed} jobs ({jobs_requeued} re-queued for processing)"
             }
             
         except HTTPException:
@@ -812,41 +885,30 @@ class CampaignService:
             )
     
     async def pause_campaigns_for_service(self, service: ThirdPartyService, reason: str, db: Session) -> int:
-        """Pause all running campaigns that depend on a specific service."""
+        """
+        Pause campaigns that are significantly affected by a specific service failure.
+        
+        Uses CampaignStatusMonitor to apply business rules (>10% job threshold).
+        """
         try:
-            logger.info(f"Pausing campaigns dependent on service {service.value} due to: {reason}")
+            logger.info(f"Evaluating campaigns for pausing due to service {service.value} failure: {reason}")
             
-            # Get all running campaigns
-            running_campaigns = (
-                db.query(Campaign)
-                .filter(Campaign.status == CampaignStatus.RUNNING)
-                .all()
-            )
+            # Import here to avoid circular imports
+            from app.services.campaign_status_monitor import get_campaign_status_monitor
             
-            paused_count = 0
-            for campaign in running_campaigns:
-                try:
-                    # All campaigns depend on all services for enrichment pipeline
-                    # So we pause all running campaigns when any service goes down
-                    pause_reason = f"Service {service.value} unavailable: {reason}"
-                    success = campaign.pause(pause_reason)
-                    
-                    if success:
-                        paused_count += 1
-                        logger.info(f"Paused campaign {campaign.id} due to service {service.value} failure")
-                    else:
-                        logger.warning(f"Failed to pause campaign {campaign.id}")
-                        
-                except Exception as e:
-                    logger.error(f"Error pausing individual campaign {campaign.id}: {str(e)}")
-                    continue
+            campaign_monitor = get_campaign_status_monitor()
             
-            db.commit()
-            logger.info(f"Successfully paused {paused_count} campaigns due to {service.value} service failure")
+            # Use the sophisticated monitoring service to evaluate campaigns
+            result = await campaign_monitor.evaluate_campaign_status_for_service(service, db)
+            
+            paused_count = result["campaigns_paused"]
+            eligible_count = result["campaigns_eligible"]
+            
+            logger.info(f"Service {service.value} failure evaluation: {eligible_count} campaigns evaluated, {paused_count} campaigns paused")
+            
             return paused_count
             
         except Exception as e:
-            db.rollback()
             logger.error(f"Error pausing campaigns for service {service}: {str(e)}", exc_info=True)
             return 0
     
@@ -862,6 +924,7 @@ class CampaignService:
             return can_start, reason
         
         # Check if campaign is explicitly paused
+        #TODO: remove paused state from campaign, refactor states that are possible for campaigns to be created, running, completed.
         if campaign.status == CampaignStatus.PAUSED:
             return False, "Cannot start paused campaign - resume it first"
         
@@ -869,37 +932,22 @@ class CampaignService:
         try:
             circuit_breaker = get_circuit_breaker()
             
-            # Check all services that campaigns depend on
-            required_services = [
-                ThirdPartyService.APOLLO,
-                ThirdPartyService.PERPLEXITY,
-                ThirdPartyService.OPENAI,
-                ThirdPartyService.INSTANTLY,
-                ThirdPartyService.MILLIONVERIFIER
-            ]
+    #TODO : remove logic around available services, the open or closed state of the circuit breaker is the source of truth for if a campaign can be started
+
+            # Check all services that campaigns depend on - ALL are critical for campaign operation
+            required_services = self.REQUIRED_SERVICES
             
-            blocked_services = []
-            critical_services_down = []
+            unavailable_services = []
             
             for service in required_services:
                 allowed, circuit_reason = circuit_breaker.should_allow_request(service)
                 if not allowed:
                     service_info = f"{service.value} ({circuit_reason})"
-                    blocked_services.append(service_info)
-                    
-                    # Apollo is critical for campaign start (fetch leads)
-                    if service == ThirdPartyService.APOLLO:
-                        critical_services_down.append(service_info)
+                    unavailable_services.append(service_info)
             
-            # If critical services are down, prevent starting
-            if critical_services_down:
-                return False, f"Cannot start campaign: Critical service unavailable: {', '.join(critical_services_down)}"
-            
-            # If any services are blocked, warn but allow (depending on configuration)
-            if blocked_services:
-                # For now, prevent starting if any required service is down
-                # This can be made configurable in the future
-                return False, f"Cannot start campaign: Required services unavailable: {', '.join(blocked_services)}"
+            # If ANY required service is unavailable, prevent starting
+            if unavailable_services:
+                return False, f"Cannot start campaign: Required services unavailable: {', '.join(unavailable_services)}"
             
             # Check global queue pause status
             is_globally_paused, pause_reason = self._check_global_pause_status()
@@ -913,6 +961,8 @@ class CampaignService:
             # If validation checks fail, be conservative and prevent starting
             return False, f"Cannot start campaign: Validation check failed: {str(e)}"
 
+
+#TODO: this methos is likely redundant. should be able to just get the state of the circuit breaker instead of checking the services. 
     def _check_global_pause_status(self) -> tuple[bool, str]:
         """
         Check if the system is in a global pause state that should prevent campaign starts.
@@ -921,7 +971,7 @@ class CampaignService:
         try:
             circuit_breaker = get_circuit_breaker()
             
-            # Check if too many services are down (e.g., more than 50%)
+            # Check if too many services are down (more than 50% of all services)
             all_services = list(ThirdPartyService)
             down_services = []
             
@@ -934,12 +984,16 @@ class CampaignService:
             if len(down_services) > len(all_services) / 2:
                 return True, f"Too many services unavailable ({len(down_services)}/{len(all_services)}): {', '.join(down_services)}"
             
-            # Check for specific critical service combinations
-            apollo_down = ThirdPartyService.APOLLO in [s for s in all_services if not circuit_breaker.should_allow_request(s)[0]]
-            instantly_down = ThirdPartyService.INSTANTLY in [s for s in all_services if not circuit_breaker.should_allow_request(s)[0]]
+            # Check for specific critical service combinations that indicate total system failure
+            required_services = self.REQUIRED_SERVICES
             
-            if apollo_down and instantly_down:
-                return True, "Both Apollo and Instantly services are down - cannot process campaign workflow"
+            down_required_services = [s for s in required_services if not circuit_breaker.should_allow_request(s)[0]]
+            
+            # If both Apollo (lead fetching) and Instantly (lead creation) are down, 
+            # the core workflow is broken
+            if (ThirdPartyService.APOLLO in down_required_services and 
+                ThirdPartyService.INSTANTLY in down_required_services):
+                return True, "Core workflow services (Apollo and Instantly) are both unavailable"
             
             return False, "System is operational"
             
@@ -948,6 +1002,9 @@ class CampaignService:
             # If check fails, assume not paused to avoid false positives
             return False, "Global pause check failed - assuming operational"
 
+
+
+# TODO: this method is likely redundant. should be able to just get the state of the circuit breaker instead of checking the services. 
     def validate_campaign_start_prerequisites(self, campaign: Campaign) -> Dict[str, Any]:
         """
         Comprehensive validation of campaign start prerequisites.
@@ -978,17 +1035,10 @@ class CampaignService:
             
             # 2. Circuit breaker and service validation
             circuit_breaker = get_circuit_breaker()
-            required_services = [
-                ThirdPartyService.APOLLO,
-                ThirdPartyService.PERPLEXITY,
-                ThirdPartyService.OPENAI,
-                ThirdPartyService.INSTANTLY,
-                ThirdPartyService.MILLIONVERIFIER
-            ]
+            required_services = self.REQUIRED_SERVICES
             
             service_status = {}
             unavailable_services = []
-            critical_unavailable = []
             
             for service in required_services:
                 allowed, reason = circuit_breaker.should_allow_request(service)
@@ -998,18 +1048,14 @@ class CampaignService:
                 }
                 
                 if not allowed:
-                    unavailable_services.append(service.value)
-                    if service == ThirdPartyService.APOLLO:  # Critical service
-                        critical_unavailable.append(service.value)
+                    unavailable_services.append(f"{service.value} ({reason})")
             
             results["validation_details"]["services"] = service_status
-            results["services_available"] = len(critical_unavailable) == 0
+            results["services_available"] = len(unavailable_services) == 0
             
-            if critical_unavailable:
-                results["errors"].append(f"Critical services unavailable: {', '.join(critical_unavailable)}")
+            # All services are critical - any unavailable service prevents campaign start
             if unavailable_services:
-                if set(unavailable_services) - set(critical_unavailable):
-                    results["warnings"].append(f"Some services unavailable: {', '.join(set(unavailable_services) - set(critical_unavailable))}")
+                results["errors"].append(f"Required services unavailable: {', '.join(unavailable_services)}")
             
             # 3. Global state validation
             is_globally_paused, pause_reason = self._check_global_pause_status()

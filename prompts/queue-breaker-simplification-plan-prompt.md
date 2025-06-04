@@ -1,5 +1,5 @@
 
-
+the testibility of the app has decreased to a point that is intractible. we need to reduce complexity. 
 
 # Your job is to create an extreamly detailed set of step by step instructions for an ai agent to perform this task.
 

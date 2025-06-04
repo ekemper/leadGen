@@ -616,4 +616,159 @@ async def get_paused_campaigns_for_service(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting paused campaigns: {str(e)}"
+        )
+
+@router.post("/circuit-breakers/{service}/reset", response_model=QueueStatusResponse)
+async def reset_circuit_breaker(
+    service: str,
+    queue_manager: QueueManager = Depends(get_queue_manager)
+):
+    """Reset circuit breaker for a specific service (same as manual resume)."""
+    try:
+        # Validate service name
+        try:
+            service_enum = ThirdPartyService(service.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid service name: {service}. Valid services: {[s.value for s in ThirdPartyService]}"
+            )
+        
+        # Reset circuit breaker (manually resume service)
+        queue_manager.circuit_breaker.manually_resume_service(service_enum)
+        
+        logger.info(f"Circuit breaker reset for {service_enum.value}")
+        
+        return QueueStatusResponse(
+            status="success",
+            data={
+                "service": service_enum.value,
+                "action": "circuit_breaker_reset",
+                "message": f"Circuit breaker reset for {service_enum.value} - service manually resumed"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resetting circuit breaker for {service}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error resetting circuit breaker: {str(e)}"
+        )
+
+@router.post("/resume-queue", response_model=QueueStatusResponse)
+async def resume_queue(
+    queue_manager: QueueManager = Depends(get_queue_manager),
+    db: Session = Depends(get_db)
+):
+    """
+    Manually resume the entire queue system (NEW MANUAL RESUME LOGIC).
+    
+    This is the PRIMARY way to resume campaigns after circuit breaker events.
+    Validates all circuit breakers are closed before resuming.
+    
+    Implements the cascade: Queue Resume → Campaign Resume → Job Resume
+    """
+    try:
+        logger.info("Manual queue resume requested - validating prerequisites")
+        
+        # STEP 1: Validate ALL circuit breakers are closed (prerequisite check)
+        redis_client = get_redis_connection()
+        circuit_breaker = CircuitBreakerService(redis_client)
+        
+        blocked_services = []
+        all_services = [
+            ThirdPartyService.APOLLO,
+            ThirdPartyService.PERPLEXITY,
+            ThirdPartyService.OPENAI,
+            ThirdPartyService.INSTANTLY,
+            ThirdPartyService.MILLIONVERIFIER
+        ]
+        
+        for service in all_services:
+            allowed, reason = circuit_breaker.should_allow_request(service)
+            if not allowed:
+                blocked_services.append(f"{service.value} ({reason})")
+        
+        if blocked_services:
+            error_message = f"Cannot resume queue: Circuit breakers still open for: {', '.join(blocked_services)}"
+            logger.warning(error_message)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_message
+            )
+        
+        logger.info("Prerequisites met: All circuit breakers are closed - proceeding with queue resume")
+        
+        # STEP 2: Resume queue for all services
+        total_jobs_resumed = 0
+        for service in all_services:
+            # Resume service queues
+            circuit_breaker.manually_resume_service(service)
+            
+            # Resume jobs for each service
+            jobs_resumed = queue_manager.resume_jobs_for_service(service)
+            total_jobs_resumed += jobs_resumed
+            
+            logger.info(f"Queue resume: {jobs_resumed} jobs resumed for {service.value}")
+        
+        # STEP 3: Resume ALL paused campaigns (coordinated resume)
+        from app.services.campaign import CampaignService
+        from app.models.campaign import Campaign, CampaignStatus
+        
+        campaign_service = CampaignService()
+        
+        # Get ALL paused campaigns
+        paused_campaigns = (
+            db.query(Campaign)
+            .filter(Campaign.status == CampaignStatus.PAUSED)
+            .all()
+        )
+        
+        campaigns_resumed = 0
+        campaign_resume_errors = []
+        
+        for campaign in paused_campaigns:
+            try:
+                # Resume the campaign (all prerequisites are met)
+                await campaign_service.resume_campaign(campaign.id, db)
+                campaigns_resumed += 1
+                logger.info(f"Queue resume: Campaign {campaign.id} resumed")
+                
+            except Exception as e:
+                error_msg = f"Campaign {campaign.id}: {str(e)}"
+                campaign_resume_errors.append(error_msg)
+                logger.error(f"Error resuming campaign {campaign.id} during queue resume: {str(e)}")
+        
+        # STEP 4: Log the complete queue resume operation
+        logger.info(f"Manual queue resume completed: {total_jobs_resumed} jobs, {campaigns_resumed} campaigns resumed")
+        
+        response_data = {
+            "queue_resumed": True,
+            "jobs_resumed": total_jobs_resumed,
+            "campaigns_eligible": len(paused_campaigns),
+            "campaigns_resumed": campaigns_resumed,
+            "services_resumed": [service.value for service in all_services],
+            "prerequisites_met": "All circuit breakers closed",
+            "message": f"Queue resumed successfully: {total_jobs_resumed} jobs and {campaigns_resumed} campaigns resumed"
+        }
+        
+        # Include any campaign resume errors in response
+        if campaign_resume_errors:
+            response_data["campaign_resume_errors"] = campaign_resume_errors
+            response_data["message"] += f" (with {len(campaign_resume_errors)} campaign errors)"
+        
+        return QueueStatusResponse(
+            status="success",
+            data=response_data
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during manual queue resume: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error resuming queue: {str(e)}"
         ) 
