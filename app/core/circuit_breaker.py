@@ -247,21 +247,6 @@ class CircuitBreakerService:
                 'redis_connected': False
             }
 
-    # Legacy methods for backward compatibility during transition
-    # These will be removed in later phases
-    
-    def get_circuit_state(self, service: ThirdPartyService) -> CircuitState:
-        """Legacy method - returns global state regardless of service."""
-        logger.warning(f"Using legacy get_circuit_state for {service}, returning global state")
-        return self.get_global_circuit_state()
-    
-    def should_allow_request_legacy(self, service: ThirdPartyService) -> tuple[bool, str]:
-        """Legacy method - returns global state regardless of service."""
-        logger.warning(f"Using legacy should_allow_request for {service}, returning global state")
-        allowed = self.should_allow_request()
-        reason = "global circuit open" if not allowed else "global circuit closed"
-        return allowed, reason
-
 
 def get_circuit_breaker(redis_client: Redis = None) -> CircuitBreakerService:
     """Factory function to get circuit breaker instance."""

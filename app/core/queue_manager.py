@@ -39,7 +39,6 @@ class QueueManager:
     def should_process_job(self) -> bool:
         """
         Check if jobs should be processed based on global circuit breaker status.
-        Simplified: only check global circuit state, not service-specific.
         """
         try:
             return self.circuit_breaker.should_allow_request()
@@ -209,41 +208,6 @@ class QueueManager:
                     return None
                 
         return None
-
-    def get_queue_status(self) -> Dict[str, Any]:
-        """Get comprehensive queue status with simplified circuit breaker info."""
-        try:
-            if not self.db:
-                from app.core.database import SessionLocal
-                db = SessionLocal()
-                should_close = True
-            else:
-                db = self.db
-                should_close = False
-            
-            try:
-                # Get global circuit breaker status
-                circuit_status = self.circuit_breaker.get_circuit_status()
-                
-                # Get job counts by status
-                job_counts = {}
-                for status in JobStatus:
-                    count = db.query(Job).filter(Job.status == status).count()
-                    job_counts[status.value] = count
-                
-                return {
-                    'circuit_breaker': circuit_status,  # Single global circuit breaker
-                    'job_counts': job_counts,
-                    'timestamp': datetime.utcnow().isoformat()
-                }
-                
-            finally:
-                if should_close:
-                    db.close()
-                    
-        except Exception as e:
-            logger.error(f"Error getting queue status: {e}")
-            return {'error': str(e)}
 
 
 def get_queue_manager(redis_client=None) -> QueueManager:

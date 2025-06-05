@@ -1,6 +1,6 @@
-# FastAPI K8s Prototype - Unified Logging System
+# LeadGen - Unified Logging System
 
-This document describes the unified logging system implemented for the FastAPI K8s prototype application. The system provides consistent logging patterns across all containers with proper sanitization, structured JSON output, and centralized log management.
+This document describes the unified logging system implemented for the LeadGen application. The system provides consistent logging patterns across all containers with proper sanitization, structured JSON output, and centralized log management.
 
 ## System Overview and Architecture
 
@@ -917,4 +917,4 @@ rm -f combined.log.[0-9]*
 echo "LOG_ROTATION_SIZE=5242880" >> .env  # 5MB
 ```
 
-This comprehensive unified logging system provides enterprise-grade observability with automatic sanitization, structured output, and seamless integration capabilities for the FastAPI K8s prototype application. 
+This comprehensive unified logging system provides enterprise-grade observability with automatic sanitization, structured output, and seamless integration capabilities for the LeadGen application. 
