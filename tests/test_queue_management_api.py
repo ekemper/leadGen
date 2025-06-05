@@ -19,6 +19,7 @@ from app.models.job import Job, JobStatus, JobType
 from app.core.circuit_breaker import ThirdPartyService
 from tests.helpers.auth_helpers import AuthHelpers
 
+API_BASE = "/api/v1/queue-management"
 
 class TestQueueManagementAPI:
     """Test queue management API endpoints with new simplified logic."""
@@ -260,40 +261,55 @@ class TestQueueManagementAPI:
             "service": "openai",
             "reason": "Test service resume with prerequisites"
         }
-        
+
         pause_response = authenticated_client.post(
             "/api/v1/queue-management/pause-service",
             json=pause_data
         )
         assert pause_response.status_code == 200
-        
-        # Try to resume individual service
+
+        # Try to resume individual service while circuit breaker is open - should fail
         resume_data = {
             "service": "openai"
         }
-        
+
         response = authenticated_client.post(
             "/api/v1/queue-management/resume-service",
             json=resume_data
         )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Should return error because circuit breaker is open
+        assert data["status"] == "error"
         
+        response_data = data["data"]
+        assert "circuit_breaker_state" in response_data
+        assert response_data["circuit_breaker_state"] == "open"
+        assert "Cannot resume individual services" in response_data["message"]
+        
+        # Now reset the circuit breaker first
+        reset_response = authenticated_client.post(f"{API_BASE}/circuit-breakers/openai/reset")
+        assert reset_response.status_code == 200
+        
+        # Now try service resume again - should succeed (circuit breaker is closed)
+        response = authenticated_client.post(
+            "/api/v1/queue-management/resume-service",
+            json=resume_data
+        )
+
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
+
+        response_data = data["data"]
+        assert "service" in response_data
+        assert "circuit_breaker_state" in response_data
+        assert response_data["circuit_breaker_state"] == "closed"
+        assert response_data["service"] == "openai"
         
-        service_data = data["data"]
-        assert "service" in service_data
-        assert "resumed" in service_data
-        assert "jobs_resumed" in service_data
-        assert "campaigns_resumed" in service_data
-        assert "message" in service_data
-        
-        assert service_data["service"] == "openai"
-        assert service_data["resumed"] is True
-        
-        # Campaigns resumed count may be limited by new prerequisite logic
-        campaigns_resumed = service_data["campaigns_resumed"]
-        assert campaigns_resumed >= 0
+        # Should recommend using /resume-queue for actual resumption
+        assert "/resume-queue" in response_data["message"]
 
     def test_error_handling_invalid_service(self, authenticated_client, db_session):
         """Test error handling for invalid service names."""
@@ -321,16 +337,15 @@ class TestQueueManagementAPI:
         assert data["status"] == "success"
         
         status_data = data["data"]
-        assert "circuit_breakers" in status_data
+        assert "circuit_breaker" in status_data
         assert "job_counts" in status_data
         
-        # Should include circuit breaker states for prerequisite checking
-        circuit_breakers = status_data["circuit_breakers"]
-        for service in ["apollo", "perplexity", "openai", "instantly", "millionverifier"]:
-            if service in circuit_breakers:
-                cb_info = circuit_breakers[service]
-                assert "circuit_state" in cb_info
-                assert cb_info["circuit_state"] in ["closed", "open", "half_open"]
+        # Validate circuit breaker structure (global format)
+        circuit_breaker = status_data["circuit_breaker"]
+        
+        assert isinstance(circuit_breaker, dict)
+        assert "state" in circuit_breaker
+        assert circuit_breaker["state"] in ["open", "closed"]
 
     def test_paused_jobs_for_service(self, authenticated_client, db_session):
         """Test GET /queue-management/paused-jobs/{service} endpoint."""
@@ -347,16 +362,21 @@ class TestQueueManagementAPI:
         assert job_data["service"] == "apollo"
 
     def test_circuit_breakers_endpoint(self, authenticated_client, db_session):
-        """Test GET /queue-management/circuit-breakers endpoint."""
-        response = authenticated_client.get("/api/v1/queue-management/circuit-breakers")
-        
+        """Test the dedicated circuit breakers status endpoint."""
+        response = authenticated_client.get(f"{API_BASE}/circuit-breakers")
         assert response.status_code == 200
+        
         data = response.json()
         assert data["status"] == "success"
         
-        # Should contain circuit breaker status for all services
         cb_data = data["data"]
-        assert "circuit_breakers" in cb_data
+        assert "circuit_breaker" in cb_data
+        
+        # Global circuit breaker format
+        circuit_breaker = cb_data["circuit_breaker"]
+        assert isinstance(circuit_breaker, dict)
+        assert "state" in circuit_breaker
+        assert circuit_breaker["state"] in ["open", "closed"]
 
     def test_circuit_breaker_reset_does_not_auto_resume(self, authenticated_client, db_session):
         """Test that circuit breaker reset does NOT automatically resume campaigns (new logic)."""
@@ -513,7 +533,7 @@ class TestQueueManagementAPI:
         assert "data" in cb_data
         
         # Should contain circuit breaker information for frontend display
-        assert "circuit_breakers" in cb_data["data"]
+        assert "circuit_breaker" in cb_data["data"]
 
     def test_manual_resume_prerequisite_validation(self, authenticated_client, db_session, test_campaigns):
         """Test that manual resume validates circuit breaker prerequisites (new logic)."""
@@ -567,7 +587,7 @@ class TestQueueManagementAPI:
         
         # Status should reflect the pause operation
         # Exact changes depend on implementation, but should be different
-        assert "circuit_breakers" in updated_data
+        assert "circuit_breaker" in updated_data
         
         # Reset the service
         reset_response = authenticated_client.post(
@@ -581,4 +601,4 @@ class TestQueueManagementAPI:
         final_data = final_response.json()["data"]
         
         # Should reflect the reset operation
-        assert "circuit_breakers" in final_data 
+        assert "circuit_breaker" in final_data 

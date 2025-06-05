@@ -86,22 +86,19 @@ def check_queue_paused(token, api_base):
         return False, "Unable to determine queue status"
     
     # Check circuit breaker status for open breakers
-    circuit_breakers = queue_status["data"].get("circuit_breakers", {})
+    circuit_breaker = queue_status["data"].get("circuit_breaker", {})
     
-    # Look for any open circuit breakers which would pause the queue
-    open_breakers = []
-    for service, status in circuit_breakers.items():
-        if isinstance(status, dict):
-            state = status.get("circuit_state", "unknown")
-            if state in ["open", "half_open"]:
-                open_breakers.append(service)
-    
-    queue_paused = len(open_breakers) > 0
+    # Check if global circuit breaker is open
+    queue_paused = False
+    if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
+        state = circuit_breaker["state"]
+        if state == "open":
+            queue_paused = True
     
     if queue_paused:
-        return True, f"Queue paused due to open circuit breakers: {', '.join(open_breakers)}"
+        return True, "Queue paused due to open global circuit breaker"
     else:
-        return False, "Queue is active - all circuit breakers closed"
+        return False, "Queue is active - global circuit breaker closed"
 
 def wait_for_campaign_pause_propagation(token, campaign_ids, api_base, timeout_seconds=30):
     """
@@ -190,19 +187,26 @@ def main():
         
         # Detailed circuit breaker status
         cb_status = check_circuit_breaker_status(token, API_BASE)
-        if cb_status and cb_status.get("data", {}).get("circuit_breakers"):
-            circuit_breakers = cb_status["data"]["circuit_breakers"]
-            healthy_count = len([s for s in circuit_breakers.values() 
-                               if isinstance(s, dict) and s.get("circuit_state") == "closed"])
-            print(f"✅ Circuit Breaker Health: {healthy_count}/{len(circuit_breakers)} services healthy")
-            
-            for service, status in circuit_breakers.items():
-                if isinstance(status, dict):
-                    state = status.get("circuit_state", "unknown")
-                    if state == "closed":
-                        print(f"   🟢 {service.upper()}: {state}")
-                    else:
-                        print(f"   🔴 {service.upper()}: {state} (should not happen after validation)")
+        if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
+            circuit_breaker = cb_status["data"]["circuit_breaker"]
+            if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
+                state = circuit_breaker["state"]
+                if state == "closed":
+                    print(f"✅ Global Circuit Breaker: CLOSED")
+                else:
+                    print(f"⚠️  Global Circuit Breaker: {state.upper()}")
+            else:
+                print(f"⚠️  Global Circuit Breaker: Status unknown")
+        
+        circuit_breaker = queue_status["data"].get("circuit_breaker", {})
+        
+        # Check global circuit breaker status
+        if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
+            state = circuit_breaker["state"]
+            if state == "open":
+                print(f"⚠️  Global circuit breaker is OPEN")
+            else:
+                print(f"✅ Global circuit breaker is CLOSED")
         
         print("\n📋 PHASE 3: Sequential Campaign Creation with Queue Monitoring")
         print("-" * 50)
@@ -314,21 +318,18 @@ def main():
             
             print("\n📊 Queue and Circuit Breaker Analysis")
             print("-" * 50)
-            if final_queue_status and final_queue_status.get("data", {}).get("circuit_breakers"):
-                circuit_breakers = final_queue_status["data"]["circuit_breakers"]
+            if final_queue_status and final_queue_status.get("data", {}).get("circuit_breaker"):
+                circuit_breaker = final_queue_status["data"]["circuit_breaker"]
                 
-                for service, status in circuit_breakers.items():
-                    if isinstance(status, dict):
-                        state = status.get("circuit_state", "unknown")
-                        failure_count = status.get("failure_count", 0)
-                        threshold = status.get("failure_threshold", "unknown")
-                        
-                        if state in ["open", "half_open"]:
-                            print(f"   🔴 {service.upper()}: {state} (failures: {failure_count}/{threshold})")
-                            if status.get("last_failure_reason"):
-                                print(f"      Last failure: {status['last_failure_reason']}")
-                        else:
-                            print(f"   🟢 {service.upper()}: {state}")
+                if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
+                    state = circuit_breaker["state"]
+                    
+                    if state == "open":
+                        print(f"   🔴 GLOBAL CIRCUIT BREAKER: {state.upper()}")
+                        if circuit_breaker.get("last_failure_reason"):
+                            print(f"      Last failure: {circuit_breaker['last_failure_reason']}")
+                    else:
+                        print(f"   🟢 GLOBAL CIRCUIT BREAKER: {state.upper()}")
             
             print("\n" + "="*80)
             print("🛑 TEST RESULT: CIRCUIT BREAKER TRIGGERED SYSTEM PAUSE")

@@ -240,8 +240,8 @@ class TestCampaignStatusRefactor:
 
     # ===== MANUAL RESUME SCENARIOS =====
 
-    def test_manual_queue_resume_with_closed_circuit_breakers(self, authenticated_client, db_session,
-                                                            multiple_running_campaigns, db_helpers):
+    def test_manual_queue_resume_with_global_circuit_breaker_closed(self, authenticated_client, db_session,
+                                                                multiple_running_campaigns, db_helpers):
         """Test manual queue resume works when all circuit breakers are closed."""
         campaigns = multiple_running_campaigns
 
@@ -360,23 +360,15 @@ class TestCampaignStatusRefactor:
 
         queue_data = data["data"]
         # Check for actual fields that exist in the response
-        assert "circuit_breakers" in queue_data
+        assert "circuit_breaker" in queue_data
         assert "job_counts" in queue_data
-        assert "paused_jobs_by_service" in queue_data
         assert "timestamp" in queue_data
         
-        # Verify circuit breaker structure
-        circuit_breakers = queue_data["circuit_breakers"]
-        assert "apollo" in circuit_breakers
-        assert "instantly" in circuit_breakers
-        assert "millionverifier" in circuit_breakers
-        assert "openai" in circuit_breakers
-        
-        # Each circuit breaker should have proper state info
-        for service, cb_info in circuit_breakers.items():
-            assert "circuit_state" in cb_info
-            assert "failure_count" in cb_info
-            assert "failure_threshold" in cb_info
+        # Verify global circuit breaker format
+        circuit_breaker = queue_data["circuit_breaker"]
+        assert isinstance(circuit_breaker, dict)
+        assert "state" in circuit_breaker
+        assert circuit_breaker["state"] in ["open", "closed"]
 
     def test_circuit_breaker_reset_does_not_auto_resume_campaigns(self, authenticated_client, db_session,
                                                                 multiple_running_campaigns, db_helpers):

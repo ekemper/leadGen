@@ -1,6 +1,40 @@
 
 the testibility of the app has decreased to a point that is intractible. we need to reduce complexity. 
 
+we will completeley remove the concept of the paused state of a campaign. jobs will keep the paused state.
+
+the use of unavailable_services is too complex. the circuit breaker state ( only open and closed ) will be used as the source of truth for if the background processes can be resumed. 
+
+the only means of closing the breaker will be from the front end - this will replace the concept of the queue being paused and resumed. only the state of the breaker will be important. 
+
+The front end queue management page will have to be simplified greatly, however this will be in another plan. dont make any front end updates yet. 
+
+it is critical that the existing logic around state changes of campaigns be updated to not involve a pending state. if the breaker opens the campaign will remain in a running state. 
+
+if the breaker opens, the current running and pending jobs will be paused. 
+
+when the breaker is closed, the paused jobs will be set to pending, and a new celery task of the correct type for each one will be created. The only means to close the breaker will be via an api endpoint ( potentially already exists ). in a later refactor, we will rework the queue management dash on the front end, keep the changes for this plan confined to the back end. 
+
+please evaluate all of the documentation in the app to ensure this new paradigm is explained properly. Ensure that any references to older logic should be updated. 
+
+TESTING will be critical here: please first identify and depricate all the tests that will be unneeded based on the new logic. tests that need to be updated should be updated. please consolidate if possible. please adopt a TDD approach here. create or update  the basic tests that will be needed and then, as you make edits to the code use them as confirmation that your changes were correct. 
+
+
+The new logical for handling third party api integrations will be as follows:
+* the current logic for handling third party api errors informs the circuit breaker of the error
+* the breaker is triggered.
+* all of the jobs in a pending or running state are switched to paused. 
+* the campaigns that were in a running state will still be in a running state
+* the queue status will be available via the existing endpoint, but the response should be greatly simplified- we will takle this in a different refactor. 
+
+Please find all the TODOs in the codebase and use them to inform your plan - all the TODOs should be accomplished by the plan ( critical for continuity )
+
+at the end of the plan make a checklist that incorporates all of the details that needed to be accomplished in the todos. when they are all done, please remove them from the code so we can start fresh
+
+PLEASE IDENTIFY AND DOCUMENT ANY DISCONTIUTITIES IN THE LOGIC OR TECHNICAL RISKS WITH THIS SIMPLIFICATION
+
+Simpicity is critical - focus on simplicity for the sake of my weary monkey brain. 
+
 # Your job is to create an extreamly detailed set of step by step instructions for an ai agent to perform this task.
 
 

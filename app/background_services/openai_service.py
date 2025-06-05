@@ -58,23 +58,10 @@ class OpenAIService:
             dict: Error response if circuit is open, None if allowed
         """
         if self.circuit_breaker:
-            allowed, reason = self.circuit_breaker.should_allow_request(ThirdPartyService.OPENAI)
+            allowed = self.circuit_breaker.should_allow_request()
             if not allowed:
-                error_msg = f"OpenAI API circuit breaker is open: {reason}"
-                logger.warning(
-                    f"Circuit breaker blocked {operation}",
-                    extra={
-                        'component': 'openai_service',
-                        'circuit_breaker_open': True,
-                        'reason': reason,
-                        'operation': operation
-                    }
-                )
-                return {
-                    'status': 'circuit_breaker_open',
-                    'error': error_msg,
-                    'reason': reason
-                }
+                logger.warning("Circuit breaker is open, skipping OpenAI operation")
+                return None
         return None
 
     def _check_rate_limit(self, operation: str) -> Optional[dict]:
@@ -276,7 +263,7 @@ Email:"""
             
             # Record success in circuit breaker
             if self.circuit_breaker:
-                self.circuit_breaker.record_success(ThirdPartyService.OPENAI)
+                self.circuit_breaker.record_success()
             
             # Log rate limiting status for monitoring
             if self.rate_limiter:
@@ -320,8 +307,8 @@ Email:"""
                 
                 # Record rate limit failure in circuit breaker with detailed info
                 if self.circuit_breaker:
-                    error_context = f"{rate_limit_details.get('error_type', 'rate_limit')}: {str(e)}"
-                    self.circuit_breaker.record_failure(ThirdPartyService.OPENAI, error_context, 'rate_limit')
+                    error_context = f"OpenAI {rate_limit_details.get('error_type', 'rate_limit')}: {str(e)}"
+                    self.circuit_breaker.record_failure(error_context, 'rate_limit')
                 
                 # Return specific rate limit error with details
                 return {
@@ -333,7 +320,7 @@ Email:"""
             else:
                 # Record general failure in circuit breaker
                 if self.circuit_breaker:
-                    self.circuit_breaker.record_failure(ThirdPartyService.OPENAI, str(e), 'exception')
+                    self.circuit_breaker.record_failure(f"OpenAI service error: {str(e)}", 'exception')
                 
                 # Return generic error
                 return {

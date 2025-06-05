@@ -50,9 +50,6 @@ class CampaignStartResponse(BaseModel):
     status: str
     data: CampaignResponse
 
-class CampaignPauseRequest(BaseModel):
-    reason: str = "Manual pause requested"
-
 class CampaignActionResponse(BaseModel):
     status: str
     message: str
@@ -211,7 +208,7 @@ async def start_campaign(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Start campaign process"""
+    """Start a campaign"""
     campaign_service = CampaignService()
     campaign_dict = await campaign_service.start_campaign(campaign_id, start_data, db)
     
@@ -227,59 +224,6 @@ async def start_campaign(
         status="success",
         data=CampaignResponse.from_campaign(campaign)
     )
-
-@router.post("/{campaign_id}/pause", response_model=CampaignActionResponse)
-async def pause_campaign(
-    campaign_id: str,
-    pause_request: CampaignPauseRequest = CampaignPauseRequest(),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Pause a running campaign"""
-    campaign_service = CampaignService()
-    
-    try:
-        result = await campaign_service.pause_campaign(campaign_id, pause_request.reason, db)
-        
-        return CampaignActionResponse(
-            status="success",
-            message=result["message"],
-            data=result
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error pausing campaign: {str(e)}"
-        )
-
-@router.post("/{campaign_id}/resume", response_model=CampaignActionResponse)
-async def resume_campaign(
-    campaign_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Resume a paused campaign"""
-    campaign_service = CampaignService()
-    
-    try:
-        result = await campaign_service.resume_campaign(campaign_id, db)
-        
-        return CampaignActionResponse(
-            status="success",
-            message=result["message"],
-            data=result
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error resuming campaign: {str(e)}"
-        )
 
 @router.get("/{campaign_id}/leads/stats", response_model=CampaignStatsResponse)
 async def get_campaign_lead_stats(

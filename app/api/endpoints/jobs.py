@@ -134,7 +134,7 @@ async def get_job_status(
     job_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get job status including Celery task progress"""
+    """Get job status including Celery task progress and circuit breaker context"""
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(
@@ -142,23 +142,43 @@ async def get_job_status(
             detail=f"Job {job_id} not found"
         )
     
+    # Get global circuit breaker status for context
+    from app.core.circuit_breaker import get_circuit_breaker
+    circuit_breaker = get_circuit_breaker()
+    circuit_breaker_closed = circuit_breaker.should_allow_request()
+    
     response_data = {
         "id": job.id,
         "status": job.status,
+        "job_type": job.job_type,
+        "campaign_id": job.campaign_id,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
-        "completed_at": job.completed_at
+        "completed_at": job.completed_at,
+        "error": job.error,
+        "circuit_breaker": {
+            "state": "closed" if circuit_breaker_closed else "open",
+            "can_process": circuit_breaker_closed
+        }
     }
+    
+    # Add pause context if job is paused
+    if job.status == JobStatus.PAUSED:
+        response_data["pause_reason"] = job.error or "Job paused due to circuit breaker"
+        response_data["resume_available"] = circuit_breaker_closed
     
     # Get Celery task status if available
     if job.task_id and job.status == JobStatus.PROCESSING:
         from app.workers.celery_app import celery_app
-        task_result = celery_app.AsyncResult(job.task_id)
-        
-        if task_result.state == "PROGRESS":
-            response_data["progress"] = task_result.info
-        else:
-            response_data["task_state"] = task_result.state
+        try:
+            task_result = celery_app.AsyncResult(job.task_id)
+            
+            if task_result.state == "PROGRESS":
+                response_data["progress"] = task_result.info
+            else:
+                response_data["task_state"] = task_result.state
+        except Exception as e:
+            response_data["task_error"] = f"Could not get task status: {str(e)}"
     
     return JobStatusResponse(
         status="success",

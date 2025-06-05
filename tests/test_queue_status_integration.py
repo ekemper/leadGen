@@ -33,30 +33,27 @@ class TestQueueStatusAccuracy:
         assert data["status"] == "success"
         
         status_data = data["data"]
-        required_fields = ["circuit_breakers", "job_counts", "paused_jobs_by_service", "timestamp"]
+        required_fields = ["circuit_breaker", "job_counts", "timestamp"]
         for field in required_fields:
             assert field in status_data, f"Missing required field: {field}"
         
-        # Verify circuit breaker data structure
-        circuit_breakers = status_data["circuit_breakers"]
-        assert isinstance(circuit_breakers, dict)
+        # Validate circuit breaker structure (now global, not service-specific)
+        circuit_breaker = status_data["circuit_breaker"]
+        assert isinstance(circuit_breaker, dict)
         
-        # Check for expected services
-        expected_services = ["apollo", "perplexity", "openai", "instantly", "millionverifier"]
-        for service in expected_services:
-            if service in circuit_breakers:
-                cb_info = circuit_breakers[service]
-                if isinstance(cb_info, dict):
-                    assert "circuit_state" in cb_info
-                    assert cb_info["circuit_state"] in ["closed", "open", "half_open"]
+        # Global circuit breaker should have these fields
+        assert "state" in circuit_breaker
+        assert circuit_breaker["state"] in ["open", "closed"]
+        
+        # Check if additional metadata is present
+        if "opened_at" in circuit_breaker:
+            assert isinstance(circuit_breaker["opened_at"], (str, type(None)))
+        if "closed_at" in circuit_breaker:
+            assert isinstance(circuit_breaker["closed_at"], (str, type(None)))
         
         # Verify job counts structure
         job_counts = status_data["job_counts"]
         assert isinstance(job_counts, dict)
-        
-        # Verify paused jobs by service structure
-        paused_by_service = status_data["paused_jobs_by_service"]
-        assert isinstance(paused_by_service, dict)
         
         # Verify timestamp is present and recent
         timestamp = status_data["timestamp"]
@@ -78,14 +75,11 @@ class TestQueueStatusAccuracy:
         assert status_response.status_code == 200
         
         status_data = status_response.json()["data"]
-        circuit_breakers = status_data["circuit_breakers"]
+        circuit_breaker = status_data["circuit_breaker"]
         
-        # Apollo circuit breaker should reflect the pause
-        if "apollo" in circuit_breakers:
-            apollo_cb = circuit_breakers["apollo"]
-            if isinstance(apollo_cb, dict):
-                # Should be paused/open due to manual pause
-                assert apollo_cb.get("circuit_state") in ["open", "half_open", "paused"]
+        # Verify the global circuit breaker is now open due to the pause
+        assert isinstance(circuit_breaker, dict)
+        assert circuit_breaker.get("state") == "open"
         
         # Reset the circuit breaker
         reset_response = authenticated_client.post(f"{API_BASE}/circuit-breakers/apollo/reset")
@@ -99,20 +93,16 @@ class TestQueueStatusAccuracy:
 class TestManualQueueResume:
     """Test manual queue resume workflow with prerequisite validation."""
     
-    def test_manual_queue_resume_with_all_circuit_breakers_closed(self, authenticated_client, db_session):
-        """Test successful manual queue resume when all circuit breakers are closed."""
-        # Ensure all circuit breakers are closed first
-        reset_services = ["apollo", "perplexity", "openai", "instantly", "millionverifier"]
-        
-        for service in reset_services:
-            reset_response = authenticated_client.post(f"{API_BASE}/circuit-breakers/{service}/reset")
-            # May return 200 or 404 depending on implementation - both acceptable
-            assert reset_response.status_code in [200, 404]
+    def test_manual_queue_resume_with_global_circuit_breaker_closed(self, authenticated_client, db_session):
+        """Test successful manual queue resume when global circuit breaker is closed."""
+        # Ensure global circuit breaker is closed first
+        reset_response = authenticated_client.post(f"{API_BASE}/circuit-breakers/apollo/reset")
+        assert reset_response.status_code == 200
         
         # Attempt manual queue resume
         resume_response = authenticated_client.post(f"{API_BASE}/resume-queue")
         
-        # Should succeed when all circuit breakers are closed
+        # Should succeed when global circuit breaker is closed
         assert resume_response.status_code == 200
         
         resume_data = resume_response.json()
@@ -128,7 +118,7 @@ class TestManualQueueResume:
         
         # Verify prerequisites_met field indicates success
         if "prerequisites_met" in response_data:
-            assert "circuit breakers closed" in response_data["prerequisites_met"].lower()
+            assert "global circuit breaker closed" in response_data["prerequisites_met"].lower()
 
     def test_manual_queue_resume_blocked_by_open_circuit_breaker(self, authenticated_client, db_session):
         """Test manual queue resume is blocked when circuit breaker is open."""
@@ -289,13 +279,12 @@ class TestQueueResumeWorkflow:
         assert updated_timestamp != baseline_timestamp
         
         # Circuit breaker status should reflect the change
-        circuit_breakers = updated_data["circuit_breakers"]
-        if "apollo" in circuit_breakers:
-            apollo_status = circuit_breakers["apollo"]
-            if isinstance(apollo_status, dict):
-                # Should show paused/open state
-                state = apollo_status.get("circuit_state", "unknown")
-                assert state in ["open", "half_open", "paused", "closed"]  # Any valid state
+        circuit_breaker = updated_data["circuit_breaker"]
+        assert isinstance(circuit_breaker, dict)
+        assert "state" in circuit_breaker
+        # Should show current global state
+        state = circuit_breaker.get("state", "unknown")
+        assert state in ["open", "closed"]  # Valid global states
         
         # Reset and verify again
         reset_response = authenticated_client.post(f"{API_BASE}/circuit-breakers/apollo/reset")
@@ -309,47 +298,41 @@ class TestQueueResumeWorkflow:
         assert final_timestamp != updated_timestamp
 
     def test_multiple_circuit_breaker_failures_and_manual_recovery(self, authenticated_client, db_session):
-        """Test system behavior with multiple circuit breaker failures and recovery."""
-        # Test with multiple services
+        """Test system behavior with global circuit breaker and manual recovery."""
+        # Test with multiple services triggering the same global circuit breaker
         test_services = ["apollo", "perplexity"]
         
-        # Pause multiple services
+        # Pause multiple services (all will trigger the same global circuit breaker)
         for service in test_services:
             pause_data = {
                 "service": service,
-                "reason": f"Testing multiple CB failures - {service}"
+                "reason": f"Testing global CB with {service}"
             }
             
             pause_response = authenticated_client.post(f"{API_BASE}/pause-service", json=pause_data)
             assert pause_response.status_code == 200
         
-        # Get status with multiple failures
+        # Get status - should show global circuit breaker is open
         status_response = authenticated_client.get(f"{API_BASE}/status")
         assert status_response.status_code == 200
         
-        circuit_breakers = status_response.json()["data"]["circuit_breakers"]
+        circuit_breaker = status_response.json()["data"]["circuit_breaker"]
+        assert circuit_breaker.get("state") == "open"
         
-        # Attempt queue resume with multiple open circuit breakers
+        # Attempt queue resume with open global circuit breaker
         resume_response = authenticated_client.post(f"{API_BASE}/resume-queue")
         
-        # Should fail due to multiple open circuit breakers
+        # Should fail due to open global circuit breaker
         assert resume_response.status_code == 400
         
         error_message = resume_response.json()["detail"].lower()
-        # Should mention multiple services or general circuit breaker issue
         assert "circuit breaker" in error_message
         
-        # Reset one service at a time
-        for service in test_services:
-            reset_response = authenticated_client.post(f"{API_BASE}/circuit-breakers/{service}/reset")
-            assert reset_response.status_code == 200
-            
-            # Queue resume should still fail until ALL are reset
-            if service != test_services[-1]:  # Not the last service
-                partial_resume_response = authenticated_client.post(f"{API_BASE}/resume-queue")
-                # May still fail if other breakers are open
+        # Reset circuit breaker (any service endpoint will reset the global one)
+        reset_response = authenticated_client.post(f"{API_BASE}/circuit-breakers/apollo/reset")
+        assert reset_response.status_code == 200
         
-        # Final queue resume should succeed after all resets
+        # Now queue resume should succeed
         final_resume_response = authenticated_client.post(f"{API_BASE}/resume-queue")
         assert final_resume_response.status_code == 200
         
@@ -371,12 +354,12 @@ class TestQueueStatusIntegrationEdgeCases:
         
         # Even with potential inconsistencies, should return valid structure
         status_data = data["data"]
-        assert "circuit_breakers" in status_data
+        assert "circuit_breaker" in status_data
         assert "job_counts" in status_data
         
         # Should handle missing or malformed circuit breaker data gracefully
-        circuit_breakers = status_data["circuit_breakers"]
-        assert isinstance(circuit_breakers, (dict, type(None)))
+        circuit_breaker = status_data["circuit_breaker"]
+        assert isinstance(circuit_breaker, (dict, type(None)))
 
     def test_concurrent_queue_operations(self, authenticated_client, db_session):
         """Test system behavior with concurrent queue management operations."""
@@ -436,13 +419,14 @@ class TestQueueStatusIntegrationEdgeCases:
             assert set(current.keys()) == set(previous.keys())
             
             # Circuit breaker structure should be consistent
-            current_cb = current.get("circuit_breakers", {})
-            previous_cb = previous.get("circuit_breakers", {})
+            current_cb = current.get("circuit_breaker", {})
+            previous_cb = previous.get("circuit_breaker", {})
             
             if current_cb and previous_cb:
-                # Should have same services
-                current_services = set(current_cb.keys())
-                previous_services = set(previous_cb.keys())
-                # Services may change but should be consistent within test period
-                assert isinstance(current_services, set)
-                assert isinstance(previous_services, set) 
+                # Global circuit breaker should have consistent structure
+                if isinstance(current_cb, dict) and isinstance(previous_cb, dict):
+                    assert "state" in current_cb
+                    assert "state" in previous_cb
+                    # State transitions should be valid
+                    assert current_cb["state"] in ["open", "closed"]
+                    assert previous_cb["state"] in ["open", "closed"] 

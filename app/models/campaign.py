@@ -37,11 +37,10 @@ class Campaign(Base):
     # Relationship to organization
     organization = relationship("Organization", back_populates="campaigns")
 
-    # Define valid status transitions
+    # Define valid status transitions (simplified - no PAUSED state)
     VALID_TRANSITIONS = {
         CampaignStatus.CREATED: [CampaignStatus.RUNNING, CampaignStatus.FAILED],
-        CampaignStatus.RUNNING: [CampaignStatus.PAUSED, CampaignStatus.COMPLETED, CampaignStatus.FAILED],
-        CampaignStatus.PAUSED: [CampaignStatus.RUNNING, CampaignStatus.FAILED],  # Can resume or fail
+        CampaignStatus.RUNNING: [CampaignStatus.COMPLETED, CampaignStatus.FAILED],
         CampaignStatus.COMPLETED: [],
         CampaignStatus.FAILED: []
     }
@@ -87,49 +86,28 @@ class Campaign(Base):
         """Get list of valid status transitions from current status."""
         return self.VALID_TRANSITIONS.get(self.status, [])
 
-    def pause(self, reason: str = None) -> bool:
-        """
-        Pause a running campaign.
-        Returns True if pause was successful, False if transition is invalid.
-        """
-        if self.status != CampaignStatus.RUNNING:
-            return False
-        
-        return self.update_status(
-            CampaignStatus.PAUSED,
-            status_message=f"Campaign paused: {reason}" if reason else "Campaign paused",
-            status_error=reason if reason else None
-        )
-
-    def resume(self, message: str = None) -> bool:
-        """
-        Resume a paused campaign.
-        Returns True if resume was successful, False if transition is invalid.
-        """
-        if self.status != CampaignStatus.PAUSED:
-            return False
-        
-        return self.update_status(
-            CampaignStatus.RUNNING,
-            status_message=message or "Campaign resumed",
-            status_error=None  # Clear any pause-related errors
-        )
-
     def can_be_started(self) -> tuple[bool, str]:
         """
-        Check if campaign can be started.
+        Check if campaign can be started (simplified logic - no paused state).
         Returns (can_start, reason).
         """
-        if self.status == CampaignStatus.PAUSED:
-            return False, "Cannot start paused campaign - resume it first"
-        elif self.status == CampaignStatus.RUNNING:
+        if self.status == CampaignStatus.RUNNING:
             return False, "Campaign is already running"
         elif self.status == CampaignStatus.COMPLETED:
             return False, "Cannot start completed campaign"
         elif self.status == CampaignStatus.FAILED:
             return False, "Cannot start failed campaign"
         elif self.status == CampaignStatus.CREATED:
-            return True, "Campaign can be started"
+            # Check global circuit breaker state instead of unavailable services
+            from app.core.circuit_breaker import get_circuit_breaker
+            try:
+                circuit_breaker = get_circuit_breaker()
+                if not circuit_breaker.should_allow_request():
+                    return False, "Cannot start campaign - circuit breaker is open"
+                return True, "Campaign can be started"
+            except Exception as e:
+                # If circuit breaker check fails, allow start (fail-safe)
+                return True, "Campaign can be started"
         else:
             return False, f"Unknown campaign status: {self.status}"
 

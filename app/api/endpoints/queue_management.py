@@ -32,6 +32,8 @@ class QueueStatusResponse(BaseModel):
     status: str
     data: Dict[str, Any]
 
+
+# TODO: these campaign related schemas will have to be consolidated. 
 # Campaign-specific schemas for queue management responses
 class CampaignSummaryItem(BaseModel):
     """Schema for individual campaign in status summaries."""
@@ -120,11 +122,11 @@ async def pause_service(
                 detail=f"Invalid service name: {request.service}. Valid services: {[s.value for s in ThirdPartyService]}"
             )
         
-        # Pause the service
-        queue_manager.circuit_breaker.manually_pause_service(service, request.reason)
+        # Manually open the circuit breaker (this pauses all services globally)
+        queue_manager.circuit_breaker.record_failure(f"Manual pause requested for {service.value}", request.reason)
         
-        # Pause related jobs
-        paused_jobs = queue_manager.pause_jobs_for_service(service, request.reason)
+        # Pause related jobs for all services (since circuit breaker is now global)
+        paused_jobs = queue_manager.pause_all_jobs_on_breaker_open(request.reason)
         
         # Pause related campaigns
         from app.services.campaign import CampaignService
@@ -139,7 +141,8 @@ async def pause_service(
                 "reason": request.reason,
                 "jobs_paused": paused_jobs,
                 "campaigns_paused": paused_campaigns,
-                "message": f"Service {service.value} paused successfully: {paused_jobs} jobs and {paused_campaigns} campaigns affected"
+                "circuit_breaker_state": "open",
+                "message": f"Circuit breaker opened due to {service.value} issues: {paused_jobs} jobs and {paused_campaigns} campaigns paused"
             }
         )
         
@@ -158,7 +161,10 @@ async def resume_service(
     queue_manager: QueueManager = Depends(get_queue_manager),
     db: Session = Depends(get_db)
 ):
-    """Manually resume a service and its related queues and campaigns."""
+    """
+    NOTE: In the simplified circuit breaker model, service-specific resume is not supported.
+    This endpoint now redirects to global queue resume logic.
+    """
     try:
         # Validate service name
         try:
@@ -169,80 +175,32 @@ async def resume_service(
                 detail=f"Invalid service name: {request.service}. Valid services: {[s.value for s in ThirdPartyService]}"
             )
         
-        # Resume the service
-        queue_manager.circuit_breaker.manually_resume_service(service)
+        logger.info(f"Service-specific resume requested for {service.value} - redirecting to global queue resume")
         
-        # Resume related jobs
-        resumed_jobs = queue_manager.resume_jobs_for_service(service)
+        # Check if circuit breaker is already closed
+        current_state = queue_manager.circuit_breaker.get_global_circuit_state()
         
-        # Resume related campaigns
-        from app.services.campaign import CampaignService
-        from app.models.campaign import Campaign, CampaignStatus
+        if current_state.value == "closed":
+            return QueueStatusResponse(
+                status="success",
+                data={
+                    "service": service.value,
+                    "resumed": False,
+                    "jobs_resumed": 0,
+                    "campaigns_resumed": 0,
+                    "circuit_breaker_state": "closed",
+                    "message": f"Circuit breaker is already closed. Use /resume-queue endpoint to resume all paused campaigns and jobs."
+                }
+            )
         
-        campaign_service = CampaignService()
-        
-        # Get paused campaigns that were paused due to this service
-        paused_campaigns = (
-            db.query(Campaign)
-            .filter(Campaign.status == CampaignStatus.PAUSED)
-            .all()
-        )
-        
-        # Filter campaigns paused due to this specific service
-        service_paused_campaigns = []
-        for campaign in paused_campaigns:
-            if (campaign.status_message and 
-                service.value.lower() in campaign.status_message.lower()):
-                service_paused_campaigns.append(campaign)
-        
-        # Try to resume each campaign
-        resumed_campaigns = 0
-        for campaign in service_paused_campaigns:
-            try:
-                # Check if all required services are now available before resuming
-                can_start, reason = campaign_service.can_start_campaign(campaign)
-                if campaign.status == CampaignStatus.PAUSED:
-                    # For paused campaigns, check if this specific service is now available
-                    allowed, cb_reason = queue_manager.circuit_breaker.should_allow_request(service)
-                    if allowed:
-                        # Additional check: make sure ALL required services are available
-                        all_services_available = True
-                        required_services = [
-                            ThirdPartyService.APOLLO,
-                            ThirdPartyService.PERPLEXITY,
-                            ThirdPartyService.OPENAI,
-                            ThirdPartyService.INSTANTLY,
-                            ThirdPartyService.MILLIONVERIFIER
-                        ]
-                        
-                        for required_service in required_services:
-                            service_allowed, _ = queue_manager.circuit_breaker.should_allow_request(required_service)
-                            if not service_allowed:
-                                all_services_available = False
-                                break
-                        
-                        if all_services_available:
-                            await campaign_service.resume_campaign(campaign.id, db)
-                            resumed_campaigns += 1
-                            logger.info(f"Resumed campaign {campaign.id} after {service.value} recovery")
-                        else:
-                            logger.info(f"Cannot resume campaign {campaign.id}: Other services still unavailable")
-                    else:
-                        logger.info(f"Cannot resume campaign {campaign.id}: {cb_reason}")
-                        
-            except Exception as e:
-                logger.error(f"Error resuming campaign {campaign.id}: {str(e)}")
-                continue
-        
+        # Circuit breaker is open - cannot resume individual services
         return QueueStatusResponse(
-            status="success",
+            status="error",
             data={
                 "service": service.value,
-                "resumed": True,
-                "jobs_resumed": resumed_jobs,
-                "campaigns_eligible": len(service_paused_campaigns),
-                "campaigns_resumed": resumed_campaigns,
-                "message": f"Service {service.value} resumed successfully: {resumed_jobs} jobs and {resumed_campaigns} campaigns affected"
+                "resumed": False,
+                "circuit_breaker_state": current_state.value,
+                "message": f"Cannot resume individual services. Circuit breaker is {current_state.value}. Please use /resume-queue endpoint after addressing all service issues."
             }
         )
         
@@ -343,7 +301,7 @@ async def get_paused_leads_for_service(
 
 @router.get("/circuit-breakers", response_model=QueueStatusResponse)
 async def get_circuit_breaker_status():
-    """Get status of all circuit breakers."""
+    """Get status of the global circuit breaker."""
     try:
         redis_client = get_redis_connection()
         circuit_breaker = CircuitBreakerService(redis_client)
@@ -353,7 +311,7 @@ async def get_circuit_breaker_status():
         return QueueStatusResponse(
             status="success",
             data={
-                "circuit_breakers": status_data,
+                "circuit_breaker": status_data,  # Changed from circuit_breakers to circuit_breaker (global)
                 "timestamp": status_data.get("timestamp", "unknown")
             }
         )
@@ -455,13 +413,13 @@ async def resume_campaigns_for_service(
                     cb_service = CircuitBreakerService(circuit_breaker)
                     
                     # Check if the specific service is available
-                    allowed, cb_reason = cb_service.should_allow_request(service)
+                    allowed = cb_service.should_allow_request()
                     if allowed:
                         await campaign_service.resume_campaign(campaign.id, db)
                         resumed_count += 1
                         logger.info(f"Resumed campaign {campaign.id} after {service.value} recovery")
                     else:
-                        logger.info(f"Cannot resume campaign {campaign.id}: {cb_reason}")
+                        logger.info(f"Cannot resume campaign {campaign.id}: {reason}")
                         
             except Exception as e:
                 logger.error(f"Error resuming campaign {campaign.id}: {str(e)}")
@@ -623,9 +581,13 @@ async def reset_circuit_breaker(
     service: str,
     queue_manager: QueueManager = Depends(get_queue_manager)
 ):
-    """Reset circuit breaker for a specific service (same as manual resume)."""
+    """
+    Reset circuit breaker (global) - service parameter is maintained for API compatibility but circuit breaker is now global.
+    NOTE: This only closes the circuit breaker, it does NOT automatically resume campaigns.
+    Use /resume-queue endpoint to resume paused campaigns after circuit breaker reset.
+    """
     try:
-        # Validate service name
+        # Validate service name for API compatibility
         try:
             service_enum = ThirdPartyService(service.lower())
         except ValueError:
@@ -634,19 +596,46 @@ async def reset_circuit_breaker(
                 detail=f"Invalid service name: {service}. Valid services: {[s.value for s in ThirdPartyService]}"
             )
         
-        # Reset circuit breaker (manually resume service)
-        queue_manager.circuit_breaker.manually_resume_service(service_enum)
+        # Reset circuit breaker (this is now global, not service-specific)
+        current_state = queue_manager.circuit_breaker.get_global_circuit_state()
         
-        logger.info(f"Circuit breaker reset for {service_enum.value}")
+        if current_state.value == "closed":
+            logger.info(f"Circuit breaker reset requested for {service_enum.value} but circuit breaker is already closed")
+            return QueueStatusResponse(
+                status="success",
+                data={
+                    "service": service_enum.value,
+                    "action": "circuit_breaker_reset",
+                    "circuit_breaker_state": "closed",
+                    "message": f"Circuit breaker is already closed. No reset needed."
+                }
+            )
         
-        return QueueStatusResponse(
-            status="success",
-            data={
-                "service": service_enum.value,
-                "action": "circuit_breaker_reset",
-                "message": f"Circuit breaker reset for {service_enum.value} - service manually resumed"
-            }
-        )
+        # Manually close the circuit breaker
+        closed = queue_manager.circuit_breaker.manually_close_circuit()
+        
+        if closed:
+            logger.info(f"Circuit breaker reset completed (was requested for {service_enum.value})")
+            return QueueStatusResponse(
+                status="success",
+                data={
+                    "service": service_enum.value,
+                    "action": "circuit_breaker_reset",
+                    "circuit_breaker_state": "closed",
+                    "message": f"Circuit breaker reset successful. Use /resume-queue to resume paused campaigns and jobs."
+                }
+            )
+        else:
+            logger.warning(f"Circuit breaker reset failed for {service_enum.value}")
+            return QueueStatusResponse(
+                status="error",
+                data={
+                    "service": service_enum.value,
+                    "action": "circuit_breaker_reset",
+                    "circuit_breaker_state": current_state.value,
+                    "message": f"Circuit breaker reset failed. Current state: {current_state.value}"
+                }
+            )
         
     except HTTPException:
         raise
@@ -687,9 +676,10 @@ async def resume_queue(
         ]
         
         for service in all_services:
-            allowed, reason = circuit_breaker.should_allow_request(service)
+            allowed = circuit_breaker.should_allow_request()
             if not allowed:
-                blocked_services.append(f"{service.value} ({reason})")
+                blocked_services.append(f"Global circuit breaker (open)")
+                break  # Since it's global, if it's open, all services are blocked
         
         if blocked_services:
             error_message = f"Cannot resume queue: Circuit breakers still open for: {', '.join(blocked_services)}"
@@ -699,14 +689,14 @@ async def resume_queue(
                 detail=error_message
             )
         
-        logger.info("Prerequisites met: All circuit breakers are closed - proceeding with queue resume")
+        logger.info("Prerequisites met: Global circuit breaker is closed - proceeding with queue resume")
         
         # STEP 2: Resume queue for all services
         total_jobs_resumed = 0
+        
+        # Since circuit breaker is global, we just need to resume jobs for all services
+        # The circuit breaker is already closed at this point
         for service in all_services:
-            # Resume service queues
-            circuit_breaker.manually_resume_service(service)
-            
             # Resume jobs for each service
             jobs_resumed = queue_manager.resume_jobs_for_service(service)
             total_jobs_resumed += jobs_resumed
@@ -750,7 +740,7 @@ async def resume_queue(
             "campaigns_eligible": len(paused_campaigns),
             "campaigns_resumed": campaigns_resumed,
             "services_resumed": [service.value for service in all_services],
-            "prerequisites_met": "All circuit breakers closed",
+            "prerequisites_met": "Global circuit breaker closed",
             "message": f"Queue resumed successfully: {total_jobs_resumed} jobs and {campaigns_resumed} campaigns resumed"
         }
         
@@ -771,4 +761,57 @@ async def resume_queue(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error resuming queue: {str(e)}"
+        )
+
+@router.post("/close-circuit", response_model=QueueStatusResponse)
+async def close_circuit_breaker(
+    queue_manager: QueueManager = Depends(get_queue_manager)
+):
+    """Manually close the global circuit breaker and resume all paused jobs."""
+    try:
+        circuit_breaker = queue_manager.circuit_breaker
+        
+        # Check current state
+        current_state = circuit_breaker.get_global_circuit_state()
+        
+        if current_state.value == "closed":
+            return QueueStatusResponse(
+                status="success",
+                data={
+                    "circuit_breaker_state": "closed",
+                    "message": "Circuit breaker is already closed",
+                    "jobs_resumed": 0
+                }
+            )
+        
+        # Manually close circuit breaker (this will trigger job resume)
+        closed = circuit_breaker.manually_close_circuit()
+        
+        if closed:
+            # Get updated status
+            status_data = queue_manager.get_queue_status()
+            
+            return QueueStatusResponse(
+                status="success",
+                data={
+                    "circuit_breaker_state": "closed",
+                    "message": "Circuit breaker closed successfully and jobs resumed",
+                    "queue_status": status_data
+                }
+            )
+        else:
+            return QueueStatusResponse(
+                status="success",
+                data={
+                    "circuit_breaker_state": current_state.value,
+                    "message": "Circuit breaker was already closed",
+                    "jobs_resumed": 0
+                }
+            )
+        
+    except Exception as e:
+        logger.error(f"Error closing circuit breaker: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error closing circuit breaker: {str(e)}"
         ) 

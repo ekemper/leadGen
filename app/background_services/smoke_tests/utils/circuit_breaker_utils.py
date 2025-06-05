@@ -55,18 +55,17 @@ def report_circuit_breaker_failure(cb_status, paused_campaigns):
     print("\n🔴 CIRCUIT BREAKER TRIGGERED - SERVICE FAILURE DETECTED")
     print("=" * 60)
     
-    if cb_status and cb_status.get("data", {}).get("circuit_breakers"):
-        circuit_breakers = cb_status["data"]["circuit_breakers"]
-        print(f"Circuit Breaker Status:")
+    if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
+        circuit_breaker = cb_status["data"]["circuit_breaker"]
+        print(f"Global Circuit Breaker Status:")
         
-        for service, status in circuit_breakers.items():
-            if isinstance(status, dict):
-                state = status.get("circuit_state", "unknown")
-                print(f"  🔴 {service.upper()}: {state}")
-                if status.get("pause_info"):
-                    print(f"    Reason: {status['pause_info']}")
-                if status.get("failure_count", 0) > 0:
-                    print(f"    Failures: {status['failure_count']}/{status.get('failure_threshold', 'unknown')}")
+        if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
+            state = circuit_breaker["state"]
+            print(f"  🔴 GLOBAL CIRCUIT BREAKER: {state.upper()}")
+            if circuit_breaker.get("last_failure_reason"):
+                print(f"    Reason: {circuit_breaker['last_failure_reason']}")
+            if circuit_breaker.get("failure_count", 0) > 0:
+                print(f"    Failures: {circuit_breaker['failure_count']}/{circuit_breaker.get('failure_threshold', 'unknown')}")
     
     if paused_campaigns:
         print(f"\nCampaigns Paused: {len(paused_campaigns)}")

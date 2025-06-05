@@ -214,12 +214,12 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
         lead.enrichment_job_id = enrichment_job.id
         db.commit()
         
-        # Check campaign status before processing
+        # Get the campaign to check status
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if not campaign:
-            logger.error(f"Campaign {campaign_id} not found for job {enrichment_job.id}")
+            logger.error(f"Campaign {campaign_id} not found for lead {lead_id}")
             enrichment_job.status = JobStatus.FAILED
-            enrichment_job.error = f"Campaign {campaign_id} not found"
+            enrichment_job.error = "Campaign not found"
             enrichment_job.completed_at = datetime.utcnow()
             db.commit()
             return {
@@ -229,25 +229,13 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
                 "reason": "Campaign not found"
             }
         
-        if campaign.status == CampaignStatus.PAUSED:
-            logger.warning(f"Pausing job {enrichment_job.id} for lead {lead_id}: Campaign {campaign_id} is paused")
-            enrichment_job.status = JobStatus.PAUSED
-            enrichment_job.error = f"Job paused: Campaign {campaign_id} is paused"
-            enrichment_job.completed_at = datetime.utcnow()
-            db.commit()
-            return {
-                "lead_id": lead_id,
-                "job_id": enrichment_job.id,
-                "status": "paused",
-                "reason": f"Campaign {campaign_id} is paused"
-            }
-        
         # Check if job should be processed based on circuit breaker status
         queue_manager = get_queue_manager(db)
         circuit_breaker = queue_manager.circuit_breaker
         
-        should_process, reason = queue_manager.should_process_job(enrichment_job)
+        should_process = queue_manager.should_process_job()
         if not should_process:
+            reason = "Circuit breaker is open"
             logger.warning(f"Pausing job {enrichment_job.id} for lead {lead_id}: {reason}")
             enrichment_job.status = JobStatus.PAUSED
             enrichment_job.error = f"Job paused: {reason}"
@@ -315,8 +303,7 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
             
             # Check for rate limiting in response
             if enrichment_result and enrichment_result.get('status') == 'rate_limited':
-                circuit_breaker.record_failure(ThirdPartyService.PERPLEXITY, 
-                                             enrichment_result.get('error', 'Rate limited'), 
+                circuit_breaker.record_failure(f"Perplexity rate limit: {enrichment_result.get('error', 'Rate limited')}", 
                                              'rate_limit')
                 # Pause this job and trigger circuit breaker
                 enrichment_job.status = JobStatus.PAUSED
@@ -330,7 +317,7 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
                     "reason": "Perplexity rate limit exceeded"
                 }
             else:
-                circuit_breaker.record_success(ThirdPartyService.PERPLEXITY)
+                circuit_breaker.record_success()
             
             # Store enrichment results
             lead.enrichment_results = enrichment_result
@@ -338,7 +325,7 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
             if not enrichment_success:
                 error_details['enrichment'] = enrichment_result
         except Exception as e:
-            circuit_breaker.record_failure(ThirdPartyService.PERPLEXITY, str(e), 'exception')
+            circuit_breaker.record_failure(f"Perplexity service error: {str(e)}", 'exception')
             error_details['enrichment'] = str(e)
             logger.error(f"Enrichment error for lead {lead_id}: {str(e)}")
             enrichment_result = {'error': str(e)}
@@ -455,17 +442,16 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
                 
                 # Check for rate limiting in response
                 if instantly_result and instantly_result.get('status') == 'rate_limited':
-                    circuit_breaker.record_failure(ThirdPartyService.INSTANTLY, 
-                                                 instantly_result.get('error', 'Rate limited'), 
+                    circuit_breaker.record_failure(f"Instantly rate limit: {instantly_result.get('error', 'Rate limited')}", 
                                                  'rate_limit')
                 else:
-                    circuit_breaker.record_success(ThirdPartyService.INSTANTLY)
+                    circuit_breaker.record_success()
                 
                 instantly_success = 'error' not in instantly_result and instantly_result.get('status') != 'rate_limited'
                 lead.instantly_lead_record = instantly_result
                 logger.info(f"Instantly lead creation result for lead {lead_id}: {instantly_result}")
             except Exception as e:
-                circuit_breaker.record_failure(ThirdPartyService.INSTANTLY, str(e), 'exception')
+                circuit_breaker.record_failure(f"Instantly service error: {str(e)}", 'exception')
                 error_details['instantly'] = str(e)
                 logger.error(f"Instantly lead creation failed for lead {lead_id}: {str(e)}")
                 lead.instantly_lead_record = {'error': str(e)}
@@ -638,110 +624,118 @@ def cleanup_campaign_jobs_task(self, campaign_id: str, days: int):
     finally:
         db.close()
 
-# @celery_app.task(bind=True, name="process_campaign_leads_task")
-# def process_campaign_leads_task(self, campaign_id: str, processing_type: str = "enrichment"):
+@celery_app.task(bind=True, name="process_job_task")
+def process_job_task(self, job_id: int, job_type: str, campaign_id: str):
     """
-    Background task to process leads for a campaign (enrichment, email verification, etc.).
+    Generic task processor that routes to appropriate specific task based on job type.
+    This is used when resuming paused jobs.
     
     Args:
+        job_id: ID of the job to process
+        job_type: Type of job (FETCH_LEADS, ENRICH_LEAD, CLEANUP_CAMPAIGN)
         campaign_id: ID of the campaign
-        processing_type: Type of processing (enrichment, email_verification, etc.)
     """
     db_gen = get_db()
     db: Session = next(db_gen)
     
     try:
-        logger.info(f"Starting process_campaign_leads_task for campaign {campaign_id}, type={processing_type}")
+        logger.info(f"Processing job {job_id} of type {job_type} for campaign {campaign_id}")
         
-        # Get campaign
-        campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-        if not campaign:
-            raise ValueError(f"Campaign {campaign_id} not found")
+        # Get the job
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            raise ValueError(f"Job {job_id} not found")
         
-        # Create a job to track this processing
-        processing_job = Job(
-            campaign_id=campaign_id,
-            name=f'PROCESS_LEADS_{processing_type.upper()}',
-            description=f'Process leads for campaign {campaign.name} - {processing_type}',
-            status=JobStatus.PROCESSING,
-            task_id=self.request.id
-        )
-        db.add(processing_job)
-        db.commit()
-        db.refresh(processing_job)
-        
-        # Update task progress
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "current": 1,
-                "total": 4,
-                "status": f"Starting {processing_type} processing"
-            }
-        )
-        
-        # TODO: Implement actual lead processing logic
-        # For now, this is a placeholder that simulates processing
-        
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "current": 2,
-                "total": 4,
-                "status": f"Processing leads with {processing_type}"
-            }
-        )
-        
-        # Simulate processing time
-        time.sleep(2)
-        
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "current": 3,
-                "total": 4,
-                "status": "Updating lead records"
-            }
-        )
-        
-        # Mock processing results
-        processed_count = 0  # TODO: Replace with actual processing count
-        
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "current": 4,
-                "total": 4,
-                "status": "Finalizing processing"
-            }
-        )
-        
-        # Update job status
-        processing_job.status = JobStatus.COMPLETED
-        processing_job.result = f"Processed {processed_count} leads with {processing_type}"
-        processing_job.completed_at = datetime.utcnow()
+        # Update job status to processing
+        job.status = JobStatus.PROCESSING
+        job.task_id = self.request.id
         db.commit()
         
-        logger.info(f"Completed process_campaign_leads_task for campaign {campaign_id}")
-        
-        return {
-            "campaign_id": campaign_id,
-            "processing_type": processing_type,
-            "status": "completed",
-            "leads_processed": processed_count,
-            "job_id": processing_job.id
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in process_campaign_leads_task: {str(e)}", exc_info=True)
-        
-        # Mark job as failed if it was created
-        if 'processing_job' in locals() and processing_job:
-            processing_job.status = JobStatus.FAILED
-            processing_job.error = str(e)
-            processing_job.completed_at = datetime.utcnow()
+        # Route to appropriate task based on job type
+        if job_type == JobType.FETCH_LEADS.value:
+            # For fetch leads, we need the job parameters
+            campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+            if not campaign:
+                raise ValueError(f"Campaign {campaign_id} not found")
+            
+            job_params = {
+                'fileName': campaign.fileName,
+                'totalRecords': campaign.totalRecords,
+                'url': campaign.url
+            }
+            
+            # Queue the fetch and save leads task
+            task_result = fetch_and_save_leads_task.delay(job_params, campaign_id, job_id)
+            logger.info(f"Queued fetch_and_save_leads_task {task_result.id} for job {job_id}")
+            
+            # Update job with new task ID
+            job.task_id = task_result.id
             db.commit()
+            
+            return {
+                "status": "queued",
+                "task_id": task_result.id,
+                "job_id": job_id,
+                "message": f"Fetch leads task queued for campaign {campaign_id}"
+            }
+            
+        elif job_type == JobType.ENRICH_LEAD.value:
+            # For enrich lead, we need to get the lead associated with this job
+            lead = db.query(Lead).filter(Lead.enrichment_job_id == job_id).first()
+            if not lead:
+                # If no lead is directly linked, this might be a legacy job
+                logger.warning(f"No lead found for enrichment job {job_id}, marking as completed")
+                job.status = JobStatus.COMPLETED
+                job.result = "No lead found for enrichment (legacy job)"
+                job.completed_at = datetime.utcnow()
+                db.commit()
+                return {"status": "completed", "message": "No lead found for enrichment"}
+            
+            # Queue the enrich lead task
+            task_result = enrich_lead_task.delay(lead.id, campaign_id)
+            logger.info(f"Queued enrich_lead_task {task_result.id} for job {job_id}, lead {lead.id}")
+            
+            # Update job with new task ID
+            job.task_id = task_result.id
+            db.commit()
+            
+            return {
+                "status": "queued",
+                "task_id": task_result.id,
+                "job_id": job_id,
+                "lead_id": lead.id,
+                "message": f"Enrich lead task queued for lead {lead.id}"
+            }
+            
+        elif job_type == JobType.CLEANUP_CAMPAIGN.value:
+            # Queue cleanup task with default 30 days retention
+            task_result = cleanup_campaign_jobs_task.delay(campaign_id, days=30)
+            logger.info(f"Queued cleanup_campaign_jobs_task {task_result.id} for job {job_id}")
+            
+            # Update job with new task ID
+            job.task_id = task_result.id
+            db.commit()
+            
+            return {
+                "status": "queued",
+                "task_id": task_result.id,
+                "job_id": job_id,
+                "message": f"Cleanup task queued for campaign {campaign_id}"
+            }
+            
+        else:
+            raise ValueError(f"Unknown job type: {job_type}")
+            
+    except Exception as e:
+        logger.error(f"Error in process_job_task: {str(e)}", exc_info=True)
         
+        # Mark job as failed
+        if 'job' in locals() and job:
+            job.status = JobStatus.FAILED
+            job.error = str(e)
+            job.completed_at = datetime.utcnow()
+            db.commit()
+            
         raise
         
     finally:

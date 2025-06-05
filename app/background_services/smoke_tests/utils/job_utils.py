@@ -321,9 +321,14 @@ def monitor_all_campaigns_jobs_with_cb_awareness(token, campaigns_data, timeout,
                     status_summary, campaign_details = check_campaign_status_summary_func(token, campaign_ids, api_base)
                     
                     # Check if this is circuit breaker related
-                    if cb_status and cb_status.get("data", {}).get("circuit_breakers"):
-                        if report_circuit_breaker_failure_func:
-                            report_circuit_breaker_failure_func(cb_status, unexpected_paused)
+                    if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
+                        circuit_breaker = cb_status["data"]["circuit_breaker"]
+                        
+                        if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
+                            state = circuit_breaker["state"]
+                            if state == "open":
+                                print(f"🔴 CIRCUIT BREAKER OPEN - Queue paused due to service failures")
+                                return None  # Signal circuit breaker triggered
                     else:
                         print(f"[Monitor CB] ❌ Non-circuit-breaker related campaign pauses detected:")
                         for campaign in unexpected_paused:
@@ -332,48 +337,16 @@ def monitor_all_campaigns_jobs_with_cb_awareness(token, campaigns_data, timeout,
                     return None  # Signal failure due to unexpected pauses
             
             # Check if any services are unhealthy
-            if cb_status and cb_status.get("data", {}).get("circuit_breakers"):
-                circuit_breakers = cb_status["data"]["circuit_breakers"]
-                unhealthy_services = []
+            if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
+                circuit_breaker = cb_status["data"]["circuit_breaker"]
                 
-                for service, status in circuit_breakers.items():
-                    if isinstance(status, dict):
-                        state = status.get("circuit_state", "unknown")
-                        if state != "closed":
-                            unhealthy_services.append((service, state, status))
-                
-                if unhealthy_services:
-                    print(f"[Monitor CB] ⚠️  CRITICAL: {len(unhealthy_services)} service(s) not in 'closed' state:")
-                    for service, state, status in unhealthy_services:
-                        print(f"[Monitor CB]     {service.upper()}: {state}")
-                        if status.get("pause_info"):
-                            print(f"[Monitor CB]       Pause info: {status['pause_info']}")
-                    
-                    # Check if there are actually paused jobs due to these circuit breaker issues
-                    paused_job_counts = cb_status.get("data", {}).get("paused_jobs_by_service", {})
-                    total_paused = sum(paused_job_counts.values())
-                    
-                    if total_paused > 0:
-                        print(f"[Monitor CB] ❌ STOPPING TEST: {total_paused} jobs paused due to circuit breaker issues")
-                        print(f"[Monitor CB] Paused jobs by service: {paused_job_counts}")
-                        
-                        # Create synthetic paused campaigns for reporting
-                        synthetic_paused = []
-                        for service, state, status in unhealthy_services:
-                            if paused_job_counts.get(service, 0) > 0:
-                                synthetic_paused.append({
-                                    "id": f"multiple_campaigns_affected_by_{service}",
-                                    "status_message": f"Jobs paused due to {service} circuit breaker in {state} state",
-                                    "paused_reason": f"Circuit breaker {state} for {service}: {status.get('pause_info', 'No details')}"
-                                })
-                        
-                        if report_circuit_breaker_failure_func:
-                            report_circuit_breaker_failure_func(cb_status, synthetic_paused)
-                        return None  # Signal circuit breaker failure
-                    else:
-                        print(f"[Monitor CB] ⚠️  Circuit breakers unhealthy but no jobs paused yet - continuing to monitor...")
+                if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
+                    state = circuit_breaker["state"]
+                    if state == "open":
+                        print(f"🔴 CIRCUIT BREAKER OPEN - Queue paused due to service failures")
+                        return None  # Signal circuit breaker triggered
                 else:
-                    print(f"[Monitor CB] ✅ All circuit breakers and campaigns healthy")
+                    print(f"[Monitor CB] ✅ Global circuit breaker is healthy")
             else:
                 print(f"[Monitor CB] ℹ️  Could not get circuit breaker status, campaigns appear healthy")
             

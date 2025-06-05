@@ -27,6 +27,8 @@
 
     * In cases where there are code edits, the ai agent is to perform the changes.
 
+    * always check for Consistency in function signatures compared to their usage - for EVERY change. 
+
     * In cases where there are commands to be run, the ai agent is to run them in the chat window context and parse the output for errors and other actionable information.
 
     * When createing and running migrations, run the commands in the api docker container.
