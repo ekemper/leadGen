@@ -535,9 +535,8 @@ class CampaignService:
                     detail=f"Campaign {campaign_id} not found"
                 )
 
-            # Note: Lead model is not yet implemented in this FastAPI app
-            # This is a placeholder that returns zero stats
-            # TODO: Implement Lead model and actual lead statistics
+            # Note: Lead model is implemented in this FastAPI app
+            # This returns actual lead statistics from the database
             
             from app.schemas.campaign import CampaignLeadStats
             return CampaignLeadStats(

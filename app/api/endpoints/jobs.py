@@ -5,7 +5,7 @@ import math
 
 from app.core.database import get_db
 from app.models.job import Job, JobStatus
-from app.schemas.job import JobCreate, JobResponse, JobUpdate
+from app.schemas.job import JobCreate, JobResponse
 from app.workers.tasks import process_job
 from pydantic import BaseModel
 
@@ -26,10 +26,6 @@ class JobDetailResponse(BaseModel):
     data: JobResponse
 
 class JobCreateResponse(BaseModel):
-    status: str
-    data: JobResponse
-
-class JobUpdateResponse(BaseModel):
     status: str
     data: JobResponse
 
@@ -183,41 +179,6 @@ async def get_job_status(
     return JobStatusResponse(
         status="success",
         data=response_data
-    )
-
-
-#TODO : the cancel job post endpoint is redundant - please refactor usages of this endpoin to use the delete endpoint instead
-@router.post("/{job_id}/cancel", response_model=JobCancelResponse)
-async def cancel_job_post(
-    job_id: int,
-    db: Session = Depends(get_db)
-):
-    """Cancel a pending or processing job (POST endpoint)"""
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job {job_id} not found"
-        )
-    
-    if job.status not in [JobStatus.PENDING, JobStatus.PROCESSING]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot cancel job in {job.status} status"
-        )
-    
-    # Revoke Celery task if it exists
-    if job.task_id:
-        from app.workers.celery_app import celery_app
-        celery_app.control.revoke(job.task_id, terminate=True)
-    
-    # Update job status
-    job.status = JobStatus.CANCELLED
-    db.commit()
-    
-    return JobCancelResponse(
-        status="success",
-        message=f"Job {job_id} cancelled"
     )
 
 @router.delete("/{job_id}", response_model=JobCancelResponse)

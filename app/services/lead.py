@@ -78,16 +78,4 @@ class LeadService:
         except SQLAlchemyError as e:
             db.rollback()
             logger.error(f"Error updating lead: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating lead")
-
-    async def delete_lead(self, lead_id: str, db: Session) -> None:
-        try:
-            lead = db.query(Lead).filter(Lead.id == lead_id).first()
-            if not lead:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
-            db.delete(lead)
-            db.commit()
-        except SQLAlchemyError as e:
-            db.rollback()
-            logger.error(f"Error deleting lead: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error deleting lead") 
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating lead") 

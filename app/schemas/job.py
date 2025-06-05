@@ -7,15 +7,11 @@ from app.models.job import JobStatus, JobType
 class JobBase(BaseModel):
     name: str
     description: Optional[str] = None
-
-class JobCreate(JobBase):
-    job_type: Optional[JobType] = JobType.FETCH_LEADS
+    job_type: JobType = JobType.FETCH_LEADS
     campaign_id: Optional[str] = None
 
-class JobUpdate(BaseModel):
-    status: Optional[JobStatus] = None
-    result: Optional[str] = None
-    error: Optional[str] = None
+class JobCreate(JobBase):
+    pass
 
 class JobInDB(JobBase):
     id: int
@@ -33,4 +29,4 @@ class JobInDB(JobBase):
         from_attributes = True
 
 class JobResponse(JobInDB):
-    pass 
+    pass

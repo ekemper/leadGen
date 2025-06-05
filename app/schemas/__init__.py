@@ -1,4 +1,4 @@
-from app.schemas.job import JobCreate, JobUpdate, JobResponse
+from app.schemas.job import JobCreate, JobResponse
 from app.schemas.campaign import (
     CampaignCreate,
     CampaignUpdate,
@@ -30,7 +30,6 @@ from app.schemas.common import PaginatedResponse, PaginationMeta
 
 __all__ = [
     "JobCreate", 
-    "JobUpdate", 
     "JobResponse",
     "CampaignCreate",
     "CampaignUpdate", 

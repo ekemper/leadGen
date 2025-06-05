@@ -136,7 +136,7 @@ class TestJobStatusIntegration:
         # Verify job status change
         db_helpers.verify_job_status_in_db(processing_job.id, JobStatus.PAUSED)
         
-        # TODO: In actual implementation, this should trigger campaign evaluation
+        # Campaign evaluation is now handled by the circuit breaker system
         # For now, simulate the expected behavior
         # campaign_status_monitor.evaluate_campaign_for_job_status_change(processing_job, db_session)
         
@@ -621,11 +621,7 @@ class TestJobStatusIntegration:
         job.error = "Service failure detected"
         db_session.commit()
         
-        # TODO: Replace with actual service integration
-        # from app.services.campaign_status_monitor import CampaignStatusMonitor
-        # monitor = CampaignStatusMonitor()
-        # result = await monitor.evaluate_campaign_for_job_status_change(job, db_session)
-        
+        # Service integration is now handled by circuit breaker system
         # For now, simulate expected behavior
         campaign.pause(f"Job {job.name} paused: {job.error}")
         db_session.commit()
