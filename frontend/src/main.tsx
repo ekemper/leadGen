@@ -14,7 +14,16 @@ createRoot(document.getElementById("root")!).render(
     <ThemeProvider>
       <AppWrapper>
         <App />
-        <ToastContainer />
+        <ToastContainer 
+          position="bottom-right"
+          autoClose={4000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+        />
       </AppWrapper>
     </ThemeProvider>
   </StrictMode>,

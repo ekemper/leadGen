@@ -1,5 +1,8 @@
 import os
 import requests
+import time
+import uuid
+from datetime import datetime
 from app.models.lead import Lead
 from typing import Dict, Any, List, Optional
 from app.core.logger import get_logger
@@ -14,6 +17,9 @@ class PerplexityService:
     This service now supports rate limiting to prevent exceeding API limits
     and avoid IP blocking. Rate limiting is optional to maintain backward 
     compatibility with existing code.
+    
+    Enhanced with comprehensive timing and request logging for debugging
+    rate limiting issues and analyzing request patterns.
     """
 
     API_URL = "https://api.perplexity.ai/chat/completions"
@@ -50,20 +56,111 @@ class PerplexityService:
                 extra={'component': 'perplexity_service', 'rate_limiting': 'disabled'}
             )
 
-    def _check_rate_limit(self, operation: str) -> dict:
+    def _log_request_attempt(self, lead_id: str, attempt_number: int, correlation_id: str, 
+                           rate_limiter_decision: str, rate_limiter_remaining: int, 
+                           time_since_last_request: Optional[float]) -> None:
         """
-        Check rate limiting if enabled.
+        Log detailed timing information for each request attempt.
+        
+        Args:
+            lead_id: ID of the lead being enriched
+            attempt_number: Current attempt number (1-3)
+            correlation_id: Correlation ID for tracking this request
+            rate_limiter_decision: Whether request was allowed or denied
+            rate_limiter_remaining: Number of remaining requests in rate limiter
+            time_since_last_request: Seconds since last request, None if first request
+        """
+        current_time = datetime.utcnow()
+        
+        logger.info(
+            f"perplexity timing test log - Request Attempt: "
+            f"correlation_id={correlation_id}, "
+            f"timestamp={current_time.isoformat()}Z, "
+            f"time_since_last_request={time_since_last_request}, "
+            f"rate_limiter_decision={rate_limiter_decision}, "
+            f"rate_limiter_remaining={rate_limiter_remaining}, "
+            f"lead_id={lead_id}, "
+            f"attempt_number={attempt_number}",
+            extra={
+                'component': 'perplexity_service',
+                'log_type': 'timing_test',
+                'event': 'request_attempt',
+                'correlation_id': correlation_id,
+                'lead_id': lead_id,
+                'attempt_number': attempt_number,
+                'rate_limiter_decision': rate_limiter_decision,
+                'rate_limiter_remaining': rate_limiter_remaining,
+                'time_since_last_request': time_since_last_request,
+                'timestamp_iso': current_time.isoformat() + 'Z'
+            }
+        )
+
+    def _log_request_response(self, correlation_id: str, response_status: str, 
+                            response_time_ms: float, api_response_code: Optional[int] = None,
+                            error_details: Optional[str] = None) -> None:
+        """
+        Log detailed response information for each request.
+        
+        Args:
+            correlation_id: Correlation ID for tracking this request
+            response_status: Status of the response (success, error, rate_limited)
+            response_time_ms: Response time in milliseconds
+            api_response_code: HTTP response code if available
+            error_details: Error details if applicable
+        """
+        logger.info(
+            f"perplexity timing test log - Request Response: "
+            f"correlation_id={correlation_id}, "
+            f"response_status={response_status}, "
+            f"response_time_ms={response_time_ms:.2f}, "
+            f"api_response_code={api_response_code}, "
+            f"error_details={error_details}",
+            extra={
+                'component': 'perplexity_service',
+                'log_type': 'timing_test',
+                'event': 'request_response',
+                'correlation_id': correlation_id,
+                'response_status': response_status,
+                'response_time_ms': response_time_ms,
+                'api_response_code': api_response_code,
+                'error_details': error_details
+            }
+        )
+
+    def _check_rate_limit(self, operation: str, lead_id: str, correlation_id: str, attempt_number: int) -> dict:
+        """
+        Check rate limiting if enabled with comprehensive timing logging.
         
         Args:
             operation: The operation being performed for logging
+            lead_id: ID of the lead being processed
+            correlation_id: Correlation ID for tracking this request
+            attempt_number: Current attempt number
             
         Returns:
             dict: Error response if rate limited, None if allowed
         """
         if self.rate_limiter:
             try:
-                if not self.rate_limiter.acquire():
-                    remaining = self.rate_limiter.get_remaining()
+                # Get timing information before checking rate limit
+                time_since_last_request = self.rate_limiter.get_time_since_last_request()
+                
+                # Check if request is allowed
+                is_allowed = self.rate_limiter.acquire()
+                remaining = self.rate_limiter.get_remaining()
+                
+                # Log the attempt with timing information
+                rate_limiter_decision = "allowed" if is_allowed else "denied"
+                self._log_request_attempt(
+                    lead_id=lead_id,
+                    attempt_number=attempt_number,
+                    correlation_id=correlation_id,
+                    rate_limiter_decision=rate_limiter_decision,
+                    rate_limiter_remaining=remaining,
+                    time_since_last_request=time_since_last_request
+                )
+                
+                if not is_allowed:
                     error_msg = (
                         f"Rate limit exceeded for Perplexity API. "
                         f"Remaining requests: {remaining}. "
@@ -75,21 +172,58 @@ class PerplexityService:
                             'component': 'perplexity_service',
                             'rate_limit_exceeded': True,
                             'remaining_requests': remaining,
-                            'operation': operation
+                            'operation': operation,
+                            'correlation_id': correlation_id,
+                            'time_since_last_request': time_since_last_request
                         }
                     )
+                    
+                    # Log the rate limit response
+                    self._log_request_response(
+                        correlation_id=correlation_id,
+                        response_status="rate_limited",
+                        response_time_ms=0.0,
+                        error_details=error_msg
+                    )
+                    
                     return {
                         'status': 'rate_limited',
                         'error': error_msg,
                         'remaining_requests': remaining,
                         'retry_after_seconds': self.rate_limiter.period_seconds
                     }
+                    
             except Exception as rate_limit_error:
                 # If rate limiter fails (e.g., Redis unavailable), log and continue
                 logger.warning(
                     f"Rate limiter error, proceeding without rate limiting: {rate_limit_error}",
-                    extra={'component': 'perplexity_service', 'rate_limiter_error': str(rate_limit_error)}
+                    extra={
+                        'component': 'perplexity_service', 
+                        'rate_limiter_error': str(rate_limit_error),
+                        'correlation_id': correlation_id
+                    }
                 )
+                
+                # Log attempt without rate limiter
+                self._log_request_attempt(
+                    lead_id=lead_id,
+                    attempt_number=attempt_number,
+                    correlation_id=correlation_id,
+                    rate_limiter_decision="error_fallback",
+                    rate_limiter_remaining=-1,
+                    time_since_last_request=None
+                )
+        else:
+            # No rate limiter configured - log attempt without timing
+            self._log_request_attempt(
+                lead_id=lead_id,
+                attempt_number=attempt_number,
+                correlation_id=correlation_id,
+                rate_limiter_decision="no_limiter",
+                rate_limiter_remaining=-1,
+                time_since_last_request=None
+            )
+            
         return None
 
     def build_prompt(self, lead: Lead) -> Dict[str, Any]:
@@ -159,11 +293,10 @@ class PerplexityService:
 
     def enrich_lead(self, lead: Lead) -> Dict[str, Any]:
         """
-        Enrich a single lead using Perplexity API.
+        Enrich a single lead using Perplexity API with comprehensive timing logging.
         
-        This method now includes rate limiting support to prevent exceeding
-        API limits. If rate limiting is enabled and the limit is exceeded,
-        the method will return an error response.
+        This method now includes detailed timing logging to track each request attempt,
+        rate limiter decisions, and response details for debugging rate limiting issues.
         
         Args:
             lead: Lead object to enrich
@@ -173,47 +306,150 @@ class PerplexityService:
         if not lead:
             raise ValueError("Lead is required")
 
-        # Check rate limiting if enabled
-        rate_limit_error = self._check_rate_limit(f"enrich_lead for lead {getattr(lead, 'id', None)}")
-        if rate_limit_error:
-            return rate_limit_error
+        # Generate correlation ID for tracking this request across logs
+        correlation_id = str(uuid.uuid4())
+        lead_id = str(getattr(lead, 'id', 'unknown'))
+        
+        logger.info(
+            f"Starting lead enrichment for lead {lead_id} with correlation_id {correlation_id}",
+            extra={
+                'component': 'perplexity_service',
+                'correlation_id': correlation_id,
+                'lead_id': lead_id
+            }
+        )
 
         prompt = self.build_prompt(lead)
         
         for attempt in range(self.MAX_RETRIES):
+            attempt_number = attempt + 1
+            
+            # Check rate limiting with comprehensive logging
+            rate_limit_error = self._check_rate_limit(
+                f"enrich_lead for lead {lead_id}", 
+                lead_id, 
+                correlation_id, 
+                attempt_number
+            )
+            if rate_limit_error:
+                return rate_limit_error
+
             try:
-                logger.info(f"Enriching lead {lead.id} (attempt {attempt + 1}/{self.MAX_RETRIES})", extra={'component': 'perplexity_service'})
-                response = requests.post(self.API_URL, json=prompt, headers=self.headers, timeout=30)
-                response.raise_for_status()
+                logger.info(
+                    f"Making Perplexity API request for lead {lead_id} "
+                    f"(attempt {attempt_number}/{self.MAX_RETRIES}, correlation_id: {correlation_id})",
+                    extra={
+                        'component': 'perplexity_service',
+                        'correlation_id': correlation_id,
+                        'lead_id': lead_id,
+                        'attempt_number': attempt_number
+                    }
+                )
                 
+                # Record start time for response timing
+                request_start_time = time.time()
+                
+                response = requests.post(self.API_URL, json=prompt, headers=self.headers, timeout=30)
+                
+                # Calculate response time
+                response_time_ms = (time.time() - request_start_time) * 1000
+                
+                response.raise_for_status()
                 result = response.json()
+                
+                # Log successful response
+                self._log_request_response(
+                    correlation_id=correlation_id,
+                    response_status="success",
+                    response_time_ms=response_time_ms,
+                    api_response_code=response.status_code
+                )
                 
                 # Log rate limiting status for monitoring
                 if self.rate_limiter:
                     remaining = self.rate_limiter.get_remaining()
                     logger.info(
-                        f"Lead enrichment successful for lead {getattr(lead, 'id', None)}. Rate limiter remaining: {remaining}",
+                        f"Lead enrichment successful for lead {lead_id}. "
+                        f"Rate limiter remaining: {remaining}, correlation_id: {correlation_id}",
                         extra={
                             'component': 'perplexity_service',
-                            'lead_id': getattr(lead, 'id', None),
-                            'rate_limiter_remaining': remaining
+                            'lead_id': lead_id,
+                            'rate_limiter_remaining': remaining,
+                            'correlation_id': correlation_id,
+                            'response_time_ms': response_time_ms
                         }
                     )
                 else:
                     logger.info(
-                        f"Lead enrichment successful for lead {getattr(lead, 'id', None)}",
-                        extra={'component': 'perplexity_service', 'lead_id': getattr(lead, 'id', None)}
+                        f"Lead enrichment successful for lead {lead_id}, correlation_id: {correlation_id}",
+                        extra={
+                            'component': 'perplexity_service',
+                            'lead_id': lead_id,
+                            'correlation_id': correlation_id,
+                            'response_time_ms': response_time_ms
+                        }
                     )
                 
                 return result
                 
             except requests.RequestException as e:
-                error_msg = f"Perplexity API request failed for lead {lead.id}: {str(e)}"
-                logger.error(error_msg, extra={'component': 'perplexity_service'})
+                # Calculate response time even for failed requests
+                response_time_ms = (time.time() - request_start_time) * 1000 if 'request_start_time' in locals() else 0.0
+                
+                error_msg = f"Perplexity API request failed for lead {lead_id}: {str(e)}"
+                
+                # Extract status code if available
+                api_response_code = None
+                if hasattr(e, 'response') and e.response is not None:
+                    api_response_code = e.response.status_code
+                
+                # Log failed response
+                self._log_request_response(
+                    correlation_id=correlation_id,
+                    response_status="error",
+                    response_time_ms=response_time_ms,
+                    api_response_code=api_response_code,
+                    error_details=str(e)
+                )
+                
+                logger.error(
+                    f"{error_msg} (correlation_id: {correlation_id}, attempt: {attempt_number})",
+                    extra={
+                        'component': 'perplexity_service',
+                        'correlation_id': correlation_id,
+                        'lead_id': lead_id,
+                        'attempt_number': attempt_number,
+                        'api_response_code': api_response_code,
+                        'response_time_ms': response_time_ms
+                    }
+                )
+                
                 if attempt < self.MAX_RETRIES - 1:
                     continue
                 return {'error': error_msg}
+                
             except Exception as e:
-                error_msg = f"Unexpected error enriching lead {lead.id}: {str(e)}"
-                logger.error(error_msg, extra={'component': 'perplexity_service'})
+                # Calculate response time even for unexpected errors
+                response_time_ms = (time.time() - request_start_time) * 1000 if 'request_start_time' in locals() else 0.0
+                
+                error_msg = f"Unexpected error enriching lead {lead_id}: {str(e)}"
+                
+                # Log unexpected error
+                self._log_request_response(
+                    correlation_id=correlation_id,
+                    response_status="error",
+                    response_time_ms=response_time_ms,
+                    error_details=str(e)
+                )
+                
+                logger.error(
+                    f"{error_msg} (correlation_id: {correlation_id}, attempt: {attempt_number})",
+                    extra={
+                        'component': 'perplexity_service',
+                        'correlation_id': correlation_id,
+                        'lead_id': lead_id,
+                        'attempt_number': attempt_number,
+                        'response_time_ms': response_time_ms
+                    }
+                )
                 return {'error': error_msg} 

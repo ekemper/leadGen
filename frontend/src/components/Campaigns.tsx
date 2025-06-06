@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../config/api';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 
@@ -52,7 +52,6 @@ const Campaigns: React.FC = () => {
       padding: '2rem',
       color: '#d4d4d4'
     }}>
-      <ToastContainer position="top-right" autoClose={4000} hideProgressBar={false} newestOnTop closeOnClick pauseOnFocusLoss draggable pauseOnHover />
       <h1 style={{ fontSize: '1.5rem', marginBottom: '2rem' }}>Campaigns</h1>
       
       <form onSubmit={handleSubmit} style={{

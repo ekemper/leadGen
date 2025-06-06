@@ -167,6 +167,7 @@ class TestRedisIntegration:
         
         # Clear rate limit state
         redis_client.delete(rate_limiter.key)
+        redis_client.delete(rate_limiter.last_request_key)
         
         with patch('requests.post') as mock_post:
             mock_response = Mock()
@@ -280,6 +281,119 @@ class TestRedisIntegration:
         assert apollo_limiter.key != email_limiter.key
         assert 'Apollo' in apollo_limiter.key
         assert 'MillionVerifier' in email_limiter.key
+
+    def test_rate_limiter_timing_functionality(self, redis_client):
+        """Test the new timing functionality in ApiIntegrationRateLimiter."""
+        rate_limiter = get_perplexity_rate_limiter(redis_client)
+        
+        # Clear state
+        redis_client.delete(rate_limiter.key)
+        redis_client.delete(rate_limiter.last_request_key)
+        
+        # Initially, no previous request time
+        assert rate_limiter.get_last_request_time() is None
+        assert rate_limiter.get_time_since_last_request() is None
+        
+        # Acquire a rate limit slot
+        import time
+        start_time = time.time()
+        assert rate_limiter.acquire() == True
+        
+        # Should now have a last request time
+        last_request_time = rate_limiter.get_last_request_time()
+        assert last_request_time is not None
+        assert abs(last_request_time - start_time) < 1.0  # Within 1 second
+        
+        # Wait a bit and check time since last request
+        time.sleep(0.1)
+        time_since = rate_limiter.get_time_since_last_request()
+        assert time_since is not None
+        assert 0.05 <= time_since <= 0.5  # Should be around 0.1 seconds
+
+    def test_rate_limiter_timing_persistence(self, redis_client):
+        """Test that timing data persists across rate limiter instances."""
+        # Create first rate limiter instance
+        rate_limiter1 = get_perplexity_rate_limiter(redis_client)
+        
+        # Clear state
+        redis_client.delete(rate_limiter1.key)
+        redis_client.delete(rate_limiter1.last_request_key)
+        
+        # Make a request
+        import time
+        before_request = time.time()
+        assert rate_limiter1.acquire() == True
+        
+        # Create second rate limiter instance
+        rate_limiter2 = get_perplexity_rate_limiter(redis_client)
+        
+        # Should see the same timing data
+        last_request_time = rate_limiter2.get_last_request_time()
+        assert last_request_time is not None
+        assert abs(last_request_time - before_request) < 1.0
+        
+        # Check time since last request
+        time_since = rate_limiter2.get_time_since_last_request()
+        assert time_since is not None
+        assert time_since >= 0
+
+    def test_rate_limiter_timing_graceful_degradation(self):
+        """Test timing functionality graceful degradation when Redis fails."""
+        from unittest.mock import Mock
+        
+        # Create a mock Redis client that always fails
+        failing_redis = Mock()
+        failing_redis.get.side_effect = Exception("Redis connection failed")
+        failing_redis.setex.side_effect = Exception("Redis connection failed")
+        
+        rate_limiter = ApiIntegrationRateLimiter(
+            redis_client=failing_redis,
+            api_name='TestService',
+            max_requests=10,
+            period_seconds=60
+        )
+        
+        # Should gracefully handle Redis failures
+        assert rate_limiter.get_last_request_time() is None
+        assert rate_limiter.get_time_since_last_request() is None
+        
+        # acquire() should still work (graceful degradation)
+        assert rate_limiter.acquire() == True
+
+    def test_rate_limiter_timing_with_multiple_requests(self, redis_client):
+        """Test timing functionality with multiple sequential requests."""
+        rate_limiter = get_perplexity_rate_limiter(redis_client)
+        
+        # Clear state
+        redis_client.delete(rate_limiter.key)
+        redis_client.delete(rate_limiter.last_request_key)
+        
+        import time
+        
+        # First request
+        time1 = time.time()
+        assert rate_limiter.acquire() == True
+        
+        # Wait and make second request
+        time.sleep(0.2)
+        time2 = time.time()
+        
+        # Check time since last request before second acquire
+        time_since = rate_limiter.get_time_since_last_request()
+        assert time_since is not None
+        assert 0.15 <= time_since <= 0.3  # Should be around 0.2 seconds
+        
+        # Make second request (might be rate limited)
+        result = rate_limiter.acquire()
+        
+        if result:  # If not rate limited
+            # Last request time should be updated
+            last_time = rate_limiter.get_last_request_time()
+            assert abs(last_time - time2) < 1.0
+        
+        # Time since last request should reset or be very small
+        new_time_since = rate_limiter.get_time_since_last_request()
+        assert new_time_since is not None
 
 
 @pytest.mark.asyncio

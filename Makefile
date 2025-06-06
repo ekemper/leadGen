@@ -1,4 +1,4 @@
-.PHONY: help docker-start docker-stop docker-logs docker-build docker-test docker-clean
+.PHONY: help docker-start docker-stop docker-logs docker-build docker-test docker-clean tail-errors
 
 help:
 	@echo "Available commands:"
@@ -8,6 +8,7 @@ help:
 	@echo "  make docker-build    - Build Docker images"
 	@echo "  make docker-test     - Run tests in Docker"
 	@echo "  make docker-clean    - Clean up Docker resources"
+	@echo "  make tail-errors     - Tail Docker logs showing only errors and circuit breaker events"
 
 docker-start:
 	./scripts/docker-dev.sh start
@@ -25,4 +26,7 @@ docker-test:
 	./scripts/docker-dev.sh test
 
 docker-clean:
-	./scripts/docker-dev.sh clean 
+	./scripts/docker-dev.sh clean
+
+tail-errors:
+	docker compose logs -f | grep -v -i "flower" | grep -i -E "(error|exception|fail|circuit.?breaker|timeout|connection.?refused|http.?[45][0-9][0-9]|api.?error|request.?failed|rate.?limit|throttle|quota.?exceeded|too.?many.?requests|429)" --line-buffered 

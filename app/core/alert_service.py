@@ -8,7 +8,7 @@ from enum import Enum
 
 from app.core.logger import get_logger
 from app.core.config import settings
-from app.core.circuit_breaker import CircuitState
+from app.core.circuit_breaker import CircuitState, ThirdPartyService
 
 logger = get_logger(__name__)
 

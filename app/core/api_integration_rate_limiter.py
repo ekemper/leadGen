@@ -42,11 +42,14 @@ API_RATE_LIMITS = get_api_rate_limits()
 
 class ApiIntegrationRateLimiter:
     """
-    Distributed rate limiter using Redis. Supports per-API configuration.
+    Distributed rate limiter using Redis. Supports per-API configuration and timing tracking.
     
     This rate limiter uses Redis for distributed rate limiting across multiple
     processes and servers. Rate limits are configurable per API service through
     environment variables managed by the application settings.
+    
+    Enhanced with timing tracking capabilities to support debugging and analysis
+    of request intervals and rate limiting effectiveness.
     
     Example usage:
         from app.core.config import get_redis_connection
@@ -65,6 +68,8 @@ class ApiIntegrationRateLimiter:
         self.max_requests = max_requests
         self.period_seconds = period_seconds
         self.key = f"ratelimit:{api_name}"
+        # Key for tracking last request timestamp
+        self.last_request_key = f"ratelimit:{api_name}:last_request"
 
     def is_allowed(self) -> bool:
         """
@@ -101,9 +106,13 @@ class ApiIntegrationRateLimiter:
                 pipe.expire(self.key, self.period_seconds)
                 count, _ = pipe.execute()
                 if count <= self.max_requests:
+                    # Record the timestamp of this successful request
+                    self._record_request_timestamp()
                     return True
             except Exception:
                 # If Redis is unavailable, allow the request (graceful degradation)
+                # Still record timestamp for timing analysis
+                self._record_request_timestamp()
                 return True
                 
             if not block:
@@ -127,4 +136,52 @@ class ApiIntegrationRateLimiter:
             return max(0, self.max_requests - int(current))
         except Exception:
             # If Redis is unavailable, return max_requests (graceful degradation)
-            return self.max_requests 
+            return self.max_requests
+
+    def get_last_request_time(self) -> Optional[float]:
+        """
+        Get the timestamp of the last successful request.
+        
+        Returns:
+            Optional[float]: Unix timestamp of last request, None if no previous request
+        """
+        try:
+            timestamp_str = self.redis.get(self.last_request_key)
+            if timestamp_str is None:
+                return None
+            return float(timestamp_str)
+        except Exception:
+            # If Redis is unavailable, return None (graceful degradation)
+            return None
+
+    def get_time_since_last_request(self) -> Optional[float]:
+        """
+        Calculate the time in seconds since the last successful request.
+        
+        Returns:
+            Optional[float]: Seconds since last request, None if no previous request or Redis unavailable
+        """
+        last_request_time = self.get_last_request_time()
+        if last_request_time is None:
+            return None
+        
+        current_time = time.time()
+        return current_time - last_request_time
+
+    def _record_request_timestamp(self) -> None:
+        """
+        Record the current timestamp as the last request time.
+        
+        This method is called internally when a request is successfully acquired.
+        Uses a longer TTL than the rate limit period to support timing analysis.
+        """
+        try:
+            current_time = time.time()
+            # Use a longer TTL for timing analysis (24 hours)
+            # This allows analysis of request patterns over longer periods
+            ttl_seconds = max(self.period_seconds * 10, 86400)  # 24 hours or 10x period, whichever is larger
+            self.redis.setex(self.last_request_key, ttl_seconds, str(current_time))
+        except Exception:
+            # If Redis is unavailable, fail silently (graceful degradation)
+            # The timing analysis will just show None for time since last request
+            pass 
