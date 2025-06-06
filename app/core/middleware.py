@@ -28,6 +28,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         "/docs",
         "/redoc",
         "/openapi.json",
+        "/api/v1/openapi.json",
         "/",
     }
     

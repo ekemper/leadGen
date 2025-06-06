@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import jobs, health, campaigns, organizations, auth, queue_management
+from app.api.endpoints import jobs, health, campaigns, organizations, auth, queue
 from app.api.endpoints import leads
 from app.core.config import settings
 from app.core.middleware import AuthenticationMiddleware
@@ -32,7 +32,7 @@ def create_application() -> FastAPI:
     app.include_router(campaigns.router, prefix=f"{settings.API_V1_STR}/campaigns", tags=["campaigns"])
     app.include_router(organizations.router, prefix=f"{settings.API_V1_STR}/organizations", tags=["organizations"])
     app.include_router(leads.router, prefix=f"{settings.API_V1_STR}/leads", tags=["leads"])
-    app.include_router(queue_management.router, prefix=f"{settings.API_V1_STR}/queue-management", tags=["queue-management"])
+    app.include_router(queue.router, prefix=f"{settings.API_V1_STR}/queue", tags=["queue"])
 
     return app
 

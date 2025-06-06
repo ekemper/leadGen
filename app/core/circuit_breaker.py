@@ -162,6 +162,37 @@ class CircuitBreakerService:
             logger.error(f"Error manually closing circuit: {e}")
             return False
 
+    def manually_open_circuit(self, reason: str = "Manual API call"):
+        """
+        Manually open the circuit breaker.
+        This allows for manual intervention to open the circuit when needed.
+        
+        Args:
+            reason: The reason for manually opening the circuit breaker
+            
+        Returns:
+            bool: True if circuit was opened, False if already open
+        """
+        try:
+            current_state = self.get_global_circuit_state()
+            if current_state == CircuitState.CLOSED:
+                metadata = {
+                    'manually_opened_at': datetime.utcnow().isoformat(),
+                    'opened_by': 'manual_api_call',
+                    'reason': reason
+                }
+                self._set_global_circuit_state(CircuitState.OPEN, metadata)
+                self._handle_circuit_opened(reason)
+                logger.info(f"Circuit breaker manually opened: {reason}")
+                return True
+            else:
+                logger.info("Circuit breaker already open")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error manually opening circuit: {e}")
+            return False
+
     def should_allow_request(self) -> bool:
         """
         Check if requests should be allowed based on global circuit state.
@@ -251,7 +282,7 @@ class CircuitBreakerService:
 def get_circuit_breaker(redis_client: Redis = None) -> CircuitBreakerService:
     """Factory function to get circuit breaker instance."""
     if redis_client is None:
-        from app.core.dependencies import get_redis_client
-        redis_client = get_redis_client()
+        from app.core.config import get_redis_connection
+        redis_client = get_redis_connection()
     
     return CircuitBreakerService(redis_client) 

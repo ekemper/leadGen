@@ -27,6 +27,11 @@ from app.schemas.auth import (
     LoginResponse
 )
 from app.schemas.common import PaginatedResponse, PaginationMeta
+from app.schemas.circuit_breaker import (
+    CircuitState,
+    CircuitBreakerStatus,
+    CircuitBreakerOperation
+)
 
 __all__ = [
     "JobCreate", 
@@ -55,5 +60,8 @@ __all__ = [
     "SignupResponse",
     "LoginResponse",
     "PaginatedResponse",
-    "PaginationMeta"
+    "PaginationMeta",
+    "CircuitState",
+    "CircuitBreakerStatus",
+    "CircuitBreakerOperation"
 ]
