@@ -5,7 +5,7 @@ from fastapi import Depends
 from redis import Redis
 
 from app.core.logger import get_logger
-from app.core.circuit_breaker import CircuitBreakerService, ThirdPartyService, get_circuit_breaker
+from app.core.circuit_breaker import CircuitBreakerService, get_circuit_breaker
 from app.models.job import Job, JobStatus, JobType
 from app.models.lead import Lead
 from app.core.config import get_redis_connection

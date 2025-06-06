@@ -67,7 +67,7 @@ def get_queue_status(token, api_base):
     
     try:
         headers = {"Authorization": f"Bearer {token}"}
-        response = requests.get(f"{api_base}/queue-management/status", headers=headers)
+        response = requests.get(f"{api_base}/queue/circuit-breaker-status", headers=headers)
         
         if response.status_code == 200:
             return response.json()
@@ -85,8 +85,8 @@ def check_queue_paused(token, api_base):
     if not queue_status or not queue_status.get("data"):
         return False, "Unable to determine queue status"
     
-    # Check circuit breaker status for open breakers
-    circuit_breaker = queue_status["data"].get("circuit_breaker", {})
+    # The circuit breaker status is directly in the data field
+    circuit_breaker = queue_status["data"]
     
     # Check if global circuit breaker is open
     queue_paused = False
@@ -187,8 +187,8 @@ def main():
         
         # Detailed circuit breaker status
         cb_status = check_circuit_breaker_status(token, API_BASE)
-        if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
-            circuit_breaker = cb_status["data"]["circuit_breaker"]
+        if cb_status and cb_status.get("data"):
+            circuit_breaker = cb_status["data"]
             if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
                 state = circuit_breaker["state"]
                 if state == "closed":
@@ -198,7 +198,8 @@ def main():
             else:
                 print(f"⚠️  Global Circuit Breaker: Status unknown")
         
-        circuit_breaker = queue_status["data"].get("circuit_breaker", {})
+        # Check global circuit breaker status
+        circuit_breaker = queue_status["data"]
         
         # Check global circuit breaker status
         if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
@@ -318,8 +319,8 @@ def main():
             
             print("\n📊 Queue and Circuit Breaker Analysis")
             print("-" * 50)
-            if final_queue_status and final_queue_status.get("data", {}).get("circuit_breaker"):
-                circuit_breaker = final_queue_status["data"]["circuit_breaker"]
+            if final_queue_status and final_queue_status.get("data"):
+                circuit_breaker = final_queue_status["data"]
                 
                 if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
                     state = circuit_breaker["state"]

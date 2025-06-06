@@ -321,8 +321,8 @@ def monitor_all_campaigns_jobs_with_cb_awareness(token, campaigns_data, timeout,
                     status_summary, campaign_details = check_campaign_status_summary_func(token, campaign_ids, api_base)
                     
                     # Check if this is circuit breaker related
-                    if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
-                        circuit_breaker = cb_status["data"]["circuit_breaker"]
+                    if cb_status and cb_status.get("data"):
+                        circuit_breaker = cb_status["data"]
                         
                         if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
                             state = circuit_breaker["state"]
@@ -337,8 +337,8 @@ def monitor_all_campaigns_jobs_with_cb_awareness(token, campaigns_data, timeout,
                     return None  # Signal failure due to unexpected pauses
             
             # Check if any services are unhealthy
-            if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
-                circuit_breaker = cb_status["data"]["circuit_breaker"]
+            if cb_status and cb_status.get("data"):
+                circuit_breaker = cb_status["data"]
                 
                 if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:
                     state = circuit_breaker["state"]

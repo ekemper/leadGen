@@ -14,7 +14,7 @@ def check_circuit_breaker_status(token, api_base):
     headers = {"Authorization": f"Bearer {token}"}
     
     try:
-        resp = requests.get(f"{api_base}/circuit-breaker/status", headers=headers)
+        resp = requests.get(f"{api_base}/queue/circuit-breaker-status", headers=headers)
         if resp.status_code == 200:
             return resp.json()
         else:
@@ -55,8 +55,8 @@ def report_circuit_breaker_failure(cb_status, paused_campaigns):
     print("\n🔴 CIRCUIT BREAKER TRIGGERED - SERVICE FAILURE DETECTED")
     print("=" * 60)
     
-    if cb_status and cb_status.get("data", {}).get("circuit_breaker"):
-        circuit_breaker = cb_status["data"]["circuit_breaker"]
+    if cb_status and cb_status.get("data"):
+        circuit_breaker = cb_status["data"]
         print(f"Global Circuit Breaker Status:")
         
         if isinstance(circuit_breaker, dict) and "state" in circuit_breaker:

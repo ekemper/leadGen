@@ -4,7 +4,7 @@ from openai import OpenAI
 from app.core.api_integration_rate_limiter import ApiIntegrationRateLimiter
 from app.core.logger import get_logger
 from app.models import Lead
-from app.core.circuit_breaker import CircuitBreakerService, ThirdPartyService
+from app.core.circuit_breaker import CircuitBreakerService
 
 logger = get_logger(__name__)
 
@@ -183,7 +183,6 @@ class OpenAIService:
             # Record rate limit as failure in circuit breaker
             if self.circuit_breaker:
                 self.circuit_breaker.record_failure(
-                    ThirdPartyService.OPENAI, 
                     rate_limit_error.get('error', 'Rate limited'), 
                     'rate_limit'
                 )

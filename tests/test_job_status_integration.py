@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from app.models.organization import Organization
 from app.models.campaign import Campaign, CampaignStatus
 from app.models.job import Job, JobStatus, JobType
-from app.core.circuit_breaker import ThirdPartyService, CircuitState
+from app.core.circuit_breaker import CircuitState
 from tests.helpers.auth_helpers import AuthHelpers
 from tests.helpers.database_helpers import DatabaseHelpers
 
@@ -114,6 +114,7 @@ class TestJobStatusIntegration:
         """Database helpers for verification."""
         return DatabaseHelpers(db_session)
 
+    def test_bulk_job_resume_coordination(self, authenticated_client, db_session,
                                                     running_campaign_with_multiple_jobs, db_helpers):
         """Test that bulk job resume only works through queue management (new logic)."""
         campaign, jobs = running_campaign_with_multiple_jobs
@@ -252,6 +253,8 @@ class TestJobStatusIntegration:
         db_helpers.verify_campaign_status_in_db(campaign.id, CampaignStatus.RUNNING)
     
     # ===== JOB LIFECYCLE INTEGRATION TESTS ====
+
+    def test_handling_concurrent_job_status_updates(self, authenticated_client, db_session,
                                          running_campaign_with_multiple_jobs, db_helpers):
         """Test handling of concurrent job status updates."""
         campaign, jobs = running_campaign_with_multiple_jobs

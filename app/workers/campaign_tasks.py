@@ -22,8 +22,7 @@ from app.core.dependencies import (
     get_openai_rate_limiter,
     get_instantly_rate_limiter
 )
-from app.core.queue_manager import get_queue_manager
-from app.core.circuit_breaker import ThirdPartyService
+from app.core.queue_manager import get_queue_manager, QueueManager
 
 logger = get_logger(__name__)
 
@@ -230,7 +229,8 @@ def enrich_lead_task(self, lead_id: str, campaign_id: str):
             }
         
         # Check if job should be processed based on circuit breaker status
-        queue_manager = get_queue_manager(db)
+        redis_client = get_redis_connection()
+        queue_manager = QueueManager(redis_client=redis_client, db=db)
         circuit_breaker = queue_manager.circuit_breaker
         
         should_process = queue_manager.should_process_job()
